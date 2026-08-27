@@ -11,6 +11,7 @@ import smtplib
 import shutil
 import tempfile
 import zipfile
+import re
 from email.message import EmailMessage
 from datetime import datetime, timedelta
 
@@ -268,6 +269,18 @@ def ensure_columns(db):
 def init_db():
     with get_db() as db:
         db.executescript("""
+        CREATE TABLE IF NOT EXISTS app_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            company_name TEXT NOT NULL,
+            company_tagline TEXT,
+            contact_email TEXT,
+            contact_phone TEXT,
+            website TEXT,
+            accent_color TEXT NOT NULL DEFAULT '#0f62fe',
+            logo_filename TEXT,
+            updated_at TEXT
+        );
+
         CREATE TABLE IF NOT EXISTS jobs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             public_token TEXT UNIQUE NOT NULL,
@@ -306,6 +319,18 @@ def init_db():
         );
         """)
         ensure_columns(db)
+
+        db.execute("""
+            INSERT OR IGNORE INTO app_settings (
+                id, company_name, company_tagline, accent_color, updated_at
+            ) VALUES (1, ?, ?, '#0f62fe', ?)
+        """, (
+            COMPANY_NAME,
+            PRODUCT_TAGLINE,
+            datetime.now().replace(microsecond=0).isoformat(),
+        ))
+        db.commit()
+
         recover_v130_orphaned_mobilizations(db)
 
 def now_iso():
@@ -608,6 +633,12 @@ def email_delivery_enabled():
     return EMAIL_MODE == "smtp" and smtp_is_configured()
 
 def build_readiness_email(job, public_url, reminder=False):
+    settings = get_app_settings()
+    brand_name = settings.get("company_name") or COMPANY_NAME
+    brand_tagline = settings.get("company_tagline") or PRODUCT_TAGLINE
+    brand_accent = normalize_hex_color(settings.get("accent_color"))
+    logo_url = company_logo_external_url(settings)
+
     action_word = "Reminder" if reminder else "Site Readiness Confirmation"
     subject = f"{action_word}: {job['job_name']}"
 
@@ -621,8 +652,10 @@ def build_readiness_email(job, public_url, reminder=False):
     <html>
       <body style="font-family:Arial,sans-serif;background:#f5f7fb;padding:28px;color:#152033;">
         <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #dfe5ee;border-radius:14px;padding:28px;">
-          <div style="font-size:22px;font-weight:800;color:#0b2348;margin-bottom:4px;">{PRODUCT_NAME}</div>
-          <div style="font-size:12px;color:#6b7280;margin-bottom:24px;">Powered by DispatchProof</div>
+          {f'<img src="{logo_url}" alt="{brand_name} logo" style="max-height:54px;max-width:180px;object-fit:contain;margin-bottom:10px;display:block;">' if logo_url else ''}
+          <div style="font-size:22px;font-weight:800;color:#0b2348;margin-bottom:4px;">{brand_name}</div>
+          <div style="font-size:12px;color:#6b7280;margin-bottom:2px;">{brand_tagline}</div>
+          <div style="font-size:11px;color:#98a2b3;margin-bottom:24px;">Powered by DispatchProof</div>
 
           <h2 style="margin:0 0 8px;font-size:24px;">{job['job_name']}</h2>
           <p style="margin:0 0 18px;color:#6b7280;">{job['project_site'] or ''}</p>
@@ -638,7 +671,7 @@ def build_readiness_email(job, public_url, reminder=False):
           </p>
 
           <div style="margin:26px 0;">
-            <a href="{public_url}" style="display:inline-block;background:#0f62fe;color:white;text-decoration:none;font-weight:700;padding:13px 18px;border-radius:9px;">
+            <a href="{public_url}" style="display:inline-block;background:{brand_accent};color:white;text-decoration:none;font-weight:700;padding:13px 18px;border-radius:9px;">
               Confirm Site Readiness
             </a>
           </div>
@@ -926,7 +959,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "1.9",
+        "app_version": "2.0",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -1099,15 +1132,62 @@ def restore_backup_archive(zip_path):
     finally:
         shutil.rmtree(stage_dir, ignore_errors=True)
 
-@app.context_processor
-def inject_brand():
+
+def get_app_settings():
+    with get_db() as db:
+        row = db.execute(
+            "SELECT * FROM app_settings WHERE id = 1"
+        ).fetchone()
+
+    if row:
+        return dict(row)
+
     return {
         "company_name": COMPANY_NAME,
-        "company_logo_url": COMPANY_LOGO_URL,
+        "company_tagline": PRODUCT_TAGLINE,
+        "contact_email": "",
+        "contact_phone": "",
+        "website": "",
+        "accent_color": "#0f62fe",
+        "logo_filename": None,
+    }
+
+def normalize_hex_color(value):
+    value = (value or "").strip()
+    return value.lower() if re.fullmatch(r"#[0-9a-fA-F]{6}", value) else "#0f62fe"
+
+def company_logo_url(settings=None):
+    settings = settings or get_app_settings()
+    if not settings.get("logo_filename"):
+        return None
+    return url_for("company_logo")
+
+def company_logo_external_url(settings=None):
+    settings = settings or get_app_settings()
+    if not settings.get("logo_filename"):
+        return None
+
+    base = public_app_base_url()
+    if base:
+        return f"{base}/branding/logo"
+
+    return url_for("company_logo", _external=True)
+
+@app.context_processor
+def inject_brand():
+    settings = get_app_settings()
+    return {
+        "company_name": settings.get("company_name") or COMPANY_NAME,
+        "company_logo_url": company_logo_url(settings),
+        "company_tagline": settings.get("company_tagline") or PRODUCT_TAGLINE,
+        "company_contact_email": settings.get("contact_email") or "",
+        "company_contact_phone": settings.get("contact_phone") or "",
+        "company_website": settings.get("website") or "",
+        "company_accent_color": settings.get("accent_color") or "#0f62fe",
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "1.9",
+        "app_version": "2.0",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -1120,12 +1200,12 @@ def ensure_db():
     global LAST_REMINDER_SWEEP_AT
     init_db()
 
-    public_endpoints = {"login", "health", "static", "public_readiness", "public_arrival"}
+    public_endpoints = {"login", "health", "static", "public_readiness", "public_arrival", "company_logo"}
     if request.endpoint not in public_endpoints and not admin_authenticated():
         return redirect(url_for("login", next=request.full_path if request.query_string else request.path))
 
     # Do not make static/public requests responsible for sending reminders.
-    if request.endpoint in {"static", "health", "public_readiness", "public_arrival"}:
+    if request.endpoint in {"static", "health", "public_readiness", "public_arrival", "company_logo"}:
         return
 
     now = datetime.now()
@@ -1186,12 +1266,94 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "1.9",
+        "version": "2.0",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
         "email_delivery_enabled": email_delivery_enabled(),
     }, 200
+
+
+
+@app.route("/branding/logo")
+def company_logo():
+    settings = get_app_settings()
+    filename = settings.get("logo_filename")
+    if not filename:
+        abort(404)
+    return send_from_directory(UPLOAD_DIR, filename)
+
+
+@app.route("/settings/company", methods=["GET", "POST"])
+def company_settings():
+    settings = get_app_settings()
+
+    if request.method == "POST":
+        company_name = request.form.get("company_name", "").strip() or COMPANY_NAME
+        company_tagline = request.form.get("company_tagline", "").strip()
+        contact_email = request.form.get("contact_email", "").strip()
+        contact_phone = request.form.get("contact_phone", "").strip()
+        website = request.form.get("website", "").strip()
+        accent_color = normalize_hex_color(request.form.get("accent_color"))
+
+        logo_filename = settings.get("logo_filename")
+        logo = request.files.get("company_logo")
+
+        if logo and logo.filename:
+            if not allowed_file(logo.filename):
+                flash("Company logo must be PNG, JPG, JPEG, or WEBP.")
+                return redirect(url_for("company_settings"))
+
+            ext = Path(secure_filename(logo.filename)).suffix.lower()
+            logo_filename = f"branding_company_logo{ext}"
+
+            for old_logo in UPLOAD_DIR.glob("branding_company_logo.*"):
+                try:
+                    old_logo.unlink()
+                except OSError:
+                    pass
+
+            logo.save(UPLOAD_DIR / logo_filename)
+
+        if request.form.get("remove_logo") == "1":
+            if logo_filename:
+                try:
+                    (UPLOAD_DIR / logo_filename).unlink(missing_ok=True)
+                except OSError:
+                    pass
+            logo_filename = None
+
+        with get_db() as db:
+            db.execute("""
+                UPDATE app_settings
+                SET company_name = ?,
+                    company_tagline = ?,
+                    contact_email = ?,
+                    contact_phone = ?,
+                    website = ?,
+                    accent_color = ?,
+                    logo_filename = ?,
+                    updated_at = ?
+                WHERE id = 1
+            """, (
+                company_name,
+                company_tagline,
+                contact_email,
+                contact_phone,
+                website,
+                accent_color,
+                logo_filename,
+                now_iso(),
+            ))
+            db.commit()
+
+        flash("Company branding updated.")
+        return redirect(url_for("company_settings"))
+
+    return render_template(
+        "company_settings.html",
+        settings=get_app_settings(),
+    )
 
 
 @app.route("/backup")
