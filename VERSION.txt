@@ -1,2 +1,2 @@
-DispatchProof Version 1.7.1 - Field Photo Capture
-Direct phone camera capture, gallery selection, thumbnails, removal, and photo-count validation.
+DispatchProof Version 1.7.2 - Beta Polish
+30-day stay-signed-in option, backup record counts, and required failed-mobilization impact fields.

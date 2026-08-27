@@ -95,7 +95,7 @@ app.config["MAX_CONTENT_LENGTH"] = 30 * 1024 * 1024
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = os.getenv("RENDER", "").lower() == "true"
-app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=12)
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
 
 DEFAULT_CHECKLIST = [
     "Finished flooring installed",
@@ -801,7 +801,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 1,
         "created_at": now_iso(),
-        "app_version": "1.7.1",
+        "app_version": "1.7.2",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
     }
@@ -929,7 +929,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "1.7.1",
+        "app_version": "1.7",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -986,10 +986,12 @@ def login():
         password_ok = secrets.compare_digest(submitted_password, effective_admin_password())
 
         if username_ok and password_ok:
+            stay_signed_in = request.form.get("stay_signed_in") == "1"
             session.clear()
-            session.permanent = True
+            session.permanent = stay_signed_in
             session["dispatchproof_admin"] = True
             session["dispatchproof_admin_username"] = ADMIN_USERNAME
+            session["dispatchproof_stay_signed_in"] = stay_signed_in
             return redirect(safe_next_url(next_url))
 
         flash("Incorrect username or password.")
@@ -1006,7 +1008,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "1.7.1",
+        "version": "1.7.2",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -1021,10 +1023,42 @@ def backup_restore():
     if UPLOAD_DIR.exists():
         upload_count = sum(1 for p in UPLOAD_DIR.rglob("*") if p.is_file())
 
+    counts = {
+        "jobs": 0,
+        "readiness_responses": 0,
+        "mobilization_attempts": 0,
+        "outbox_messages": 0,
+    }
+
+    if db_exists:
+        with get_db() as db:
+            counts["jobs"] = db.execute(
+                "SELECT COUNT(*) AS c FROM jobs"
+            ).fetchone()["c"]
+
+            current_responses = db.execute(
+                "SELECT COUNT(*) AS c FROM jobs WHERE response_at IS NOT NULL"
+            ).fetchone()["c"]
+            archived_responses = db.execute(
+                "SELECT COUNT(*) AS c FROM readiness_confirmations"
+            ).fetchone()["c"]
+            counts["readiness_responses"] = current_responses + archived_responses
+
+            archived_attempts = db.execute(
+                "SELECT COUNT(*) AS c FROM mobilization_attempts"
+            ).fetchone()["c"]
+            # Every current job represents its active/current mobilization attempt.
+            counts["mobilization_attempts"] = archived_attempts + counts["jobs"]
+
+            counts["outbox_messages"] = db.execute(
+                "SELECT COUNT(*) AS c FROM email_events WHERE status = 'OUTBOX'"
+            ).fetchone()["c"]
+
     return render_template(
         "backup_restore.html",
         db_exists=db_exists,
         upload_count=upload_count,
+        counts=counts,
         data_dir=str(DATA_DIR),
     )
 
@@ -1407,6 +1441,26 @@ def record_arrival(job_id):
             if not issues:
                 flash("Select at least one reason the site was not ready.")
                 return redirect(url_for("record_arrival", job_id=job_id))
+
+            if crew_size is None or hours_lost is None:
+                flash("Crew Affected and Hours Lost are required for a failed mobilization.")
+                return redirect(url_for("record_arrival", job_id=job_id))
+
+            try:
+                crew_value = int(crew_size)
+                hours_value = float(hours_lost)
+            except (TypeError, ValueError):
+                flash("Enter valid numbers for Crew Affected and Hours Lost.")
+                return redirect(url_for("record_arrival", job_id=job_id))
+
+            if crew_value < 1:
+                flash("Crew Affected must be at least 1.")
+                return redirect(url_for("record_arrival", job_id=job_id))
+
+            if hours_value <= 0:
+                flash("Hours Lost must be greater than 0.")
+                return redirect(url_for("record_arrival", job_id=job_id))
+
             if len(valid_uploads) < 2:
                 flash("Please upload at least 2 arrival photos for a failed mobilization.")
                 return redirect(url_for("record_arrival", job_id=job_id))

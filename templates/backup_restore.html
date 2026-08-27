@@ -26,6 +26,10 @@
 
     <dl class="details backup-details">
       <div><dt>Database</dt><dd>{{ 'Available' if db_exists else 'Not created yet' }}</dd></div>
+      <div><dt>Jobs</dt><dd>{{ counts.jobs }}</dd></div>
+      <div><dt>Readiness Responses</dt><dd>{{ counts.readiness_responses }}</dd></div>
+      <div><dt>Mobilization Attempts</dt><dd>{{ counts.mobilization_attempts }}</dd></div>
+      <div><dt>Outbox Messages</dt><dd>{{ counts.outbox_messages }}</dd></div>
       <div><dt>Uploaded Files</dt><dd>{{ upload_count }}</dd></div>
       <div><dt>Backup Includes</dt><dd>Jobs · History · Outbox · Evidence</dd></div>
     </dl>

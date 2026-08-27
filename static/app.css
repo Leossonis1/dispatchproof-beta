@@ -620,3 +620,39 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(15,98,254,.12);bo
   .field-photo-action{min-height:64px}
   .field-photo-preview{grid-template-columns:repeat(2,1fr)}
 }
+
+
+/* DispatchProof V1.7.2 beta polish */
+.remember-login{
+  display:flex!important;
+  grid-template-columns:none!important;
+  flex-direction:row;
+  align-items:flex-start;
+  gap:10px!important;
+  cursor:pointer;
+  padding:2px 0;
+}
+.remember-login input{
+  width:16px!important;
+  height:16px;
+  margin:2px 0 0;
+  flex:0 0 auto;
+  accent-color:#0f62fe;
+}
+.remember-login span{
+  display:grid;
+  gap:2px;
+}
+.remember-login strong{
+  font-size:12px;
+  color:#101828;
+}
+.remember-login small{
+  font-size:11px;
+  color:#667085;
+  font-weight:500;
+}
+.required-on-failure{
+  color:#d92d20;
+  font-weight:900;
+}

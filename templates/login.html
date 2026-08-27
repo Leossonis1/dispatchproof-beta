@@ -35,6 +35,15 @@
         <label>Password
           <input type="password" name="password" autocomplete="current-password" required>
         </label>
+
+        <label class="remember-login">
+          <input type="checkbox" name="stay_signed_in" value="1">
+          <span>
+            <strong>Stay signed in on this device</strong>
+            <small>Keep this admin login for up to 30 days.</small>
+          </span>
+        </label>
+
         <button class="btn primary wide" type="submit">Sign In</button>
       </form>
       {% else %}

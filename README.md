@@ -64,3 +64,38 @@ Installer Arrival keeps photos optional when Site Ready is selected, but dynamic
 changes to a 2-photo minimum when Site Not Ready / failed mobilization is selected.
 
 No native mobile app is required; this uses standard browser camera/file capabilities.
+
+
+## V1.7.2 — Beta Polish
+
+### Stay signed in
+
+The Admin Sign In page now includes **Stay signed in on this device**.
+
+- unchecked: browser-session login only
+- checked: admin session can remain signed in for up to 30 days
+- Sign Out always clears the session
+- Render continues to use Secure + HttpOnly cookies
+
+### Backup visibility
+
+Backup & Restore now shows the record counts that will be preserved:
+
+- Jobs
+- Readiness Responses
+- Mobilization Attempts
+- Outbox Messages
+- Uploaded Files
+
+This makes it possible to confirm that meaningful test data is actually aboard the backup before downloading it.
+
+### Failed mobilization impact
+
+When **Site Not Ready** is selected:
+
+- Crew Affected is required and must be at least 1
+- Hours Lost is required and must be greater than 0
+- at least one failure reason is required
+- at least two arrival photos are still required
+
+Equipment / Tools Affected and Notes remain optional.

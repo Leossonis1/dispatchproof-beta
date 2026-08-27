@@ -56,11 +56,11 @@
     <div class="section-break">
       <h2>Mobilization Impact</h2>
       <div class="grid-2">
-        <label>Crew Size
-          <input type="number" min="1" step="1" name="crew_size" placeholder="4">
+        <label>Crew Affected <span class="required-on-failure">*</span>
+          <input id="crewSize" type="number" min="1" step="1" name="crew_size" placeholder="4">
         </label>
-        <label>Hours Lost
-          <input type="number" min="0" step="0.25" name="hours_lost" placeholder="5">
+        <label>Hours Lost <span class="required-on-failure">*</span>
+          <input id="hoursLost" type="number" min="0.25" step="0.25" name="hours_lost" placeholder="5">
         </label>
         <label>Equipment / Tools Affected
           <input name="equipment_affected" placeholder="1 lift, box truck">
@@ -127,6 +127,8 @@ const readyChoice = document.getElementById('readyChoice');
 const failedChoice = document.getElementById('failedChoice');
 const photoHelp = document.getElementById('arrivalPhotoHelp');
 const arrivalPhotoRoot = document.getElementById('arrivalPhotoCapture');
+const crewSize = document.getElementById('crewSize');
+const hoursLost = document.getElementById('hoursLost');
 
 function refreshArrivalFields() {
   const selected = document.querySelector('input[name="arrival_status"]:checked');
@@ -137,6 +139,8 @@ function refreshArrivalFields() {
     notReady.classList.add('show');
     failedChoice.classList.add('selected-failed');
     photoHelp.innerHTML = '<strong>Minimum 2 photos required for a failed mobilization.</strong> Photograph the actual site condition before the crew leaves.';
+    crewSize.required = true;
+    hoursLost.required = true;
     if (arrivalPhotoRoot.photoCapture) arrivalPhotoRoot.photoCapture.setMinimum(2);
   } else {
     notReady.classList.remove('show');
@@ -144,6 +148,8 @@ function refreshArrivalFields() {
       readyChoice.classList.add('selected-ready');
     }
     photoHelp.textContent = 'Photograph the actual site condition before work begins. Photos are optional when the site is ready.';
+    crewSize.required = false;
+    hoursLost.required = false;
     if (arrivalPhotoRoot.photoCapture) arrivalPhotoRoot.photoCapture.setMinimum(0);
   }
 }
@@ -159,6 +165,20 @@ document.getElementById('arrivalForm').addEventListener('submit', (e) => {
       alert('Select at least one reason the site was not ready.');
       return;
     }
+    if (!crewSize.value || Number(crewSize.value) < 1) {
+      e.preventDefault();
+      alert('Enter the number of crew members affected.');
+      crewSize.focus();
+      return;
+    }
+
+    if (!hoursLost.value || Number(hoursLost.value) <= 0) {
+      e.preventDefault();
+      alert('Enter the hours lost for the failed mobilization.');
+      hoursLost.focus();
+      return;
+    }
+
     const capture = arrivalPhotoRoot.photoCapture;
     if (!capture || capture.count() < 2) {
       e.preventDefault();
