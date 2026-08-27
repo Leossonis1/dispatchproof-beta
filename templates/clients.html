@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Clients & Projects · DispatchProof{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">Organization</div>
+    <h1>Clients & Projects</h1>
+    <p>Keep related installations together by client and project.</p>
+  </div>
+  <a class="btn primary" href="{{ url_for('new_client') }}">+ New Client</a>
+</div>
+
+{% if clients %}
+<div class="client-grid">
+  {% for client in clients %}
+  <a class="client-card" href="{{ url_for('client_detail', client_id=client['id']) }}">
+    <div class="client-card-head">
+      <div><span class="eyebrow">Client</span><h2>{{ client['name'] }}</h2></div>
+      <span class="client-open">View →</span>
+    </div>
+    {% if client['contact_name'] or client['contact_email'] %}
+    <div class="client-card-contact">
+      {% if client['contact_name'] %}<strong>{{ client['contact_name'] }}</strong>{% endif %}
+      {% if client['contact_email'] %}<span>{{ client['contact_email'] }}</span>{% endif %}
+    </div>
+    {% endif %}
+    <div class="client-card-stats">
+      <div><strong>{{ client['project_count'] }}</strong><span>Projects</span></div>
+      <div><strong>{{ client['active_job_count'] }}</strong><span>Active Installs</span></div>
+      <div><strong>{{ client['completed_job_count'] }}</strong><span>Completed</span></div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty">
+  <div class="empty-icon">✓</div>
+  <h3>No clients yet</h3>
+  <p>Create your first client, then group projects and installations under it.</p>
+  <a class="btn primary" href="{{ url_for('new_client') }}">Create First Client</a>
+</div>
+{% endif %}
+{% endblock %}

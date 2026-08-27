@@ -38,6 +38,8 @@
 
     <div class="public-report-summary">
       <div><span>Install Date</span><strong>{{ job['installation_date']|pretty_date }}</strong></div>
+      <div><span>Client</span><strong>{{ report_client['name'] if report_client else '—' }}</strong></div>
+      <div><span>Project</span><strong>{{ report_project['name'] if report_project else (job['project_site'] or '—') }}</strong></div>
       <div><span>Site Contact</span><strong>{{ job['contact_name'] }}</strong></div>
       <div><span>Readiness Confirmed</span><strong>{{ job['response_at']|pretty_datetime if job['response_at'] else 'Not received' }}</strong></div>
       <div><span>Arrival</span><strong>{{ job['arrived_at']|pretty_datetime if job['arrived_at'] else 'Not recorded' }}</strong></div>

@@ -11,6 +11,42 @@
 </div>
 
 <form class="form-card" method="post">
+
+    <div class="job-assignment-create">
+      <div class="eyebrow">Optional Organization</div>
+      <h2>Client & Project</h2>
+      <p>Group this install under a client or project so related jobs stay together.</p>
+
+      <div class="form-grid two">
+        <label>Client
+          <select name="client_id" id="client_id">
+            <option value="">No client assigned</option>
+            {% for client in clients %}
+              <option value="{{ client['id'] }}" {% if selected_client_id == client['id'] %}selected{% endif %}>{{ client['name'] }}</option>
+            {% endfor %}
+          </select>
+        </label>
+
+        <label>Project
+          <select name="project_id" id="project_id">
+            <option value="">No project assigned</option>
+            {% for project in projects %}
+              <option value="{{ project['id'] }}" data-client-id="{{ project['client_id'] }}"
+                {% if selected_project_id == project['id'] %}selected{% endif %}>
+                {{ project['client_name'] }} — {{ project['name'] }}
+              </option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+
+      {% if not clients %}
+      <div class="inline-help">
+        No clients yet. <a href="{{ url_for('new_client') }}">Create the first client</a>, or leave this job unassigned.
+      </div>
+      {% endif %}
+    </div>
+
   <div class="grid-2">
     <label>Job Name
       <input required name="job_name" placeholder="Mercy Medical Center - Casework">
@@ -73,4 +109,18 @@
     <button class="btn primary" type="submit">Create Job</button>
   </div>
 </form>
+
+<script>
+(function(){
+  const client = document.getElementById('client_id');
+  const project = document.getElementById('project_id');
+  if (!client || !project) return;
+  project.addEventListener('change', function(){
+    const selected = project.options[project.selectedIndex];
+    const clientId = selected ? selected.getAttribute('data-client-id') : '';
+    if (clientId) client.value = clientId;
+  });
+})();
+</script>
+
 {% endblock %}

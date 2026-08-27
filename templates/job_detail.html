@@ -103,6 +103,52 @@
 {% endif %}
 
 
+
+<section class="panel job-assignment-panel">
+  <div class="panel-head">
+    <div>
+      <div class="eyebrow">Organization</div>
+      <h2>Client & Project</h2>
+      <p>Group this install with related work for the same client.</p>
+    </div>
+    {% if assigned_client %}
+      <a class="text-link" href="{{ url_for('client_detail', client_id=assigned_client['id']) }}">View Client →</a>
+    {% endif %}
+  </div>
+
+  <div class="assignment-current">
+    <div><span>Client</span><strong>{{ assigned_client['name'] if assigned_client else 'Unassigned' }}</strong></div>
+    <div><span>Project</span><strong>{{ assigned_project['name'] if assigned_project else 'Unassigned' }}</strong></div>
+  </div>
+
+  <details class="assignment-editor">
+    <summary>Change Assignment</summary>
+    <form method="post" action="{{ url_for('update_job_assignment', job_id=job['id']) }}" class="assignment-form">
+      <label>Client
+        <select name="client_id">
+          <option value="">No client assigned</option>
+          {% for client in assignment_clients %}
+            <option value="{{ client['id'] }}" {% if job['client_id'] == client['id'] %}selected{% endif %}>{{ client['name'] }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label>Project
+        <select name="project_id">
+          <option value="">No project assigned</option>
+          {% for project in assignment_projects %}
+            <option value="{{ project['id'] }}" {% if job['project_id'] == project['id'] %}selected{% endif %}>
+              {{ project['client_name'] }} — {{ project['name'] }}
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <button class="btn primary" type="submit">Save Assignment</button>
+    </form>
+  </details>
+</section>
+
 <section class="panel client-report-panel">
   <div class="panel-head">
     <div>

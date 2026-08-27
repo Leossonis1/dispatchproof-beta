@@ -1605,3 +1605,74 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(15,98,254,.12);bo
     print-color-adjust:exact;
   }
 }
+
+
+/* DispatchProof V2.5 Clients & Projects */
+.job-assignment-create{
+  margin-bottom:20px;padding:16px;border:1px solid #d9e2ef;border-radius:11px;background:#f8fafc
+}
+.job-assignment-create h2{margin:3px 0 4px}
+.job-assignment-create p{margin:0 0 13px;color:#667085;font-size:12px}
+.job-assignment-create select,.assignment-form select{
+  width:100%;border:1px solid #cfd8e6;border-radius:8px;padding:10px 11px;background:white;color:#101828;font:inherit;box-sizing:border-box
+}
+.inline-help{margin-top:10px;color:#667085;font-size:11px}
+.inline-help a{color:#175cd3;font-weight:800}
+.job-assignment-panel{border-left:3px solid #667085}
+.assignment-current{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.assignment-current>div{display:grid;gap:3px;padding:12px 14px;border:1px solid #e4e7ec;border-radius:9px;background:#f8fafc}
+.assignment-current span{color:#667085;font-size:9px;text-transform:uppercase;letter-spacing:.05em}
+.assignment-editor{margin-top:12px;border-top:1px solid #e4e7ec;padding-top:10px}
+.assignment-editor summary{cursor:pointer;color:#175cd3;font-size:11px;font-weight:800}
+.assignment-form{display:grid;grid-template-columns:1fr 1fr auto;align-items:end;gap:9px;margin-top:11px}
+
+.client-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.client-card{display:block;color:inherit;text-decoration:none;border:1px solid #d9e2ef;border-radius:13px;padding:18px;background:white}
+.client-card:hover{border-color:#a9bce0;box-shadow:0 8px 18px rgba(15,35,65,.06)}
+.client-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.client-card h2{margin:3px 0 0}
+.client-open{color:#175cd3;font-size:11px;font-weight:800}
+.client-card-contact{display:grid;gap:2px;margin:11px 0 14px;color:#667085;font-size:11px}
+.client-card-contact strong{color:#344054}
+.client-card-stats{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid #e4e7ec;padding-top:13px}
+.client-card-stats>div{display:grid;gap:2px;border-right:1px solid #e4e7ec;padding:0 10px}
+.client-card-stats>div:first-child{padding-left:0}.client-card-stats>div:last-child{border-right:0}
+.client-card-stats strong{font-size:18px}.client-card-stats span{color:#667085;font-size:9px}
+.narrow-panel{max-width:620px}
+.client-detail-layout,.project-detail-layout{display:grid;grid-template-columns:minmax(320px,.75fr) minmax(500px,1.25fr);gap:18px;margin-bottom:18px}
+.project-detail-layout{grid-template-columns:minmax(360px,1fr) minmax(300px,.8fr)}
+.project-list,.organization-job-list{display:grid}
+.project-row,.organization-job-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 4px;color:inherit;text-decoration:none;border-bottom:1px solid #edf0f5}
+.project-row:last-child,.organization-job-row:last-child{border-bottom:0}
+.project-row>div:first-child,.organization-job-row>div:first-child{display:grid;gap:3px;min-width:0}
+.project-row span,.organization-job-row span{color:#667085;font-size:10px}
+.project-row-stats,.organization-job-row>div:last-child{display:flex;align-items:center;gap:10px;flex:0 0 auto}
+.project-row b,.organization-job-row b{color:#175cd3;font-size:10px}
+.project-summary-panel{display:flex;flex-direction:column;justify-content:center}
+.project-summary-panel h2{margin:4px 0 5px}
+.project-summary-panel p{color:#667085;font-size:12px}
+.future-report-note{display:flex;align-items:flex-start;gap:10px;margin-top:18px;padding:13px 15px;border:1px solid #cfe0ff;border-radius:10px;background:#f5f8ff}
+.future-report-note strong{flex:0 0 auto;color:#175cd3}
+.future-report-note span{color:#667085;font-size:11px}
+
+/* Six report summary facts in V2.5 */
+.public-report-summary{grid-template-columns:repeat(3,1fr)}
+.public-report-summary>div:nth-child(3){border-right:0}
+.public-report-summary>div:nth-child(-n+3){border-bottom:1px solid #e4e7ec}
+
+@media(max-width:900px){
+  .client-grid{grid-template-columns:1fr}
+  .client-detail-layout,.project-detail-layout{grid-template-columns:1fr}
+  .assignment-form{grid-template-columns:1fr}
+}
+@media(max-width:620px){
+  .assignment-current{grid-template-columns:1fr}
+  .client-card-stats{grid-template-columns:1fr}
+  .client-card-stats>div{border-right:0;border-bottom:1px solid #e4e7ec;padding:8px 0}
+  .client-card-stats>div:last-child{border-bottom:0}
+  .project-row,.organization-job-row{align-items:flex-start;flex-direction:column}
+  .project-row-stats,.organization-job-row>div:last-child{flex-wrap:wrap}
+  .future-report-note{flex-direction:column}
+  .public-report-summary{grid-template-columns:1fr}
+  .public-report-summary>div{border-right:0;border-bottom:1px solid #e4e7ec}
+}

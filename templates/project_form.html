@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}New Project · {{ client['name'] }} · DispatchProof{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <a class="text-link" href="{{ url_for('client_detail', client_id=client['id']) }}">← {{ client['name'] }}</a>
+    <div class="eyebrow">Project</div>
+    <h1>New Project</h1>
+    <p>Create a project under {{ client['name'] }}.</p>
+  </div>
+</div>
+
+<section class="panel narrow-panel">
+  <form method="post" class="form-stack">
+    <label>Project Name<input required name="name" placeholder="2026 Retail Rollout"></label>
+    <label>Project Number<input name="project_number" placeholder="Optional client or internal number"></label>
+    <label>Project Location<input name="location" placeholder="Region, city, or general project location"></label>
+    <label>Notes<textarea name="notes" rows="4" placeholder="Optional project notes"></textarea></label>
+    <button class="btn primary wide" type="submit">Create Project</button>
+  </form>
+</section>
+{% endblock %}

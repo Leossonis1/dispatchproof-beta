@@ -473,3 +473,23 @@ description.
 The public report has a **Print / Save PDF** button using the browser's native
 print workflow. This keeps the beta lightweight while still giving a client or
 office user a clean PDF-style copy when needed.
+
+
+## V2.5 — Clients & Projects
+
+DispatchProof now supports **Client → Project → Installation Job** organization.
+
+- Create and edit clients.
+- Create projects under a client.
+- View active/completed install counts by client.
+- View every project and job belonging to a client.
+- View running and completed jobs inside a project.
+- Assign existing jobs from Job Detail.
+- Select client/project when creating a new job.
+- Jobs may remain unassigned.
+- Selecting a project automatically enforces that project's client.
+- Creating a new job from a Project page preselects that client/project.
+- V2.4 single-job Client Reports show the assigned Client and Project.
+- Activity Log records client/project creation, edits, and job assignment changes.
+- Backups include client/project tables and counts.
+- The relationship is designed for a future combined multi-job client/project report.

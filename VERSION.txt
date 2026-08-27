@@ -1,2 +1,2 @@
-DispatchProof Version 2.4 - Client Reports
-Adds secure branded live client reports with job evidence, arrival results, audit trail, and email/outbox generation.
+DispatchProof Version 2.5 - Clients & Projects
+Adds client and project organization so related installations can be managed together.

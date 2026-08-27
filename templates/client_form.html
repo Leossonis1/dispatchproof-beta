@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}New Client · DispatchProof{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <a class="text-link" href="{{ url_for('clients') }}">← Back to Clients & Projects</a>
+    <div class="eyebrow">Organization</div>
+    <h1>New Client</h1>
+    <p>Create the client company that projects and installs belong to.</p>
+  </div>
+</div>
+
+<section class="panel narrow-panel">
+  <form method="post" class="form-stack">
+    <label>Client Name<input required name="name" placeholder="Example Construction Group"></label>
+    <label>Primary Contact<input name="contact_name" placeholder="Jane Smith"></label>
+    <label>Contact Email<input type="email" name="contact_email" placeholder="jane@company.com"></label>
+    <label>Contact Phone<input name="contact_phone" placeholder="555-555-5555"></label>
+    <label>Notes<textarea name="notes" rows="4" placeholder="Optional internal notes about this client"></textarea></label>
+    <button class="btn primary wide" type="submit">Create Client</button>
+  </form>
+</section>
+{% endblock %}
