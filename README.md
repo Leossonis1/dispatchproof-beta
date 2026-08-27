@@ -1,40 +1,25 @@
+# DispatchProof V1.5.1 — Free Render Beta
 
-# DispatchProof V1.5 — Render Beta
+V1.5.1 makes free-tier email testing intentional.
 
-This is the first public-deployment build of DispatchProof.
+## Free Beta · Outbox Mode
 
-Start locally:
+The Render Blueprint now sets:
 
-```bat
-python -m pip install -r requirements.txt
-python app.py
-```
+`DISPATCHPROOF_EMAIL_MODE=outbox`
 
-Deploy to Render using the included:
+In this mode:
 
-- `render.yaml`
-- `DEPLOY_RENDER.md`
+- Readiness emails are generated and logged in Email Outbox.
+- Reminder previews are generated and logged in Email Outbox.
+- Nothing is sent externally.
+- SMTP is never attempted.
+- Automatic email reminder delivery is paused.
+- Existing Gmail SMTP environment variables can remain in Render; they are ignored while Outbox Mode is active.
 
-## Important
+The public readiness-link workflow continues to work normally.
 
-The included Render Blueprint uses the **Free** web-service plan for the first
-public workflow test. Free Render filesystem storage is temporary, so this is
-not yet the durable production configuration.
+## Later
 
-When we want persistent beta data, V1.5 already supports:
-
-`DISPATCHPROOF_DATA_DIR=/var/data/dispatchproof`
-
-with a Render persistent disk.
-
-## V1.5 features retained
-
-- readiness workflow
-- dispatch gating
-- photo proof
-- failed-mobilization reports
-- immutable mobilization history
-- multi-attempt jobs
-- email preview/outbox
-- SMTP email support
-- reminder workflow
+When we decide to enable real outbound email, we can use an HTTPS email API
+or an SMTP-capable hosting plan and explicitly switch email mode.

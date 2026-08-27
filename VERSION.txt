@@ -1,2 +1,2 @@
-DispatchProof Version 1.5 - Render Beta
-Public deployment build with Gunicorn, Render URL handling, health checks, and configurable data storage.
+DispatchProof Version 1.5.1 - Free Render Beta
+Outbox Mode patch: free beta never attempts blocked SMTP delivery.

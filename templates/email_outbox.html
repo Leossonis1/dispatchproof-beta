@@ -8,15 +8,15 @@
     <h1>Email Outbox</h1>
     <p>See every readiness request and reminder DispatchProof generated.</p>
   </div>
-  <span class="smtp-pill {{ 'connected' if smtp_configured else 'test-mode' }}">
-    {{ 'SMTP CONNECTED' if smtp_configured else 'TEST MODE' }}
+  <span class="smtp-pill {{ 'connected' if email_delivery_enabled else 'test-mode' }}">
+    {{ 'LIVE EMAIL' if email_delivery_enabled else 'OUTBOX MODE' }}
   </span>
 </div>
 
-{% if not smtp_configured %}
+{% if not email_delivery_enabled %}
 <div class="config-banner">
-  <strong>Nothing is leaving your computer yet.</strong>
-  <span>Until SMTP is configured, Send Email and Reminder actions are stored here for testing.</span>
+  <strong>Free beta email testing.</strong>
+  <span>Messages shown here are generated previews. Nothing is sent externally while Outbox Mode is active.</span>
 </div>
 {% endif %}
 

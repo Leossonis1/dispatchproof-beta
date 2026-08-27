@@ -55,6 +55,14 @@ SMTP_FROM_EMAIL = os.getenv("DISPATCHPROOF_SMTP_FROM_EMAIL", SMTP_USERNAME).stri
 SMTP_FROM_NAME = os.getenv("DISPATCHPROOF_SMTP_FROM_NAME", COMPANY_NAME).strip()
 SMTP_USE_TLS = os.getenv("DISPATCHPROOF_SMTP_USE_TLS", "true").lower() in {"1", "true", "yes", "on"}
 
+# Email mode:
+#   outbox = generate/log messages only; never attempt SMTP
+#   smtp   = attempt real SMTP delivery
+# Free Render beta defaults to outbox because outbound SMTP ports are unavailable.
+EMAIL_MODE = os.getenv("DISPATCHPROOF_EMAIL_MODE", "outbox").strip().lower()
+if EMAIL_MODE not in {"outbox", "smtp"}:
+    EMAIL_MODE = "outbox"
+
 # Reminder defaults for new jobs.
 DEFAULT_REMINDER_ENABLED = True
 DEFAULT_REMINDER_HOURS_BEFORE = 48
@@ -516,10 +524,13 @@ def public_readiness_url(job):
     base = public_app_base_url()
     if base:
         return f"{base}/r/{job['public_token']}"
-    return public_readiness_url(job)
+    return url_for("public_readiness", token=job["public_token"], _external=True)
 
 def smtp_is_configured():
     return bool(SMTP_HOST and SMTP_PORT and SMTP_FROM_EMAIL)
+
+def email_delivery_enabled():
+    return EMAIL_MODE == "smtp" and smtp_is_configured()
 
 def build_readiness_email(job, public_url, reminder=False):
     action_word = "Reminder" if reminder else "Site Readiness Confirmation"
@@ -567,8 +578,11 @@ def build_readiness_email(job, public_url, reminder=False):
     return subject, html
 
 def send_smtp_message(recipient_email, recipient_name, subject, html_body):
+    if EMAIL_MODE != "smtp":
+        return False, "Free beta Outbox Mode is enabled. Message generated locally and not delivered."
+
     if not smtp_is_configured():
-        return False, "SMTP is not configured. Message saved to DispatchProof Email Outbox."
+        return False, "SMTP mode is enabled, but SMTP is not fully configured."
 
     msg = EmailMessage()
     msg["Subject"] = subject
@@ -618,7 +632,12 @@ def send_readiness_email_for_job(job, public_url, reminder=False):
     )
 
     event_type = "REMINDER" if reminder else "READINESS_REQUEST"
-    status = "SENT" if sent else ("OUTBOX" if not smtp_is_configured() else "FAILED")
+    if sent:
+        status = "SENT"
+    elif EMAIL_MODE == "outbox":
+        status = "OUTBOX"
+    else:
+        status = "FAILED"
 
     with get_db() as db:
         log_email_event(
@@ -666,6 +685,8 @@ def latest_request_event(job_id):
         """, (job_id,)).fetchone()
 
 def reminder_due(job):
+    if not email_delivery_enabled():
+        return False
     if not job["reminder_enabled"]:
         return False
     if job["status"] != "NO RESPONSE":
@@ -722,8 +743,10 @@ def inject_brand():
     return {
         "company_name": COMPANY_NAME,
         "company_logo_url": COMPANY_LOGO_URL,
-        "app_version": "1.5",
+        "app_version": "1.5.1",
         "smtp_configured": smtp_is_configured(),
+        "email_mode": EMAIL_MODE,
+        "email_delivery_enabled": email_delivery_enabled(),
     }
 
 @app.before_request
@@ -754,9 +777,11 @@ def ensure_db():
 def health():
     return {
         "status": "ok",
-        "version": "1.5",
+        "version": "1.5.1",
         "data_dir": str(DATA_DIR),
+        "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
+        "email_delivery_enabled": email_delivery_enabled(),
     }, 200
 
 @app.route("/")
@@ -878,9 +903,9 @@ def send_readiness_email(job_id):
     if status == "SENT":
         flash(f"Readiness request emailed to {job['contact_email']}.")
     elif status == "OUTBOX":
-        flash("SMTP is not configured yet. The email was saved to the DispatchProof Email Outbox for testing.")
+        flash("Readiness email generated in Outbox Mode. Nothing was sent externally.")
     else:
-        flash(f"Email failed: {error}")
+        flash(f"Email delivery failed: {error}")
 
     return redirect(url_for("readiness_request", job_id=job_id))
 
@@ -901,9 +926,9 @@ def send_reminder(job_id):
     if status == "SENT":
         flash(f"Reminder emailed to {job['contact_email']}.")
     elif status == "OUTBOX":
-        flash("SMTP is not configured yet. The reminder was saved to the Email Outbox.")
+        flash("Reminder generated in Outbox Mode. Nothing was sent externally.")
     else:
-        flash(f"Reminder failed: {error}")
+        flash(f"Reminder delivery failed: {error}")
 
     return redirect(url_for("readiness_request", job_id=job_id))
 

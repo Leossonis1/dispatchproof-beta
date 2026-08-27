@@ -12,3 +12,5 @@ services:
         generateValue: true
       - key: DISPATCHPROOF_COMPANY_NAME
         value: DispatchProof Beta
+      - key: DISPATCHPROOF_EMAIL_MODE
+        value: outbox

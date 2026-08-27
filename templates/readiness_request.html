@@ -11,15 +11,20 @@
   <span class="badge {{ job['status']|lower|replace(' ', '-') }}">{{ job['status'] }}</span>
 </div>
 
-{% if smtp_configured %}
+{% if email_delivery_enabled %}
 <div class="success-banner">
-  <strong>Email delivery connected.</strong>
-  <span>DispatchProof will send through your configured SMTP account.</span>
+  <strong>Live email delivery enabled.</strong>
+  <span>DispatchProof will attempt delivery through the configured SMTP account.</span>
+</div>
+{% elif email_mode == 'outbox' %}
+<div class="config-banner">
+  <strong>Free Beta · Outbox Mode</strong>
+  <span>Email actions are generated and logged for testing, but nothing is sent externally.</span>
 </div>
 {% else %}
 <div class="config-banner">
-  <strong>Email test mode.</strong>
-  <span>SMTP is not configured yet. Send actions will be saved to the Email Outbox instead of leaving your computer.</span>
+  <strong>Email delivery not ready.</strong>
+  <span>SMTP mode is enabled, but the SMTP configuration is incomplete.</span>
 </div>
 {% endif %}
 
@@ -58,7 +63,9 @@
 
     <form method="post" action="{{ url_for('send_readiness_email', job_id=job['id']) }}" class="primary-send-form">
       <button class="btn primary wide" type="submit">
-        {% if job['request_sent_at'] %}
+        {% if email_mode == 'outbox' %}
+          Generate Readiness Email
+        {% elif job['request_sent_at'] %}
           Resend Readiness Email
         {% elif request_event and request_event['status'] == 'OUTBOX' %}
           Generate Email Again
@@ -68,7 +75,12 @@
       </button>
     </form>
 
-    {% if job['status'] == 'NO RESPONSE' and job['request_sent_at'] %}
+    {% if email_mode == 'outbox' and job['status'] == 'NO RESPONSE' %}
+    <form method="post" action="{{ url_for('send_reminder', job_id=job['id']) }}">
+      <button class="btn ghost wide" type="submit">Generate Reminder Preview</button>
+    </form>
+    <div class="test-mode-note">Automatic email reminders are paused in free-beta Outbox Mode.</div>
+    {% elif job['status'] == 'NO RESPONSE' and job['request_sent_at'] %}
     <form method="post" action="{{ url_for('send_reminder', job_id=job['id']) }}">
       <button class="btn ghost wide" type="submit">Send Reminder Now</button>
     </form>
