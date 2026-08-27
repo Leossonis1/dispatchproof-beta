@@ -2062,3 +2062,9 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(15,98,254,.12);bo
   .help-footer-card{align-items:flex-start;flex-direction:column}
   .status-guide>div{grid-template-columns:1fr}
 }
+
+
+/* V2.7.1: respect the HTML hidden attribute on the Help search empty-state. */
+.help-no-results[hidden]{
+  display:none !important;
+}

@@ -1,2 +1,2 @@
-DispatchProof Version 2.7 - Help & Tutorials
-Adds a searchable in-app Help Center with role-aware walkthroughs for core workflows, reports, admin tools, and backup/restore.
+DispatchProof Version 2.7.1 - Help Search Display Fix
+Fixes the Help & Tutorials no-results message so it remains hidden until a search actually returns zero matches.
