@@ -222,9 +222,65 @@ def ensure_columns(db):
             public_url TEXT,
             status TEXT NOT NULL,
             error_message TEXT,
+            scope_type TEXT,
+            scope_id INTEGER,
+            scope_name TEXT,
             created_at TEXT NOT NULL,
             FOREIGN KEY(job_id) REFERENCES jobs(id)
         )
+    """)
+
+
+    # V2.6: extend V2.5 client/project records and email history without
+    # requiring a destructive database migration.
+    for table_name, columns in {
+        "clients": {"report_token": "TEXT"},
+        "projects": {"report_token": "TEXT"},
+        "email_events": {
+            "scope_type": "TEXT",
+            "scope_id": "INTEGER",
+            "scope_name": "TEXT",
+        },
+    }.items():
+        existing_columns = {
+            row["name"]
+            for row in db.execute(f"PRAGMA table_info({table_name})").fetchall()
+        }
+        for column_name, sql_type in columns.items():
+            if column_name not in existing_columns:
+                db.execute(
+                    f"ALTER TABLE {table_name} ADD COLUMN {column_name} {sql_type}"
+                )
+
+    for table_name in ("clients", "projects"):
+        rows_without_report_token = db.execute(
+            f"""
+            SELECT id FROM {table_name}
+            WHERE report_token IS NULL OR TRIM(report_token) = ''
+            """
+        ).fetchall()
+
+        for row in rows_without_report_token:
+            while True:
+                candidate = secrets.token_urlsafe(24)
+                exists = db.execute(
+                    f"SELECT 1 FROM {table_name} WHERE report_token = ?",
+                    (candidate,),
+                ).fetchone()
+                if not exists:
+                    db.execute(
+                        f"UPDATE {table_name} SET report_token = ? WHERE id = ?",
+                        (candidate, row["id"]),
+                    )
+                    break
+
+    db.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_clients_report_token
+        ON clients(report_token)
+    """)
+    db.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_report_token
+        ON projects(report_token)
     """)
 
     # Backfill a separate high-entropy installer-arrival token for older jobs.
@@ -308,6 +364,7 @@ def init_db():
 
         CREATE TABLE IF NOT EXISTS clients (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            report_token TEXT UNIQUE,
             name TEXT NOT NULL COLLATE NOCASE,
             contact_name TEXT,
             contact_email TEXT,
@@ -319,6 +376,7 @@ def init_db():
 
         CREATE TABLE IF NOT EXISTS projects (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            report_token TEXT UNIQUE,
             client_id INTEGER NOT NULL,
             name TEXT NOT NULL COLLATE NOCASE,
             project_number TEXT,
@@ -699,7 +757,7 @@ def recover_v130_orphaned_mobilizations(db):
                 failed_report_number=NULL,
                 failed_report_generated_at=NULL
             WHERE id=?
-        """, (job["id"],))
+        """, (new_arrival_token, job["id"]))
 
         recovered += 1
 
@@ -746,6 +804,26 @@ def public_client_report_url(job):
     if base:
         return f"{base}/c/{job['client_report_token']}"
     return url_for("public_client_report", token=job["client_report_token"], _external=True)
+
+def public_portfolio_report_url(scope_type, entity):
+    token = entity["report_token"]
+    base = public_app_base_url()
+    if scope_type == "CLIENT":
+        if base:
+            return f"{base}/portfolio/client/{token}"
+        return url_for(
+            "public_client_portfolio_report",
+            token=token,
+            _external=True,
+        )
+
+    if base:
+        return f"{base}/portfolio/project/{token}"
+    return url_for(
+        "public_project_portfolio_report",
+        token=token,
+        _external=True,
+    )
 
 
 def parse_json_list(value):
@@ -906,6 +984,171 @@ def build_client_report_email(job, report_url, recipient_name=""):
     """
     return subject, html
 
+
+def portfolio_jobs(scope_type, scope_id):
+    with get_db() as db:
+        if scope_type == "CLIENT":
+            jobs = db.execute("""
+                SELECT j.*, p.name AS assigned_project_name
+                FROM jobs j
+                LEFT JOIN projects p ON p.id = j.project_id
+                WHERE j.client_id = ?
+                ORDER BY
+                    CASE WHEN j.status = 'COMPLETED' THEN 1 ELSE 0 END,
+                    j.installation_date,
+                    j.id
+            """, (scope_id,)).fetchall()
+        else:
+            jobs = db.execute("""
+                SELECT j.*, p.name AS assigned_project_name
+                FROM jobs j
+                LEFT JOIN projects p ON p.id = j.project_id
+                WHERE j.project_id = ?
+                ORDER BY
+                    CASE WHEN j.status = 'COMPLETED' THEN 1 ELSE 0 END,
+                    j.installation_date,
+                    j.id
+            """, (scope_id,)).fetchall()
+
+    return jobs
+
+def portfolio_report_data(scope_type, scope_id):
+    jobs = portfolio_jobs(scope_type, scope_id)
+    items = []
+    counts = {
+        "total": len(jobs),
+        "active": 0,
+        "ready": 0,
+        "on_site": 0,
+        "blocked": 0,
+        "no_response": 0,
+        "completed": 0,
+    }
+
+    for job in jobs:
+        status = job["status"]
+        if status == "COMPLETED":
+            counts["completed"] += 1
+        else:
+            counts["active"] += 1
+        if status == "READY":
+            counts["ready"] += 1
+        elif status == "ON SITE":
+            counts["on_site"] += 1
+        elif status in ("BLOCKED", "REVIEW"):
+            counts["blocked"] += 1
+        elif status == "NO RESPONSE":
+            counts["no_response"] += 1
+
+        data = client_report_data(job)
+        items.append({
+            "job": job,
+            "data": data,
+        })
+
+    return {
+        "jobs": items,
+        "counts": counts,
+    }
+
+def portfolio_evidence_allowed(scope_type, scope_id, job_id, filename):
+    with get_db() as db:
+        if scope_type == "CLIENT":
+            job = db.execute(
+                "SELECT * FROM jobs WHERE id = ? AND client_id = ?",
+                (job_id, scope_id),
+            ).fetchone()
+        else:
+            job = db.execute(
+                "SELECT * FROM jobs WHERE id = ? AND project_id = ?",
+                (job_id, scope_id),
+            ).fetchone()
+
+    if not job:
+        return False
+    return filename in job_evidence_filenames(job)
+
+def build_portfolio_report_email(
+    scope_type,
+    entity,
+    client,
+    jobs,
+    report_url,
+    recipient_name="",
+):
+    settings = get_app_settings()
+    brand_name = settings.get("company_name") or COMPANY_NAME
+    brand_tagline = settings.get("company_tagline") or PRODUCT_TAGLINE
+    brand_accent = normalize_hex_color(settings.get("accent_color"))
+    logo_url = company_logo_external_url(settings)
+
+    entity_name = entity["name"]
+    scope_label = "Client" if scope_type == "CLIENT" else "Project"
+    active_count = sum(1 for job in jobs if job["status"] != "COMPLETED")
+    completed_count = sum(1 for job in jobs if job["status"] == "COMPLETED")
+
+    esc_brand = html_lib.escape(str(brand_name))
+    esc_tagline = html_lib.escape(str(brand_tagline))
+    esc_entity = html_lib.escape(str(entity_name))
+    esc_client = html_lib.escape(str(client["name"]))
+    esc_recipient = html_lib.escape(str(recipient_name or ""))
+    esc_url = html_lib.escape(str(report_url), quote=True)
+
+    subject = f"{scope_label} Installation Report: {entity_name}"
+    greeting = f"Hi {esc_recipient}," if esc_recipient else "Hello,"
+
+    html = f"""
+    <html>
+      <body style="font-family:Arial,sans-serif;background:#f5f7fb;padding:28px;color:#152033;">
+        <div style="max-width:660px;margin:0 auto;background:#ffffff;border:1px solid #dfe5ee;border-radius:14px;padding:28px;">
+          {f'<img src="{logo_url}" alt="{esc_brand} logo" style="max-height:54px;max-width:180px;object-fit:contain;margin-bottom:10px;display:block;">' if logo_url else ''}
+          <div style="font-size:22px;font-weight:800;color:#0b2348;margin-bottom:4px;">{esc_brand}</div>
+          <div style="font-size:12px;color:#6b7280;margin-bottom:2px;">{esc_tagline}</div>
+          <div style="font-size:11px;color:#98a2b3;margin-bottom:24px;">Powered by DispatchProof</div>
+
+          <p style="line-height:1.55;">{greeting}</p>
+          <p style="line-height:1.55;">
+            A combined installation report is available for
+            <strong>{esc_entity}</strong>
+            {f' under {esc_client}' if scope_type == 'PROJECT' else ''}.
+          </p>
+
+          <div style="display:flex;gap:10px;margin:18px 0;flex-wrap:wrap;">
+            <div style="min-width:120px;background:#f8fafc;border:1px solid #dfe5ee;border-radius:10px;padding:12px;">
+              <div style="font-size:11px;color:#667085;">ACTIVE INSTALLS</div>
+              <div style="font-size:22px;font-weight:800;">{active_count}</div>
+            </div>
+            <div style="min-width:120px;background:#f8fafc;border:1px solid #dfe5ee;border-radius:10px;padding:12px;">
+              <div style="font-size:11px;color:#667085;">COMPLETED</div>
+              <div style="font-size:22px;font-weight:800;">{completed_count}</div>
+            </div>
+            <div style="min-width:120px;background:#f8fafc;border:1px solid #dfe5ee;border-radius:10px;padding:12px;">
+              <div style="font-size:11px;color:#667085;">TOTAL JOBS</div>
+              <div style="font-size:22px;font-weight:800;">{len(jobs)}</div>
+            </div>
+          </div>
+
+          <p style="line-height:1.55;color:#475467;">
+            The live report includes each installation's current status,
+            readiness confirmation, field arrival result, evidence photos,
+            and job audit trail.
+          </p>
+
+          <div style="margin:26px 0;">
+            <a href="{esc_url}" style="display:inline-block;background:{brand_accent};color:white;text-decoration:none;font-weight:700;padding:13px 18px;border-radius:9px;">
+              View Combined Installation Report
+            </a>
+          </div>
+
+          <p style="font-size:12px;color:#6b7280;line-height:1.5;">
+            This secure report link reflects the current DispatchProof records in this {scope_label.lower()} report.
+          </p>
+        </div>
+      </body>
+    </html>
+    """
+    return subject, html
+
 def smtp_is_configured():
     return bool(SMTP_HOST and SMTP_PORT and SMTP_FROM_EMAIL)
 
@@ -990,13 +1233,27 @@ def send_smtp_message(recipient_email, recipient_name, subject, html_body):
     except Exception as exc:
         return False, str(exc)
 
-def log_email_event(db, job_id, event_type, recipient_email, recipient_name,
-                    subject, body_html, public_url, status, error_message=None):
+def log_email_event(
+    db,
+    job_id,
+    event_type,
+    recipient_email,
+    recipient_name,
+    subject,
+    body_html,
+    public_url,
+    status,
+    error_message=None,
+    scope_type=None,
+    scope_id=None,
+    scope_name=None,
+):
     db.execute("""
         INSERT INTO email_events (
             job_id, event_type, recipient_email, recipient_name,
-            subject, body_html, public_url, status, error_message, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            subject, body_html, public_url, status, error_message,
+            scope_type, scope_id, scope_name, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         job_id,
         event_type,
@@ -1007,6 +1264,9 @@ def log_email_event(db, job_id, event_type, recipient_email, recipient_name,
         public_url,
         status,
         error_message,
+        scope_type,
+        scope_id,
+        scope_name,
         now_iso(),
     ))
 
@@ -1360,7 +1620,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.5",
+        "app_version": "2.6",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -1588,7 +1848,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.5",
+        "app_version": "2.6",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -1606,7 +1866,10 @@ def ensure_db():
 
     public_endpoints = {
         "login", "health", "static", "public_readiness", "public_arrival",
-        "public_client_report", "client_report_asset", "company_logo"
+        "public_client_report", "client_report_asset",
+        "public_client_portfolio_report", "public_project_portfolio_report",
+        "client_portfolio_asset", "project_portfolio_asset",
+        "company_logo"
     }
     if request.endpoint not in public_endpoints and not user_authenticated():
         return redirect(url_for("login", next=request.full_path if request.query_string else request.path))
@@ -1629,7 +1892,13 @@ def ensure_db():
         return redirect(url_for("dashboard"))
 
     # Do not make static/public requests responsible for sending reminders.
-    if request.endpoint in {"static", "health", "public_readiness", "public_arrival", "company_logo"}:
+    if request.endpoint in {
+        "static", "health", "public_readiness", "public_arrival",
+        "public_client_report", "client_report_asset",
+        "public_client_portfolio_report", "public_project_portfolio_report",
+        "client_portfolio_asset", "project_portfolio_asset",
+        "company_logo",
+    }:
         return
 
     now = datetime.now()
@@ -1722,7 +1991,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.5",
+        "version": "2.6",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -2269,6 +2538,297 @@ def restore_backup():
 
 
 
+
+def get_portfolio_scope(scope_type, scope_id):
+    with get_db() as db:
+        if scope_type == "CLIENT":
+            entity = db.execute(
+                "SELECT * FROM clients WHERE id = ?",
+                (scope_id,),
+            ).fetchone()
+            client = entity
+        else:
+            entity = db.execute("""
+                SELECT p.*, c.name AS client_name,
+                       c.contact_name AS client_contact_name,
+                       c.contact_email AS client_contact_email,
+                       c.contact_phone AS client_contact_phone
+                FROM projects p
+                JOIN clients c ON c.id = p.client_id
+                WHERE p.id = ?
+            """, (scope_id,)).fetchone()
+            client = db.execute(
+                "SELECT * FROM clients WHERE id = ?",
+                (entity["client_id"],),
+            ).fetchone() if entity else None
+
+    return entity, client
+
+def render_portfolio_manager(scope_type, scope_id):
+    entity, client = get_portfolio_scope(scope_type, scope_id)
+    if not entity:
+        abort(404)
+
+    jobs = portfolio_jobs(scope_type, scope_id)
+    report_url = public_portfolio_report_url(scope_type, entity)
+    default_name = (
+        client["contact_name"]
+        if client and client["contact_name"]
+        else ""
+    )
+    default_email = (
+        client["contact_email"]
+        if client and client["contact_email"]
+        else ""
+    )
+
+    return render_template(
+        "portfolio_report.html",
+        scope_type=scope_type,
+        entity=entity,
+        client=client,
+        jobs=jobs,
+        report_url=report_url,
+        default_name=default_name,
+        default_email=default_email,
+    )
+
+def generate_portfolio_email(scope_type, scope_id):
+    entity, client = get_portfolio_scope(scope_type, scope_id)
+    if not entity or not client:
+        abort(404)
+
+    jobs = portfolio_jobs(scope_type, scope_id)
+    if not jobs:
+        flash("Add at least one installation before generating a combined report email.")
+        return redirect(
+            url_for(
+                "client_combined_report" if scope_type == "CLIENT" else "project_combined_report",
+                **({"client_id": scope_id} if scope_type == "CLIENT" else {"project_id": scope_id}),
+            )
+        )
+
+    recipient_name = request.form.get("recipient_name", "").strip()
+    recipient_email = request.form.get("recipient_email", "").strip()
+    if not recipient_email or "@" not in recipient_email:
+        flash("Enter a valid client email address.")
+        return redirect(
+            url_for(
+                "client_combined_report" if scope_type == "CLIENT" else "project_combined_report",
+                **({"client_id": scope_id} if scope_type == "CLIENT" else {"project_id": scope_id}),
+            )
+        )
+
+    report_url = public_portfolio_report_url(scope_type, entity)
+    subject, html = build_portfolio_report_email(
+        scope_type,
+        entity,
+        client,
+        jobs,
+        report_url,
+        recipient_name=recipient_name,
+    )
+    sent, error = send_smtp_message(
+        recipient_email,
+        recipient_name,
+        subject,
+        html,
+    )
+
+    if sent:
+        status = "SENT"
+    elif EMAIL_MODE == "outbox":
+        status = "OUTBOX"
+    else:
+        status = "FAILED"
+
+    anchor_job_id = jobs[0]["id"]
+    scope_label = "Client" if scope_type == "CLIENT" else "Project"
+    event_type = (
+        "CLIENT_COMBINED_REPORT"
+        if scope_type == "CLIENT"
+        else "PROJECT_COMBINED_REPORT"
+    )
+
+    with get_db() as db:
+        log_email_event(
+            db,
+            anchor_job_id,
+            event_type,
+            recipient_email,
+            recipient_name,
+            subject,
+            html,
+            report_url,
+            status,
+            error,
+            scope_type=scope_type,
+            scope_id=scope_id,
+            scope_name=entity["name"],
+        )
+        record_activity(
+            db,
+            f"{scope_label} Combined Report Generated",
+            f"Generated combined report for {entity['name']} to {recipient_email}: {status}.",
+        )
+        db.commit()
+
+    if status == "SENT":
+        flash(f"Combined report emailed to {recipient_email}.")
+    elif status == "OUTBOX":
+        flash("Combined report generated in Outbox Mode. Nothing was sent externally.")
+    else:
+        flash(f"Combined report delivery failed: {error}")
+
+    return redirect(
+        url_for(
+            "client_combined_report" if scope_type == "CLIENT" else "project_combined_report",
+            **({"client_id": scope_id} if scope_type == "CLIENT" else {"project_id": scope_id}),
+        )
+    )
+
+def rotate_portfolio_token(scope_type, scope_id):
+    entity, _ = get_portfolio_scope(scope_type, scope_id)
+    if not entity:
+        abort(404)
+
+    table_name = "clients" if scope_type == "CLIENT" else "projects"
+    while True:
+        new_token = secrets.token_urlsafe(24)
+        with get_db() as db:
+            exists = db.execute(
+                f"SELECT 1 FROM {table_name} WHERE report_token = ?",
+                (new_token,),
+            ).fetchone()
+        if not exists:
+            break
+
+    with get_db() as db:
+        db.execute(
+            f"UPDATE {table_name} SET report_token = ? WHERE id = ?",
+            (new_token, scope_id),
+        )
+        scope_label = "Client" if scope_type == "CLIENT" else "Project"
+        record_activity(
+            db,
+            f"{scope_label} Combined Report Link Rotated",
+            f"Revoked the previous combined report link for {entity['name']}.",
+        )
+        db.commit()
+
+    flash("Combined report link rotated. The previous link no longer works.")
+    return redirect(
+        url_for(
+            "client_combined_report" if scope_type == "CLIENT" else "project_combined_report",
+            **({"client_id": scope_id} if scope_type == "CLIENT" else {"project_id": scope_id}),
+        )
+    )
+
+
+@app.route("/clients/<int:client_id>/combined-report", methods=["GET", "POST"])
+def client_combined_report(client_id):
+    if request.method == "POST":
+        return generate_portfolio_email("CLIENT", client_id)
+    return render_portfolio_manager("CLIENT", client_id)
+
+
+@app.post("/clients/<int:client_id>/combined-report/rotate")
+def rotate_client_combined_report(client_id):
+    return rotate_portfolio_token("CLIENT", client_id)
+
+
+@app.route("/projects/<int:project_id>/combined-report", methods=["GET", "POST"])
+def project_combined_report(project_id):
+    if request.method == "POST":
+        return generate_portfolio_email("PROJECT", project_id)
+    return render_portfolio_manager("PROJECT", project_id)
+
+
+@app.post("/projects/<int:project_id>/combined-report/rotate")
+def rotate_project_combined_report(project_id):
+    return rotate_portfolio_token("PROJECT", project_id)
+
+
+@app.route("/portfolio/client/<token>")
+def public_client_portfolio_report(token):
+    with get_db() as db:
+        entity = db.execute(
+            "SELECT * FROM clients WHERE report_token = ?",
+            (token,),
+        ).fetchone()
+    if not entity:
+        abort(404)
+
+    report = portfolio_report_data("CLIENT", entity["id"])
+    return render_template(
+        "public_portfolio_report.html",
+        scope_type="CLIENT",
+        entity=entity,
+        client=entity,
+        report=report,
+        report_token=token,
+        generated_at=now_iso(),
+    )
+
+
+@app.route("/portfolio/project/<token>")
+def public_project_portfolio_report(token):
+    with get_db() as db:
+        entity = db.execute("""
+            SELECT p.*, c.name AS client_name,
+                   c.contact_email AS client_contact_email,
+                   c.contact_phone AS client_contact_phone
+            FROM projects p
+            JOIN clients c ON c.id = p.client_id
+            WHERE p.report_token = ?
+        """, (token,)).fetchone()
+        client = db.execute(
+            "SELECT * FROM clients WHERE id = ?",
+            (entity["client_id"],),
+        ).fetchone() if entity else None
+    if not entity:
+        abort(404)
+
+    report = portfolio_report_data("PROJECT", entity["id"])
+    return render_template(
+        "public_portfolio_report.html",
+        scope_type="PROJECT",
+        entity=entity,
+        client=client,
+        report=report,
+        report_token=token,
+        generated_at=now_iso(),
+    )
+
+
+@app.route("/portfolio/client/<token>/evidence/<int:job_id>/<path:filename>")
+def client_portfolio_asset(token, job_id, filename):
+    with get_db() as db:
+        entity = db.execute(
+            "SELECT * FROM clients WHERE report_token = ?",
+            (token,),
+        ).fetchone()
+    if not entity:
+        abort(404)
+    if not portfolio_evidence_allowed("CLIENT", entity["id"], job_id, filename):
+        abort(404)
+    return send_from_directory(UPLOAD_DIR, filename)
+
+
+@app.route("/portfolio/project/<token>/evidence/<int:job_id>/<path:filename>")
+def project_portfolio_asset(token, job_id, filename):
+    with get_db() as db:
+        entity = db.execute(
+            "SELECT * FROM projects WHERE report_token = ?",
+            (token,),
+        ).fetchone()
+    if not entity:
+        abort(404)
+    if not portfolio_evidence_allowed("PROJECT", entity["id"], job_id, filename):
+        abort(404)
+    return send_from_directory(UPLOAD_DIR, filename)
+
+
 @app.route("/clients")
 def clients():
     with get_db() as db:
@@ -2300,6 +2860,7 @@ def new_client():
             flash("Client Name is required.")
             return redirect(url_for("new_client"))
 
+        report_token = secrets.token_urlsafe(24)
         with get_db() as db:
             duplicate = db.execute(
                 "SELECT id FROM clients WHERE name = ? COLLATE NOCASE", (name,)
@@ -2310,10 +2871,13 @@ def new_client():
 
             cur = db.execute("""
                 INSERT INTO clients (
-                    name, contact_name, contact_email, contact_phone,
+                    report_token, name, contact_name, contact_email, contact_phone,
                     notes, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (name, contact_name, contact_email, contact_phone, notes, now_iso(), now_iso()))
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                report_token, name, contact_name, contact_email, contact_phone,
+                notes, now_iso(), now_iso()
+            ))
             client_id = cur.lastrowid
             record_activity(db, "Client Added", f"Added client {name}.")
             db.commit()
@@ -2402,6 +2966,7 @@ def new_project(client_id):
             flash("Project Name is required.")
             return redirect(url_for("new_project", client_id=client_id))
 
+        report_token = secrets.token_urlsafe(24)
         with get_db() as db:
             duplicate = db.execute("""
                 SELECT id FROM projects
@@ -2413,10 +2978,13 @@ def new_project(client_id):
 
             cur = db.execute("""
                 INSERT INTO projects (
-                    client_id, name, project_number, location,
+                    report_token, client_id, name, project_number, location,
                     notes, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (client_id, name, project_number, location, notes, now_iso(), now_iso()))
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                report_token, client_id, name, project_number, location,
+                notes, now_iso(), now_iso()
+            ))
             project_id = cur.lastrowid
             record_activity(db, "Project Added", f"Added project {name} for client {client['name']}.")
             db.commit()
@@ -2938,7 +3506,8 @@ def client_report_asset(token, filename):
 def email_outbox():
     with get_db() as db:
         events = db.execute("""
-            SELECT e.*, j.job_name
+            SELECT e.*, j.job_name,
+                   COALESCE(e.scope_name, j.job_name) AS display_name
             FROM email_events e
             JOIN jobs j ON j.id = e.job_id
             ORDER BY e.id DESC
@@ -2951,7 +3520,8 @@ def email_outbox():
 def email_outbox_detail(event_id):
     with get_db() as db:
         event = db.execute("""
-            SELECT e.*, j.job_name, j.project_site
+            SELECT e.*, j.job_name, j.project_site,
+                   COALESCE(e.scope_name, j.job_name) AS display_name
             FROM email_events e
             JOIN jobs j ON j.id = e.job_id
             WHERE e.id = ?
