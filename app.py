@@ -1639,7 +1639,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.10",
+        "app_version": "2.11",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -1867,7 +1867,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.10",
+        "app_version": "2.11",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2010,7 +2010,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.10",
+        "version": "2.11",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -3998,6 +3998,138 @@ def add_job_note(job_id):
 
     flash("Internal job note saved.")
     return redirect(url_for("job_detail", job_id=job_id) + "#internal-notes")
+
+
+@app.route("/jobs/<int:job_id>/edit", methods=["GET", "POST"])
+def edit_job(job_id):
+    with get_db() as db:
+        job = db.execute(
+            "SELECT * FROM jobs WHERE id = ?",
+            (job_id,),
+        ).fetchone()
+        if not job:
+            abort(404)
+
+        if job["status"] == "COMPLETED":
+            flash("Completed jobs are locked. Reopen/reset the job before changing its setup.")
+            return redirect(url_for("job_detail", job_id=job_id))
+
+        if request.method == "POST":
+            job_name = request.form.get("job_name", "").strip()
+            project_site = request.form.get("project_site", "").strip()
+            installation_date = request.form.get("installation_date", "").strip()
+            contact_name = request.form.get("contact_name", "").strip()
+            contact_email = request.form.get("contact_email", "").strip()
+            contact_phone = request.form.get("contact_phone", "").strip()
+            reminder_enabled = 1 if request.form.get("reminder_enabled") == "on" else 0
+
+            try:
+                reminder_hours_before = int(
+                    request.form.get("reminder_hours_before") or DEFAULT_REMINDER_HOURS_BEFORE
+                )
+            except ValueError:
+                reminder_hours_before = DEFAULT_REMINDER_HOURS_BEFORE
+
+            if reminder_hours_before not in {24, 48, 72}:
+                reminder_hours_before = DEFAULT_REMINDER_HOURS_BEFORE
+
+            if not job_name or not installation_date or not contact_name or not contact_email:
+                flash("Job Name, Installation Date, Site Contact, and Email are required.")
+                return render_template(
+                    "edit_job.html",
+                    job=job,
+                    form_values={
+                        "job_name": job_name,
+                        "project_site": project_site,
+                        "installation_date": installation_date,
+                        "contact_name": contact_name,
+                        "contact_email": contact_email,
+                        "contact_phone": contact_phone,
+                        "reminder_enabled": reminder_enabled,
+                        "reminder_hours_before": reminder_hours_before,
+                    },
+                )
+
+            changes = []
+
+            def note_change(label, old_value, new_value):
+                old_text = "" if old_value is None else str(old_value)
+                new_text = "" if new_value is None else str(new_value)
+                if old_text != new_text:
+                    changes.append(f"{label}: {old_text or '—'} → {new_text or '—'}")
+
+            note_change("Job Name", job["job_name"], job_name)
+            note_change("Project / Site", job["project_site"], project_site)
+            note_change("Install Date", job["installation_date"], installation_date)
+            note_change("Site Contact", job["contact_name"], contact_name)
+            note_change("Contact Email", job["contact_email"], contact_email)
+            note_change("Contact Phone", job["contact_phone"], contact_phone)
+            note_change(
+                "Automatic Reminder",
+                "Enabled" if job["reminder_enabled"] else "Disabled",
+                "Enabled" if reminder_enabled else "Disabled",
+            )
+            note_change(
+                "Reminder Window",
+                f"{job['reminder_hours_before']} hours" if job["reminder_hours_before"] else "—",
+                f"{reminder_hours_before} hours",
+            )
+
+            if changes:
+                db.execute("""
+                    UPDATE jobs
+                    SET job_name = ?,
+                        project_site = ?,
+                        installation_date = ?,
+                        contact_name = ?,
+                        contact_email = ?,
+                        contact_phone = ?,
+                        reminder_enabled = ?,
+                        reminder_hours_before = ?
+                    WHERE id = ?
+                """, (
+                    job_name,
+                    project_site,
+                    installation_date,
+                    contact_name,
+                    contact_email,
+                    contact_phone,
+                    reminder_enabled,
+                    reminder_hours_before,
+                    job_id,
+                ))
+
+                record_activity(
+                    db,
+                    "Job Details Updated",
+                    " · ".join(changes),
+                    job_id=job_id,
+                )
+                db.commit()
+                flash("Job details updated.")
+            else:
+                flash("No job detail changes were made.")
+
+            return redirect(url_for("job_detail", job_id=job_id))
+
+        form_values = {
+            "job_name": job["job_name"] or "",
+            "project_site": job["project_site"] or "",
+            "installation_date": job["installation_date"] or "",
+            "contact_name": job["contact_name"] or "",
+            "contact_email": job["contact_email"] or "",
+            "contact_phone": job["contact_phone"] or "",
+            "reminder_enabled": int(job["reminder_enabled"] or 0),
+            "reminder_hours_before": int(
+                job["reminder_hours_before"] or DEFAULT_REMINDER_HOURS_BEFORE
+            ),
+        }
+
+    return render_template(
+        "edit_job.html",
+        job=job,
+        form_values=form_values,
+    )
 
 
 @app.route("/jobs/<int:job_id>")
