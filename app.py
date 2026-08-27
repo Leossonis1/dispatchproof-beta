@@ -131,6 +131,7 @@ def ensure_columns(db):
     existing = {row["name"] for row in db.execute("PRAGMA table_info(jobs)").fetchall()}
     needed = {
         "arrival_token": "TEXT",
+        "completed_at": "TEXT",
         "arrival_status": "TEXT",
         "arrived_at": "TEXT",
         "arrival_reported_by": "TEXT",
@@ -252,6 +253,16 @@ def ensure_columns(db):
             reminder_hours_before = COALESCE(reminder_hours_before, 48),
             reminder_count = COALESCE(reminder_count, 0)
     """)
+
+    # V1.8 kept a successful arrival in READY. In V1.9 that state is ON SITE.
+    db.execute("""
+        UPDATE jobs
+        SET status = 'ON SITE'
+        WHERE arrival_status = 'READY'
+          AND status = 'READY'
+          AND completed_at IS NULL
+    """)
+
     db.commit()
 
 def init_db():
@@ -270,6 +281,7 @@ def init_db():
             checklist_json TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'NO RESPONSE',
             created_at TEXT NOT NULL,
+            completed_at TEXT,
             response_at TEXT,
             confirmed_by TEXT,
             confirmed_title TEXT,
@@ -383,6 +395,17 @@ def archive_current_mobilization(db, job):
     ).fetchone()["c"]
     attempt_number = count + 1
 
+    # Lifecycle status may now be ON SITE or BLOCKED. Preserve the readiness
+    # result that existed before the installer arrived.
+    readiness_status = job["status"]
+    if job["response_at"] and job["response_json"]:
+        try:
+            readiness_answers = json.loads(job["response_json"])
+            readiness_photos = json.loads(job["photo_json"]) if job["photo_json"] else []
+            readiness_status = calculate_status(readiness_answers, readiness_photos)
+        except Exception:
+            pass
+
     db.execute("""
         INSERT INTO mobilization_attempts (
             job_id, attempt_number, checklist_json, readiness_status,
@@ -396,7 +419,7 @@ def archive_current_mobilization(db, job):
         job["id"],
         attempt_number,
         job["checklist_json"],
-        job["status"],
+        readiness_status,
         job["response_at"],
         job["confirmed_by"],
         job["confirmed_title"],
@@ -903,7 +926,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "1.8.1",
+        "app_version": "1.9",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -1084,7 +1107,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "1.8.1",
+        "app_version": "1.9",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -1163,7 +1186,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "1.8.1",
+        "version": "1.9",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -1180,6 +1203,7 @@ def backup_restore():
 
     counts = {
         "jobs": 0,
+        "completed_jobs": 0,
         "readiness_responses": 0,
         "mobilization_attempts": 0,
         "outbox_messages": 0,
@@ -1189,6 +1213,10 @@ def backup_restore():
         with get_db() as db:
             counts["jobs"] = db.execute(
                 "SELECT COUNT(*) AS c FROM jobs"
+            ).fetchone()["c"]
+
+            counts["completed_jobs"] = db.execute(
+                "SELECT COUNT(*) AS c FROM jobs WHERE status = 'COMPLETED'"
             ).fetchone()["c"]
 
             current_responses = db.execute(
@@ -1266,7 +1294,7 @@ def restore_backup():
 @app.route("/")
 def dashboard():
     status_filter = (request.args.get("status") or "").strip().upper()
-    valid_statuses = {"READY", "REVIEW", "BLOCKED", "NO RESPONSE"}
+    valid_statuses = {"READY", "REVIEW", "BLOCKED", "NO RESPONSE", "ON SITE"}
     if status_filter not in valid_statuses:
         status_filter = ""
 
@@ -1280,10 +1308,11 @@ def dashboard():
                     WHERE ma.job_id = j.id
                 ) + 1 AS attempt_number
             FROM jobs j
+            WHERE j.status != 'COMPLETED'
             ORDER BY installation_date ASC, id DESC
         """).fetchall()
 
-    counts = {"READY": 0, "REVIEW": 0, "BLOCKED": 0, "NO RESPONSE": 0}
+    counts = {"READY": 0, "REVIEW": 0, "BLOCKED": 0, "NO RESPONSE": 0, "ON SITE": 0}
     for job in all_jobs:
         counts[job["status"]] = counts.get(job["status"], 0) + 1
 
@@ -1297,6 +1326,25 @@ def dashboard():
         status_filter=status_filter,
         due_reminder_count=due_reminder_count,
     )
+
+
+@app.route("/completed")
+def completed_jobs():
+    with get_db() as db:
+        jobs = db.execute("""
+            SELECT
+                j.*,
+                (
+                    SELECT COUNT(*)
+                    FROM mobilization_attempts ma
+                    WHERE ma.job_id = j.id
+                ) + 1 AS attempt_number
+            FROM jobs j
+            WHERE j.status = 'COMPLETED'
+            ORDER BY completed_at DESC, installation_date DESC, id DESC
+        """).fetchall()
+
+    return render_template("completed_jobs.html", jobs=jobs)
 
 @app.route("/jobs/new", methods=["GET", "POST"])
 def new_job():
@@ -1357,6 +1405,10 @@ def readiness_request(job_id):
     if not job:
         abort(404)
 
+    if job["status"] == "COMPLETED":
+        flash("This job is completed. Its readiness and arrival evidence are preserved.")
+        return redirect(url_for("job_detail", job_id=job_id))
+
     public_url = public_readiness_url(job)
     subject, email_preview_html = build_readiness_email(job, public_url, reminder=False)
     request_event = latest_request_event(job_id)
@@ -1377,6 +1429,10 @@ def send_readiness_email(job_id):
         job = db.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
     if not job:
         abort(404)
+
+    if job["status"] == "COMPLETED":
+        flash("This job is completed. No new readiness email was generated.")
+        return redirect(url_for("job_detail", job_id=job_id))
 
     public_url = public_readiness_url(job)
     status, error = send_readiness_email_for_job(job, public_url, reminder=False)
@@ -1453,6 +1509,9 @@ def public_readiness(token):
         job = db.execute("SELECT * FROM jobs WHERE public_token = ?", (token,)).fetchone()
     if not job:
         abort(404)
+
+    if job["status"] == "COMPLETED":
+        return render_template("public_job_closed.html", job=job)
 
     checklist = json.loads(job["checklist_json"])
 
@@ -1558,7 +1617,7 @@ def save_arrival_submission(job, form, uploaded_files):
         if not report_generated_at:
             report_generated_at = arrival_time
     elif arrival_status == "READY" and job["status"] != "BLOCKED":
-        new_status = "READY"
+        new_status = "ON SITE"
 
     with get_db() as db:
         cur = db.execute("""
@@ -1647,6 +1706,40 @@ def public_arrival(token):
         job=job,
         issues=ARRIVAL_ISSUES,
     )
+
+
+
+@app.post("/jobs/<int:job_id>/complete")
+def complete_job(job_id):
+    with get_db() as db:
+        job = db.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+
+        if not job:
+            abort(404)
+
+        if job["status"] == "COMPLETED":
+            flash("This job is already completed.")
+            return redirect(url_for("job_detail", job_id=job_id))
+
+        if job["arrival_status"] != "READY" or job["status"] != "ON SITE":
+            flash("A job can be completed after the installer records a successful Site Ready arrival.")
+            return redirect(url_for("job_detail", job_id=job_id))
+
+        # Revoke the shared installer link as soon as the job is completed.
+        closed_arrival_token = secrets.token_urlsafe(24)
+        completed_at = now_iso()
+
+        db.execute("""
+            UPDATE jobs
+            SET status='COMPLETED',
+                completed_at=?,
+                arrival_token=?
+            WHERE id=?
+        """, (completed_at, closed_arrival_token, job_id))
+        db.commit()
+
+    flash("Job marked complete. All readiness and arrival evidence remains preserved.")
+    return redirect(url_for("job_detail", job_id=job_id))
 
 
 @app.route("/jobs/<int:job_id>")
@@ -1854,6 +1947,10 @@ def reset_job(job_id):
         job = db.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
         if not job:
             abort(404)
+
+        if job["status"] == "COMPLETED":
+            flash("Completed jobs are locked. Their evidence remains available in Completed Jobs.")
+            return redirect(url_for("job_detail", job_id=job_id))
 
         if job["arrival_status"]:
             attempt_number = archive_current_mobilization(db, job)
