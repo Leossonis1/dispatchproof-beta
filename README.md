@@ -612,3 +612,52 @@ immediately without a server request.
 A Start Here panel provides the basic DispatchProof lifecycle:
 
 **Create Job → Readiness → Arrival → Complete → Report**
+
+
+## V2.8 — Internal Job Notes
+
+V2.8 adds an internal office communication timeline to every installation job.
+
+### Office Notes
+
+Every Job Detail page now includes **Office Notes**.
+
+Signed-in Operations, Administrator, and Owner users can add a private note for:
+
+- client or GC phone-call updates
+- scheduling changes
+- material / access coordination
+- internal follow-up reminders
+- field or office context that should not be client-facing
+
+Each note is permanently stamped with:
+
+- signed-in user's display name
+- signed-in user's role
+- date and time
+- note text
+
+### Privacy
+
+Internal Job Notes are intentionally separate from the public Job Activity trail.
+
+They are **not included** in:
+
+- single-job client reports
+- combined client reports
+- combined project reports
+- readiness links
+- installer arrival links
+- any public evidence route
+
+### Backup & Restore
+
+Job notes live in the DispatchProof SQLite database, so they are included automatically in normal Backup & Restore ZIPs.
+
+The Backup & Restore page now displays an **Internal Job Notes** record count.
+
+Restoring a V2.7.1-or-earlier backup into V2.8 automatically creates the new notes table without changing existing jobs, users, reports, or evidence.
+
+### Help Center
+
+Help & Tutorials now includes **Add an Internal Job Note** under Everyday Workflows.

@@ -1,2 +1,2 @@
-DispatchProof Version 2.7.1 - Help Search Display Fix
-Fixes the Help & Tutorials no-results message so it remains hidden until a search actually returns zero matches.
+DispatchProof Version 2.8 - Internal Job Notes
+Adds a private, timestamped office-notes timeline to every job. Notes are available to signed-in office users and excluded from all public/client reports.

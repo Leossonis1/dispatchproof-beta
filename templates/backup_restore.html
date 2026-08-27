@@ -33,10 +33,11 @@
       <div><dt>Mobilization Attempts</dt><dd>{{ counts.mobilization_attempts }}</dd></div>
       <div><dt>Outbox Messages</dt><dd>{{ counts.outbox_messages }}</dd></div>
       <div><dt>Activity Events</dt><dd>{{ counts.activity_events }}</dd></div>
+      <div><dt>Internal Job Notes</dt><dd>{{ counts.job_notes }}</dd></div>
       <div><dt>Clients</dt><dd>{{ counts.clients }}</dd></div>
       <div><dt>Projects</dt><dd>{{ counts.projects }}</dd></div>
       <div><dt>Uploaded Files</dt><dd>{{ upload_count }}</dd></div>
-      <div><dt>Backup Includes</dt><dd>Jobs · History · Users · Activity · Outbox · Evidence</dd></div>
+      <div><dt>Backup Includes</dt><dd>Jobs · History · Notes · Users · Activity · Outbox · Evidence</dd></div>
     </dl>
 
     <a class="btn primary wide" href="{{ url_for('download_backup') }}">Download Backup ZIP</a>

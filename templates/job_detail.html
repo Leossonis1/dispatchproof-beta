@@ -359,6 +359,48 @@
 {% endif %}
 
 
+
+<section class="panel internal-notes-panel" id="internal-notes">
+  <div class="panel-head">
+    <div>
+      <div class="eyebrow">Internal Communication</div>
+      <h2>Office Notes</h2>
+      <p>Private notes for DispatchProof users. These notes are never included in client reports or public links.</p>
+    </div>
+    <span class="internal-only-badge">INTERNAL ONLY</span>
+  </div>
+
+  <form method="post" action="{{ url_for('add_job_note', job_id=job['id']) }}" class="job-note-form">
+    <label for="jobNoteText">Add Note
+      <textarea id="jobNoteText" name="note_text" rows="3" maxlength="2000"
+                placeholder="Example: Client PM called — ceiling grid should be complete by Friday." required></textarea>
+    </label>
+    <div class="job-note-form-footer">
+      <span>Visible only to signed-in DispatchProof office users.</span>
+      <button class="btn primary" type="submit">Save Internal Note</button>
+    </div>
+  </form>
+
+  {% if job_notes %}
+  <div class="job-note-list">
+    {% for note in job_notes %}
+    <article class="job-note">
+      <div class="job-note-head">
+        <div>
+          <strong>{{ note['actor_name'] }}</strong>
+          <span class="activity-type">{{ note['actor_type'] }}</span>
+        </div>
+        <time>{{ note['created_at']|pretty_datetime }}</time>
+      </div>
+      <p>{{ note['note_text'] }}</p>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-mini">No internal notes yet.</div>
+  {% endif %}
+</section>
+
 {% if activity_events %}
 <section class="panel">
   <div class="panel-head">
