@@ -560,3 +560,55 @@ relationships.
 
 Backups automatically preserve the new report tokens and combined-report email
 metadata because they are stored in the existing SQLite database.
+
+
+## V2.7 — Help & Tutorials
+
+DispatchProof now includes an in-app **Help & Tutorials** center for all signed-in office users.
+
+### Help Center
+
+The new page includes searchable step-by-step walkthroughs for:
+
+- Getting Started
+- Create a Job
+- Job Status
+- Readiness Requests
+- Installer Arrival
+- Failed Mobilization
+- Complete a Job
+- Job Activity
+- Email Outbox
+- Clients & Projects
+- Assign Existing Jobs
+- Create Jobs from Projects
+- Single-Job Client Reports
+- Secure Report Link Rotation
+- Combined Client Reports
+- Combined Project Reports
+- Combined Report Link Rotation
+- My Account / Password Changes
+
+### Administrator-only tutorials
+
+Owner and Administrator accounts additionally see help for:
+
+- Users & Access
+- Company Settings
+- Global Activity Log
+- Downloading Backups
+- Restoring After a Render Reset
+
+Operations users do not see tutorials for areas they cannot access.
+
+### Search
+
+The Help Center includes a local in-page search. Typing terms such as
+`arrival`, `report`, `backup`, `client`, or `password` filters the tutorial cards
+immediately without a server request.
+
+### Quick workflow map
+
+A Start Here panel provides the basic DispatchProof lifecycle:
+
+**Create Job → Readiness → Arrival → Complete → Report**

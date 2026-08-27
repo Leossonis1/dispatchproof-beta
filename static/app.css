@@ -1866,3 +1866,199 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(15,98,254,.12);bo
   .portfolio-job-card{break-inside:avoid-page}
   .portfolio-audit .activity-row{break-inside:avoid}
 }
+
+
+/* DispatchProof V2.7 Help & Tutorials */
+.help-page-head{
+  align-items:flex-end;
+}
+.help-search-wrap{
+  width:min(360px,100%);
+}
+.help-search{
+  width:100%;
+  border:1px solid #cfd8e6;
+  border-radius:10px;
+  padding:11px 13px;
+  background:white;
+  color:#101828;
+  font:inherit;
+  box-sizing:border-box;
+}
+.help-start-card{
+  display:grid;
+  grid-template-columns:minmax(260px,.8fr) minmax(500px,1.2fr);
+  align-items:center;
+  gap:20px;
+  margin-bottom:16px;
+  padding:18px 20px;
+  border:1px solid #cfe0ff;
+  border-left:4px solid var(--brand-accent,#0f62fe);
+  border-radius:12px;
+  background:#f6f9ff;
+}
+.help-start-card h2{margin:3px 0 4px}
+.help-start-card p{margin:0;color:#667085;font-size:12px}
+.help-start-steps{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.help-start-steps span{
+  display:inline-flex;
+  align-items:center;
+  padding:7px 9px;
+  border:1px solid #cfdcf4;
+  border-radius:999px;
+  background:white;
+  color:#344054;
+  font-size:10px;
+  font-weight:800;
+}
+.help-start-steps b{
+  color:#98a2b3;
+  font-size:12px;
+}
+.help-jump-grid{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:8px;
+  margin-bottom:24px;
+}
+.help-jump-grid a{
+  display:flex;
+  align-items:center;
+  min-height:42px;
+  padding:10px 12px;
+  border:1px solid #d9e2ef;
+  border-radius:9px;
+  background:white;
+  color:#175cd3;
+  text-decoration:none;
+  font-size:10px;
+  font-weight:800;
+}
+.help-jump-grid a:hover{
+  border-color:#a9bce0;
+  background:#f8fafc;
+}
+.help-section{
+  margin:0 0 28px;
+  scroll-margin-top:18px;
+}
+.help-section-head{
+  margin-bottom:12px;
+}
+.help-section-head h2{
+  margin:3px 0 3px;
+}
+.help-section-head p{
+  margin:0;
+  color:#667085;
+  font-size:12px;
+}
+.tutorial-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+}
+.tutorial-card{
+  position:relative;
+  padding:18px 18px 16px;
+  border:1px solid #d9e2ef;
+  border-radius:12px;
+  background:white;
+}
+.tutorial-card[hidden]{display:none!important}
+.tutorial-number{
+  position:absolute;
+  top:14px;
+  right:15px;
+  color:#98a2b3;
+  font-size:10px;
+  font-weight:900;
+  letter-spacing:.05em;
+}
+.tutorial-card h3{
+  margin:0 42px 12px 0;
+  color:#101828;
+  font-size:15px;
+}
+.tutorial-card ol{
+  display:grid;
+  gap:7px;
+  margin:0;
+  padding-left:20px;
+  color:#475467;
+  font-size:11px;
+  line-height:1.45;
+}
+.tutorial-tip{
+  margin-top:12px;
+  padding:9px 10px;
+  border-radius:8px;
+  background:#f8fafc;
+  color:#667085;
+  font-size:10px;
+}
+.status-guide{
+  display:grid;
+  gap:8px;
+}
+.status-guide>div{
+  display:grid;
+  grid-template-columns:100px 1fr;
+  align-items:center;
+  gap:10px;
+}
+.status-guide p{
+  margin:0;
+  color:#667085;
+  font-size:10px;
+}
+.admin-help-section .tutorial-card{
+  border-top:3px solid #d5def0;
+}
+.important-tutorial{
+  border-left:3px solid #175cd3;
+}
+.help-no-results{
+  display:grid;
+  gap:3px;
+  padding:16px;
+  margin-bottom:20px;
+  border:1px dashed #cfd8e6;
+  border-radius:10px;
+  background:#f8fafc;
+  color:#667085;
+}
+.help-no-results strong{color:#344054}
+.help-footer-card{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+  padding:18px 20px;
+  border:1px solid #d9e2ef;
+  border-radius:12px;
+  background:#f8fafc;
+}
+.help-footer-card h2{margin:3px 0 4px}
+.help-footer-card p{margin:0;color:#667085;font-size:11px;max-width:760px}
+
+@media(max-width:900px){
+  .help-start-card{grid-template-columns:1fr}
+  .help-start-steps{justify-content:flex-start}
+  .help-jump-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .tutorial-grid{grid-template-columns:1fr}
+}
+@media(max-width:620px){
+  .help-page-head{align-items:stretch}
+  .help-search-wrap{width:100%}
+  .help-jump-grid{grid-template-columns:1fr}
+  .help-start-steps b{display:none}
+  .help-footer-card{align-items:flex-start;flex-direction:column}
+  .status-guide>div{grid-template-columns:1fr}
+}

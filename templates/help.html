@@ -1,0 +1,473 @@
+{% extends "base.html" %}
+{% block title %}Help & Tutorials · DispatchProof{% endblock %}
+{% block content %}
+<div class="page-head help-page-head">
+  <div>
+    <div class="eyebrow">Help Center</div>
+    <h1>Help & Tutorials</h1>
+    <p>Quick, plain-English walkthroughs for the DispatchProof workflows you use every day.</p>
+  </div>
+  <div class="help-search-wrap">
+    <input id="helpSearch" class="help-search" type="search" placeholder="Search tutorials..." autocomplete="off">
+  </div>
+</div>
+
+<section class="help-start-card">
+  <div>
+    <div class="eyebrow">Start Here</div>
+    <h2>New to DispatchProof?</h2>
+    <p>The basic flow is simple: create the job, confirm readiness, record installer arrival, then complete and report the install.</p>
+  </div>
+  <div class="help-start-steps">
+    <span>1. Create Job</span>
+    <b>→</b>
+    <span>2. Readiness</span>
+    <b>→</b>
+    <span>3. Arrival</span>
+    <b>→</b>
+    <span>4. Complete</span>
+    <b>→</b>
+    <span>5. Report</span>
+  </div>
+</section>
+
+<div class="help-jump-grid">
+  <a href="#getting-started">Getting Started</a>
+  <a href="#everyday-workflows">Everyday Workflows</a>
+  <a href="#clients-projects">Clients & Projects</a>
+  <a href="#client-reports">Client Reports</a>
+  <a href="#combined-reports">Combined Reports</a>
+  <a href="#account-access">My Account</a>
+  {% if current_user_is_admin %}
+  <a href="#admin-tools">Admin Tools</a>
+  <a href="#backup-restore">Backup & Restore</a>
+  {% endif %}
+</div>
+
+<div id="helpNoResults" class="help-no-results" hidden>
+  <strong>No tutorial matched that search.</strong>
+  <span>Try a shorter word like “job,” “report,” “arrival,” or “backup.”</span>
+</div>
+
+<section id="getting-started" class="help-section" data-help-section>
+  <div class="help-section-head">
+    <div>
+      <div class="eyebrow">Basics</div>
+      <h2>Getting Started</h2>
+      <p>The minimum you need to run an installation through DispatchProof.</p>
+    </div>
+  </div>
+
+  <div class="tutorial-grid">
+    <article class="tutorial-card" data-help-card data-search="create new job installation date contact checklist reminder client project">
+      <div class="tutorial-number">01</div>
+      <h3>Create a Job</h3>
+      <ol>
+        <li>Click <strong>New Job</strong> in the sidebar.</li>
+        <li>Optionally choose a <strong>Client</strong> and <strong>Project</strong>.</li>
+        <li>Enter the Job Name, Project / Site, and Installation Date.</li>
+        <li>Enter the site contact name and email.</li>
+        <li>Review the readiness checklist and reminder settings.</li>
+        <li>Click <strong>Create Job</strong>.</li>
+      </ol>
+      <div class="tutorial-tip">Tip: jobs can stay unassigned and be added to a client/project later.</div>
+    </article>
+
+    <article class="tutorial-card" data-help-card data-search="dashboard status no response review ready blocked on site completed view job">
+      <div class="tutorial-number">02</div>
+      <h3>Understand Job Status</h3>
+      <div class="status-guide">
+        <div><span class="badge no-response">NO RESPONSE</span><p>Readiness has not been confirmed yet.</p></div>
+        <div><span class="badge review">REVIEW</span><p>A response needs office review.</p></div>
+        <div><span class="badge ready">READY</span><p>The site is confirmed ready to dispatch.</p></div>
+        <div><span class="badge blocked">BLOCKED</span><p>The site is not ready.</p></div>
+        <div><span class="badge on-site">ON SITE</span><p>Installer arrival was successful.</p></div>
+        <div><span class="badge completed">COMPLETED</span><p>The installation has been marked complete.</p></div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<section id="everyday-workflows" class="help-section" data-help-section>
+  <div class="help-section-head">
+    <div>
+      <div class="eyebrow">Daily Use</div>
+      <h2>Everyday Workflows</h2>
+      <p>The core actions used to manage a live installation.</p>
+    </div>
+  </div>
+
+  <div class="tutorial-grid">
+    <article class="tutorial-card" data-help-card data-search="readiness request email outbox site contact public link generate readiness email reminder">
+      <div class="tutorial-number">03</div>
+      <h3>Send a Readiness Request</h3>
+      <ol>
+        <li>Open the job.</li>
+        <li>Open the <strong>Readiness Request</strong> page.</li>
+        <li>Review the site contact and checklist.</li>
+        <li>Click <strong>Generate Readiness Email</strong>.</li>
+        <li>During Free Beta, confirm it appears in <strong>Email Outbox</strong>.</li>
+        <li>The site contact opens the secure readiness link and submits the checklist.</li>
+      </ol>
+    </article>
+
+    <article class="tutorial-card" data-help-card data-search="installer arrival link record internally site ready field photos arrival on site">
+      <div class="tutorial-number">04</div>
+      <h3>Record Installer Arrival</h3>
+      <ol>
+        <li>Wait until the job is <strong>READY</strong>.</li>
+        <li>Open the job and find the installer arrival section.</li>
+        <li>Use <strong>Copy Installer Link</strong> for the field installer, or <strong>Record Internally</strong>.</li>
+        <li>Choose <strong>Site Ready</strong> when the installer can proceed.</li>
+        <li>Add the reporter name and photos if needed.</li>
+        <li>Submit. The job moves to <strong>ON SITE</strong>.</li>
+      </ol>
+    </article>
+
+    <article class="tutorial-card" data-help-card data-search="failed mobilization site not ready crew affected hours lost photos issue reason blocked report">
+      <div class="tutorial-number">05</div>
+      <h3>Record a Failed Mobilization</h3>
+      <ol>
+        <li>Open the installer arrival form.</li>
+        <li>Choose <strong>Site Not Ready</strong>.</li>
+        <li>Select the failure reason(s).</li>
+        <li>Enter <strong>Crew Affected</strong> and <strong>Hours Lost</strong>.</li>
+        <li>Add at least two arrival photos.</li>
+        <li>Submit to create the failed mobilization record and report.</li>
+      </ol>
+      <div class="tutorial-tip">Equipment affected and installer notes are optional.</div>
+    </article>
+
+    <article class="tutorial-card" data-help-card data-search="complete job completed jobs mark complete close installer link archive">
+      <div class="tutorial-number">06</div>
+      <h3>Complete a Job</h3>
+      <ol>
+        <li>Open a job that is <strong>ON SITE</strong>.</li>
+        <li>Click <strong>Mark Job Complete</strong>.</li>
+        <li>Confirm the action.</li>
+        <li>The job moves to <strong>Completed Jobs</strong>.</li>
+        <li>The installer link is revoked, while history and evidence stay preserved.</li>
+      </ol>
+    </article>
+
+    <article class="tutorial-card" data-help-card data-search="activity job activity audit trail who did what history">
+      <div class="tutorial-number">07</div>
+      <h3>Read the Job Activity Trail</h3>
+      <ol>
+        <li>Open any job.</li>
+        <li>Scroll to <strong>Job Activity</strong>.</li>
+        <li>Each event shows the action, time, and person/type responsible.</li>
+        <li>Use it to verify job creation, readiness, arrivals, assignments, reports, and completion.</li>
+      </ol>
+    </article>
+
+    <article class="tutorial-card" data-help-card data-search="email outbox preview readiness reminder client report combined report free beta">
+      <div class="tutorial-number">08</div>
+      <h3>Use Email Outbox</h3>
+      <ol>
+        <li>Click <strong>Email Outbox</strong>.</li>
+        <li>Open any generated email.</li>
+        <li>Review the recipient, subject, branded preview, and secure shared link.</li>
+        <li>During Free Beta, OUTBOX means DispatchProof generated the email but did not send it externally.</li>
+      </ol>
+    </article>
+  </div>
+</section>
+
+<section id="clients-projects" class="help-section" data-help-section>
+  <div class="help-section-head">
+    <div>
+      <div class="eyebrow">Organization</div>
+      <h2>Clients & Projects</h2>
+      <p>Group multiple installation jobs without changing the individual job workflow.</p>
+    </div>
+  </div>
+
+  <div class="tutorial-grid">
+    <article class="tutorial-card" data-help-card data-search="client create primary contact project organization">
+      <div class="tutorial-number">09</div>
+      <h3>Create a Client</h3>
+      <ol>
+        <li>Click <strong>Clients & Projects</strong>.</li>
+        <li>Click <strong>New Client</strong>.</li>
+        <li>Enter the client name and optional primary contact details.</li>
+        <li>Save the client.</li>
+      </ol>
+    </article>
+
+    <article class="tutorial-card" data-help-card data-search="project create under client number location rollout">
+      <div class="tutorial-number">10</div>
+      <h3>Create a Project</h3>
+      <ol>
+        <li>Open the client.</li>
+        <li>Click <strong>New Project</strong>.</li>
+        <li>Enter the Project Name.</li>
+        <li>Optionally add a project number, location, and notes.</li>
+        <li>Save the project.</li>
+      </ol>
+    </article>
+
+    <article class="tutorial-card" data-help-card data-search="assign job client project change assignment existing job">
+      <div class="tutorial-number">11</div>
+      <h3>Assign an Existing Job</h3>
+      <ol>
+        <li>Open the job.</li>
+        <li>Find <strong>Client & Project</strong>.</li>
+        <li>Open <strong>Change Assignment</strong>.</li>
+        <li>Select the client and project.</li>
+        <li>Click <strong>Save Assignment</strong>.</li>
+      </ol>
+      <div class="tutorial-tip">Choosing a project automatically uses that project’s client.</div>
+    </article>
+
+    <article class="tutorial-card" data-help-card data-search="new job from project preselected client project">
+      <div class="tutorial-number">12</div>
+      <h3>Create a Job from a Project</h3>
+      <ol>
+        <li>Open <strong>Clients & Projects</strong>.</li>
+        <li>Open the client, then the project.</li>
+        <li>Click <strong>New Job</strong>.</li>
+        <li>The Client and Project fields are preselected automatically.</li>
+        <li>Finish the normal New Job form and create the job.</li>
+      </ol>
+    </article>
+  </div>
+</section>
+
+<section id="client-reports" class="help-section" data-help-section>
+  <div class="help-section-head">
+    <div>
+      <div class="eyebrow">Reporting</div>
+      <h2>Client Reports</h2>
+      <p>Share a secure branded report for one installation.</p>
+    </div>
+  </div>
+
+  <div class="tutorial-grid">
+    <article class="tutorial-card" data-help-card data-search="client report email single installation preview report secure link">
+      <div class="tutorial-number">13</div>
+      <h3>Share a Single-Job Client Report</h3>
+      <ol>
+        <li>Open the job.</li>
+        <li>Find <strong>Installation Report</strong>.</li>
+        <li>Click <strong>Client Report & Email</strong>.</li>
+        <li>Preview the secure report first.</li>
+        <li>Enter the client recipient and generate/send the report email.</li>
+        <li>During Free Beta, review the generated message in Email Outbox.</li>
+      </ol>
+    </article>
+
+    <article class="tutorial-card" data-help-card data-search="rotate secure report link revoke old url client report security">
+      <div class="tutorial-number">14</div>
+      <h3>Revoke a Client Report Link</h3>
+      <ol>
+        <li>Open <strong>Client Report & Email</strong>.</li>
+        <li>Find <strong>Secure Report Link</strong>.</li>
+        <li>Click <strong>Rotate Secure Link</strong>.</li>
+        <li>Confirm the warning.</li>
+        <li>The old link stops working immediately and a new link replaces it.</li>
+      </ol>
+    </article>
+  </div>
+</section>
+
+<section id="combined-reports" class="help-section" data-help-section>
+  <div class="help-section-head">
+    <div>
+      <div class="eyebrow">Multi-Install Reporting</div>
+      <h2>Combined Reports</h2>
+      <p>Send one report covering every installation under a client or project.</p>
+    </div>
+  </div>
+
+  <div class="tutorial-grid">
+    <article class="tutorial-card" data-help-card data-search="combined client report all installs multiple jobs portfolio client email">
+      <div class="tutorial-number">15</div>
+      <h3>Combined Client Report</h3>
+      <ol>
+        <li>Click <strong>Clients & Projects</strong>.</li>
+        <li>Open the client.</li>
+        <li>Click <strong>Combined Client Report</strong>.</li>
+        <li>Review the installations included.</li>
+        <li>Click <strong>Open Combined Report</strong> to preview.</li>
+        <li>Generate the combined report email for the client recipient.</li>
+      </ol>
+    </article>
+
+    <article class="tutorial-card" data-help-card data-search="combined project report all project installs multiple jobs portfolio">
+      <div class="tutorial-number">16</div>
+      <h3>Combined Project Report</h3>
+      <ol>
+        <li>Open <strong>Clients & Projects</strong>.</li>
+        <li>Open the client, then the project.</li>
+        <li>Click <strong>Combined Project Report</strong>.</li>
+        <li>Preview the combined report and verify all project jobs are included.</li>
+        <li>Generate the report email or copy the secure link.</li>
+      </ol>
+    </article>
+
+    <article class="tutorial-card" data-help-card data-search="rotate combined report link revoke secure combined client project">
+      <div class="tutorial-number">17</div>
+      <h3>Rotate a Combined Report Link</h3>
+      <ol>
+        <li>Open the Combined Client or Project Report setup page.</li>
+        <li>Copy the current link if you want to test revocation.</li>
+        <li>Click <strong>Rotate Secure Link</strong>.</li>
+        <li>The old URL becomes invalid and the replacement link works immediately.</li>
+      </ol>
+    </article>
+  </div>
+</section>
+
+<section id="account-access" class="help-section" data-help-section>
+  <div class="help-section-head">
+    <div>
+      <div class="eyebrow">Your Login</div>
+      <h2>My Account</h2>
+      <p>Manage your own DispatchProof sign-in.</p>
+    </div>
+  </div>
+
+  <div class="tutorial-grid">
+    <article class="tutorial-card" data-help-card data-search="my account password change current new confirm owner render">
+      <div class="tutorial-number">18</div>
+      <h3>Change Your Password</h3>
+      <ol>
+        <li>Click <strong>My Account</strong>.</li>
+        {% if current_user_role == 'OWNER' %}
+        <li>The permanent Owner password is managed in Render Environment.</li>
+        <li>Change <strong>DISPATCHPROOF_ADMIN_PASSWORD</strong> in Render when needed.</li>
+        {% else %}
+        <li>Enter your current password.</li>
+        <li>Enter and confirm a new password of at least 8 characters.</li>
+        <li>Click <strong>Change My Password</strong>.</li>
+        {% endif %}
+      </ol>
+    </article>
+  </div>
+</section>
+
+{% if current_user_is_admin %}
+<section id="admin-tools" class="help-section admin-help-section" data-help-section>
+  <div class="help-section-head">
+    <div>
+      <div class="eyebrow">Administrator</div>
+      <h2>Admin Tools</h2>
+      <p>Owner and Administrator-only workflows.</p>
+    </div>
+  </div>
+
+  <div class="tutorial-grid">
+    <article class="tutorial-card" data-help-card data-search="users access add user operations administrator password reset disable edit role">
+      <div class="tutorial-number">19</div>
+      <h3>Users & Access</h3>
+      <ol>
+        <li>Open <strong>Users & Access</strong>.</li>
+        <li>Use <strong>Add User</strong> to create an Operations or Administrator login.</li>
+        <li>Use <strong>Edit User</strong> to change name, username, role, or access status.</li>
+        <li>Use Administrator Password Reset only when the user cannot reset their own password.</li>
+      </ol>
+      <div class="tutorial-tip">Operations users can run jobs but cannot access administrative settings or the global Activity Log.</div>
+    </article>
+
+    <article class="tutorial-card" data-help-card data-search="company settings branding logo name tagline accent email phone website">
+      <div class="tutorial-number">20</div>
+      <h3>Company Settings</h3>
+      <ol>
+        <li>Open <strong>Company Settings</strong>.</li>
+        <li>Set company name and tagline.</li>
+        <li>Add contact information and website.</li>
+        <li>Upload the company logo.</li>
+        <li>Choose the accent color and save.</li>
+      </ol>
+    </article>
+
+    <article class="tutorial-card" data-help-card data-search="global activity log audit owner administrator who changed">
+      <div class="tutorial-number">21</div>
+      <h3>Global Activity Log</h3>
+      <ol>
+        <li>Open <strong>Activity Log</strong>.</li>
+        <li>Review the latest system, user, job, report, and backup events.</li>
+        <li>Click a linked job when you need the job-specific evidence and timeline.</li>
+      </ol>
+    </article>
+  </div>
+</section>
+
+<section id="backup-restore" class="help-section admin-help-section" data-help-section>
+  <div class="help-section-head">
+    <div>
+      <div class="eyebrow">Safety</div>
+      <h2>Backup & Restore</h2>
+      <p>Protect the live database, evidence uploads, users, clients, projects, and history.</p>
+    </div>
+  </div>
+
+  <div class="tutorial-grid">
+    <article class="tutorial-card important-tutorial" data-help-card data-search="backup download zip before deploy save live data restore">
+      <div class="tutorial-number">22</div>
+      <h3>Download a Backup</h3>
+      <ol>
+        <li>Open <strong>Backup & Restore</strong>.</li>
+        <li>Review the record counts.</li>
+        <li>Click <strong>Download Backup ZIP</strong>.</li>
+        <li>Save it somewhere you can find again.</li>
+        <li>Always make a fresh backup before deploying a new DispatchProof version.</li>
+      </ol>
+    </article>
+
+    <article class="tutorial-card important-tutorial" data-help-card data-search="restore backup zip render reset deploy verify jobs uploads history">
+      <div class="tutorial-number">23</div>
+      <h3>Restore After a Render Reset</h3>
+      <ol>
+        <li>Open <strong>Backup & Restore</strong>.</li>
+        <li>Select the latest DispatchProof backup ZIP.</li>
+        <li>Run the restore.</li>
+        <li>Wait for the verified success message.</li>
+        <li>Confirm the job count, branding, users, clients/projects, and evidence returned.</li>
+      </ol>
+      <div class="tutorial-tip">The restore verification protects against the older SQLite sidecar-file problem.</div>
+    </article>
+  </div>
+</section>
+{% endif %}
+
+<section class="help-footer-card">
+  <div>
+    <div class="eyebrow">Still Lost?</div>
+    <h2>Use the page names as your map.</h2>
+    <p>Dashboard = what is happening now. Job Detail = everything about one install. Clients & Projects = grouped work. Email Outbox = generated messages. Help & Tutorials = this page.</p>
+  </div>
+  <a class="btn primary" href="{{ url_for('dashboard') }}">Back to Dashboard</a>
+</section>
+
+<script>
+(function(){
+  const search = document.getElementById('helpSearch');
+  const cards = Array.from(document.querySelectorAll('[data-help-card]'));
+  const sections = Array.from(document.querySelectorAll('[data-help-section]'));
+  const noResults = document.getElementById('helpNoResults');
+
+  function applySearch(){
+    const q = (search.value || '').trim().toLowerCase();
+    let visibleCount = 0;
+
+    cards.forEach(card => {
+      const haystack = (card.textContent + ' ' + (card.dataset.search || '')).toLowerCase();
+      const visible = !q || haystack.includes(q);
+      card.hidden = !visible;
+      if (visible) visibleCount++;
+    });
+
+    sections.forEach(section => {
+      const sectionCards = Array.from(section.querySelectorAll('[data-help-card]'));
+      section.hidden = q && sectionCards.length && sectionCards.every(card => card.hidden);
+    });
+
+    noResults.hidden = visibleCount !== 0;
+  }
+
+  if (search) search.addEventListener('input', applySearch);
+})();
+</script>
+{% endblock %}
