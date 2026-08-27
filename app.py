@@ -135,6 +135,8 @@ def ensure_columns(db):
     needed = {
         "arrival_token": "TEXT",
         "client_report_token": "TEXT",
+        "client_id": "INTEGER",
+        "project_id": "INTEGER",
         "completed_at": "TEXT",
         "arrival_status": "TEXT",
         "arrived_at": "TEXT",
@@ -304,6 +306,29 @@ def init_db():
             updated_at TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS clients (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL COLLATE NOCASE,
+            contact_name TEXT,
+            contact_email TEXT,
+            contact_phone TEXT,
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS projects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_id INTEGER NOT NULL,
+            name TEXT NOT NULL COLLATE NOCASE,
+            project_number TEXT,
+            location TEXT,
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY(client_id) REFERENCES clients(id)
+        );
+
         CREATE TABLE IF NOT EXISTS activity_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             job_id INTEGER,
@@ -332,6 +357,8 @@ def init_db():
             public_token TEXT UNIQUE NOT NULL,
             arrival_token TEXT UNIQUE,
             client_report_token TEXT UNIQUE,
+            client_id INTEGER,
+            project_id INTEGER,
             job_name TEXT NOT NULL,
             project_site TEXT,
             installation_date TEXT NOT NULL,
@@ -374,6 +401,18 @@ def init_db():
         db.execute("""
             CREATE INDEX IF NOT EXISTS idx_activity_log_job_id
             ON activity_log(job_id, created_at DESC)
+        """)
+        db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_projects_client_id
+            ON projects(client_id, name)
+        """)
+        db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_jobs_client_id
+            ON jobs(client_id, installation_date)
+        """)
+        db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_jobs_project_id
+            ON jobs(project_id, installation_date)
         """)
 
         activity_migration = db.execute(
@@ -1141,6 +1180,47 @@ def current_db_user():
         ).fetchone()
 
 
+def normalize_optional_id(value):
+    value = str(value or "").strip()
+    return int(value) if value.isdigit() and int(value) > 0 else None
+
+def get_clients_and_projects(db):
+    clients = db.execute("""
+        SELECT *
+        FROM clients
+        ORDER BY LOWER(name), id
+    """).fetchall()
+    projects = db.execute("""
+        SELECT p.*, c.name AS client_name
+        FROM projects p
+        JOIN clients c ON c.id = p.client_id
+        ORDER BY LOWER(c.name), LOWER(p.name), p.id
+    """).fetchall()
+    return clients, projects
+
+def resolve_job_assignment(db, raw_client_id, raw_project_id):
+    client_id = normalize_optional_id(raw_client_id)
+    project_id = normalize_optional_id(raw_project_id)
+
+    if project_id:
+        project = db.execute(
+            "SELECT id, client_id FROM projects WHERE id = ?",
+            (project_id,),
+        ).fetchone()
+        if not project:
+            return None, None, "The selected project could not be found."
+        return project["client_id"], project["id"], None
+
+    if client_id:
+        client = db.execute(
+            "SELECT id FROM clients WHERE id = ?",
+            (client_id,),
+        ).fetchone()
+        if not client:
+            return None, None, "The selected client could not be found."
+
+    return client_id, None, None
+
 def activity_actor():
     if user_authenticated():
         role = current_user_role() or "USER"
@@ -1228,6 +1308,8 @@ def database_record_counts(db_path):
             ("mobilization_attempts", "mobilization_attempts"),
             ("email_events", "email_events"),
             ("activity_log", "activity_log"),
+            ("clients", "clients"),
+            ("projects", "projects"),
         ):
             try:
                 counts[key] = conn.execute(
@@ -1278,7 +1360,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.4",
+        "app_version": "2.5",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -1506,7 +1588,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.4",
+        "app_version": "2.5",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -1640,7 +1722,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.4",
+        "version": "2.5",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -2074,6 +2156,8 @@ def backup_restore():
         "mobilization_attempts": 0,
         "outbox_messages": 0,
         "activity_events": 0,
+        "clients": 0,
+        "projects": 0,
     }
 
     if db_exists:
@@ -2110,6 +2194,12 @@ def backup_restore():
 
             counts["activity_events"] = db.execute(
                 "SELECT COUNT(*) AS c FROM activity_log"
+            ).fetchone()["c"]
+            counts["clients"] = db.execute(
+                "SELECT COUNT(*) AS c FROM clients"
+            ).fetchone()["c"]
+            counts["projects"] = db.execute(
+                "SELECT COUNT(*) AS c FROM projects"
             ).fetchone()["c"]
 
     return render_template(
@@ -2176,6 +2266,255 @@ def restore_backup():
         "along with history, Email Outbox data, and uploaded evidence."
     )
     return redirect(url_for("dashboard"))
+
+
+
+@app.route("/clients")
+def clients():
+    with get_db() as db:
+        rows = db.execute("""
+            SELECT c.*,
+                   COUNT(DISTINCT p.id) AS project_count,
+                   COUNT(DISTINCT j.id) AS job_count,
+                   COUNT(DISTINCT CASE WHEN j.status = 'COMPLETED' THEN j.id END) AS completed_job_count,
+                   COUNT(DISTINCT CASE WHEN j.status != 'COMPLETED' THEN j.id END) AS active_job_count
+            FROM clients c
+            LEFT JOIN projects p ON p.client_id = c.id
+            LEFT JOIN jobs j ON j.client_id = c.id
+            GROUP BY c.id
+            ORDER BY LOWER(c.name), c.id
+        """).fetchall()
+    return render_template("clients.html", clients=rows)
+
+
+@app.route("/clients/new", methods=["GET", "POST"])
+def new_client():
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        contact_name = request.form.get("contact_name", "").strip()
+        contact_email = request.form.get("contact_email", "").strip()
+        contact_phone = request.form.get("contact_phone", "").strip()
+        notes = request.form.get("notes", "").strip()
+
+        if not name:
+            flash("Client Name is required.")
+            return redirect(url_for("new_client"))
+
+        with get_db() as db:
+            duplicate = db.execute(
+                "SELECT id FROM clients WHERE name = ? COLLATE NOCASE", (name,)
+            ).fetchone()
+            if duplicate:
+                flash("A client with that name already exists.")
+                return redirect(url_for("client_detail", client_id=duplicate["id"]))
+
+            cur = db.execute("""
+                INSERT INTO clients (
+                    name, contact_name, contact_email, contact_phone,
+                    notes, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (name, contact_name, contact_email, contact_phone, notes, now_iso(), now_iso()))
+            client_id = cur.lastrowid
+            record_activity(db, "Client Added", f"Added client {name}.")
+            db.commit()
+
+        flash(f"Client {name} added.")
+        return redirect(url_for("client_detail", client_id=client_id))
+
+    return render_template("client_form.html")
+
+
+@app.route("/clients/<int:client_id>", methods=["GET", "POST"])
+def client_detail(client_id):
+    with get_db() as db:
+        client = db.execute("SELECT * FROM clients WHERE id = ?", (client_id,)).fetchone()
+        if not client:
+            abort(404)
+
+        if request.method == "POST":
+            name = request.form.get("name", "").strip()
+            contact_name = request.form.get("contact_name", "").strip()
+            contact_email = request.form.get("contact_email", "").strip()
+            contact_phone = request.form.get("contact_phone", "").strip()
+            notes = request.form.get("notes", "").strip()
+
+            if not name:
+                flash("Client Name is required.")
+                return redirect(url_for("client_detail", client_id=client_id))
+
+            duplicate = db.execute(
+                "SELECT id FROM clients WHERE name = ? COLLATE NOCASE AND id != ?",
+                (name, client_id),
+            ).fetchone()
+            if duplicate:
+                flash("Another client already uses that name.")
+                return redirect(url_for("client_detail", client_id=client_id))
+
+            db.execute("""
+                UPDATE clients
+                SET name = ?, contact_name = ?, contact_email = ?,
+                    contact_phone = ?, notes = ?, updated_at = ?
+                WHERE id = ?
+            """, (name, contact_name, contact_email, contact_phone, notes, now_iso(), client_id))
+            record_activity(db, "Client Updated", f"Updated client {name}.")
+            db.commit()
+            flash(f"Client {name} updated.")
+            return redirect(url_for("client_detail", client_id=client_id))
+
+        projects = db.execute("""
+            SELECT p.*,
+                   COUNT(DISTINCT j.id) AS job_count,
+                   COUNT(DISTINCT CASE WHEN j.status = 'COMPLETED' THEN j.id END) AS completed_job_count,
+                   COUNT(DISTINCT CASE WHEN j.status != 'COMPLETED' THEN j.id END) AS active_job_count
+            FROM projects p
+            LEFT JOIN jobs j ON j.project_id = p.id
+            WHERE p.client_id = ?
+            GROUP BY p.id
+            ORDER BY LOWER(p.name), p.id
+        """, (client_id,)).fetchall()
+
+        jobs = db.execute("""
+            SELECT j.*, p.name AS project_name
+            FROM jobs j
+            LEFT JOIN projects p ON p.id = j.project_id
+            WHERE j.client_id = ?
+            ORDER BY CASE WHEN j.status = 'COMPLETED' THEN 1 ELSE 0 END,
+                     j.installation_date, j.id
+        """, (client_id,)).fetchall()
+
+    return render_template("client_detail.html", client=client, projects=projects, jobs=jobs)
+
+
+@app.route("/clients/<int:client_id>/projects/new", methods=["GET", "POST"])
+def new_project(client_id):
+    with get_db() as db:
+        client = db.execute("SELECT * FROM clients WHERE id = ?", (client_id,)).fetchone()
+    if not client:
+        abort(404)
+
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        project_number = request.form.get("project_number", "").strip()
+        location = request.form.get("location", "").strip()
+        notes = request.form.get("notes", "").strip()
+
+        if not name:
+            flash("Project Name is required.")
+            return redirect(url_for("new_project", client_id=client_id))
+
+        with get_db() as db:
+            duplicate = db.execute("""
+                SELECT id FROM projects
+                WHERE client_id = ? AND name = ? COLLATE NOCASE
+            """, (client_id, name)).fetchone()
+            if duplicate:
+                flash("That client already has a project with this name.")
+                return redirect(url_for("project_detail", project_id=duplicate["id"]))
+
+            cur = db.execute("""
+                INSERT INTO projects (
+                    client_id, name, project_number, location,
+                    notes, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (client_id, name, project_number, location, notes, now_iso(), now_iso()))
+            project_id = cur.lastrowid
+            record_activity(db, "Project Added", f"Added project {name} for client {client['name']}.")
+            db.commit()
+
+        flash(f"Project {name} added.")
+        return redirect(url_for("project_detail", project_id=project_id))
+
+    return render_template("project_form.html", client=client)
+
+
+@app.route("/projects/<int:project_id>", methods=["GET", "POST"])
+def project_detail(project_id):
+    with get_db() as db:
+        project = db.execute("""
+            SELECT p.*, c.name AS client_name
+            FROM projects p
+            JOIN clients c ON c.id = p.client_id
+            WHERE p.id = ?
+        """, (project_id,)).fetchone()
+        if not project:
+            abort(404)
+
+        if request.method == "POST":
+            name = request.form.get("name", "").strip()
+            project_number = request.form.get("project_number", "").strip()
+            location = request.form.get("location", "").strip()
+            notes = request.form.get("notes", "").strip()
+
+            if not name:
+                flash("Project Name is required.")
+                return redirect(url_for("project_detail", project_id=project_id))
+
+            duplicate = db.execute("""
+                SELECT id FROM projects
+                WHERE client_id = ? AND name = ? COLLATE NOCASE AND id != ?
+            """, (project["client_id"], name, project_id)).fetchone()
+            if duplicate:
+                flash("That client already has another project with this name.")
+                return redirect(url_for("project_detail", project_id=project_id))
+
+            db.execute("""
+                UPDATE projects
+                SET name = ?, project_number = ?, location = ?, notes = ?, updated_at = ?
+                WHERE id = ?
+            """, (name, project_number, location, notes, now_iso(), project_id))
+            record_activity(db, "Project Updated", f"Updated project {name} for client {project['client_name']}.")
+            db.commit()
+            flash(f"Project {name} updated.")
+            return redirect(url_for("project_detail", project_id=project_id))
+
+        jobs = db.execute("""
+            SELECT *
+            FROM jobs
+            WHERE project_id = ?
+            ORDER BY CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END,
+                     installation_date, id
+        """, (project_id,)).fetchall()
+
+    return render_template("project_detail.html", project=project, jobs=jobs)
+
+
+@app.post("/jobs/<int:job_id>/assignment")
+def update_job_assignment(job_id):
+    with get_db() as db:
+        job = db.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+        if not job:
+            abort(404)
+
+        client_id, project_id, error = resolve_job_assignment(
+            db, request.form.get("client_id"), request.form.get("project_id")
+        )
+        if error:
+            flash(error)
+            return redirect(url_for("job_detail", job_id=job_id))
+
+        old_client = db.execute("SELECT name FROM clients WHERE id = ?", (job["client_id"],)).fetchone() if job["client_id"] else None
+        old_project = db.execute("SELECT name FROM projects WHERE id = ?", (job["project_id"],)).fetchone() if job["project_id"] else None
+        new_client = db.execute("SELECT name FROM clients WHERE id = ?", (client_id,)).fetchone() if client_id else None
+        new_project = db.execute("SELECT name FROM projects WHERE id = ?", (project_id,)).fetchone() if project_id else None
+
+        db.execute("UPDATE jobs SET client_id = ?, project_id = ? WHERE id = ?", (client_id, project_id, job_id))
+
+        old_label = "Unassigned"
+        if old_client:
+            old_label = old_client["name"] + (f" / {old_project['name']}" if old_project else "")
+        new_label = "Unassigned"
+        if new_client:
+            new_label = new_client["name"] + (f" / {new_project['name']}" if new_project else "")
+
+        record_activity(
+            db, "Job Assignment Changed",
+            f"Changed client/project assignment: {old_label} → {new_label}.",
+            job_id=job_id
+        )
+        db.commit()
+
+    flash("Client / project assignment updated.")
+    return redirect(url_for("job_detail", job_id=job_id))
 
 
 @app.route("/activity")
@@ -2264,18 +2603,38 @@ def new_job():
         arrival_token = secrets.token_urlsafe(24)
         client_report_token = secrets.token_urlsafe(24)
         with get_db() as db:
+            client_id, project_id, assignment_error = resolve_job_assignment(
+                db, request.form.get("client_id"), request.form.get("project_id")
+            )
+            if assignment_error:
+                flash(assignment_error)
+                clients, projects = get_clients_and_projects(db)
+                return render_template(
+                    "new_job.html",
+                    default_checklist=DEFAULT_CHECKLIST,
+                    default_reminder_enabled=DEFAULT_REMINDER_ENABLED,
+                    default_reminder_hours=DEFAULT_REMINDER_HOURS_BEFORE,
+                    clients=clients,
+                    projects=projects,
+                    selected_client_id=normalize_optional_id(request.form.get("client_id")),
+                    selected_project_id=normalize_optional_id(request.form.get("project_id")),
+                )
+
             cur = db.execute("""
                 INSERT INTO jobs (
                     public_token, arrival_token, client_report_token,
+                    client_id, project_id,
                     job_name, project_site, installation_date,
                     contact_name, contact_email, contact_phone, checklist_json,
                     status, created_at, reminder_enabled, reminder_hours_before,
                     reminder_count
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NO RESPONSE', ?, ?, ?, 0)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NO RESPONSE', ?, ?, ?, 0)
             """, (
                 token,
                 arrival_token,
                 client_report_token,
+                client_id,
+                project_id,
                 request.form["job_name"].strip(),
                 request.form.get("project_site", "").strip(),
                 request.form["installation_date"],
@@ -2296,11 +2655,30 @@ def new_job():
             )
         return redirect(url_for("readiness_request", job_id=job_id))
 
+    with get_db() as db:
+        clients, projects = get_clients_and_projects(db)
+        selected_client_id = normalize_optional_id(request.args.get("client_id"))
+        selected_project_id = normalize_optional_id(request.args.get("project_id"))
+
+        if selected_project_id:
+            selected_project = db.execute(
+                "SELECT id, client_id FROM projects WHERE id = ?",
+                (selected_project_id,),
+            ).fetchone()
+            if selected_project:
+                selected_client_id = selected_project["client_id"]
+            else:
+                selected_project_id = None
+
     return render_template(
         "new_job.html",
         default_checklist=DEFAULT_CHECKLIST,
         default_reminder_enabled=DEFAULT_REMINDER_ENABLED,
         default_reminder_hours=DEFAULT_REMINDER_HOURS_BEFORE,
+        clients=clients,
+        projects=projects,
+        selected_client_id=selected_client_id,
+        selected_project_id=selected_project_id,
     )
 
 @app.route("/jobs/<int:job_id>/request")
@@ -2517,10 +2895,22 @@ def public_client_report(token):
         abort(404)
 
     report = client_report_data(job)
+    with get_db() as db:
+        report_client = db.execute(
+            "SELECT * FROM clients WHERE id = ?",
+            (job["client_id"],),
+        ).fetchone() if job["client_id"] else None
+        report_project = db.execute(
+            "SELECT * FROM projects WHERE id = ?",
+            (job["project_id"],),
+        ).fetchone() if job["project_id"] else None
+
     return render_template(
         "public_client_report.html",
         job=job,
         report=report,
+        report_client=report_client,
+        report_project=report_project,
         report_token=token,
         generated_at=now_iso(),
     )
@@ -2912,6 +3302,17 @@ def job_detail(job_id):
     arrival_url = public_arrival_url(job) if job["arrival_token"] else None
     client_report_url = public_client_report_url(job) if job["client_report_token"] else None
 
+    with get_db() as db:
+        assigned_client = db.execute(
+            "SELECT * FROM clients WHERE id = ?",
+            (job["client_id"],),
+        ).fetchone() if job["client_id"] else None
+        assigned_project = db.execute(
+            "SELECT * FROM projects WHERE id = ?",
+            (job["project_id"],),
+        ).fetchone() if job["project_id"] else None
+        assignment_clients, assignment_projects = get_clients_and_projects(db)
+
     return render_template(
         "job_detail.html",
         job=job,
@@ -2926,6 +3327,10 @@ def job_detail(job_id):
         arrival_url=arrival_url,
         client_report_url=client_report_url,
         activity_events=activity_events,
+        assigned_client=assigned_client,
+        assigned_project=assigned_project,
+        assignment_clients=assignment_clients,
+        assignment_projects=assignment_projects,
     )
 
 @app.route("/jobs/<int:job_id>/arrival", methods=["GET", "POST"])
