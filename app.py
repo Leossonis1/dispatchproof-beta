@@ -282,6 +282,17 @@ def init_db():
             updated_at TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS activity_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id INTEGER,
+            actor_type TEXT NOT NULL,
+            actor_name TEXT NOT NULL,
+            action TEXT NOT NULL,
+            description TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(job_id) REFERENCES jobs(id)
+        );
+
         CREATE TABLE IF NOT EXISTS app_settings (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             company_name TEXT NOT NULL,
@@ -332,6 +343,35 @@ def init_db():
         );
         """)
         ensure_columns(db)
+
+        db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_activity_log_created_at
+            ON activity_log(created_at DESC)
+        """)
+        db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_activity_log_job_id
+            ON activity_log(job_id, created_at DESC)
+        """)
+
+        activity_migration = db.execute(
+            "SELECT 1 FROM app_migrations WHERE migration_key = ?",
+            ("v2.3_activity_log",),
+        ).fetchone()
+        if not activity_migration:
+            db.execute("""
+                INSERT INTO activity_log (
+                    job_id, actor_type, actor_name, action, description, created_at
+                ) VALUES (NULL, 'SYSTEM', 'DispatchProof', 'Activity Log Enabled',
+                          'Audit tracking started with DispatchProof V2.3.', ?)
+            """, (now_iso(),))
+            db.execute("""
+                INSERT INTO app_migrations (migration_key, applied_at, details)
+                VALUES (?, ?, ?)
+            """, (
+                "v2.3_activity_log",
+                now_iso(),
+                "Activity Log enabled. Earlier job evidence remains available in existing histories.",
+            ))
 
         db.execute("""
             INSERT OR IGNORE INTO app_settings (
@@ -912,6 +952,44 @@ def current_db_user():
             (user_id,),
         ).fetchone()
 
+
+def activity_actor():
+    if user_authenticated():
+        role = current_user_role() or "USER"
+        return role, current_display_name() or current_username() or "Internal User"
+    return "SYSTEM", "DispatchProof"
+
+def record_activity(db, action, description="", job_id=None, actor_type=None, actor_name=None):
+    if actor_type is None or actor_name is None:
+        default_type, default_name = activity_actor()
+        actor_type = actor_type or default_type
+        actor_name = actor_name or default_name
+
+    db.execute("""
+        INSERT INTO activity_log (
+            job_id, actor_type, actor_name, action, description, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+    """, (
+        job_id,
+        str(actor_type),
+        str(actor_name),
+        action,
+        description,
+        now_iso(),
+    ))
+
+def log_activity(action, description="", job_id=None, actor_type=None, actor_name=None):
+    with get_db() as db:
+        record_activity(
+            db,
+            action,
+            description,
+            job_id=job_id,
+            actor_type=actor_type,
+            actor_name=actor_name,
+        )
+        db.commit()
+
 def safe_next_url(value):
     if not value:
         return url_for("dashboard")
@@ -946,6 +1024,7 @@ def database_record_counts(db_path):
         "readiness_confirmations": 0,
         "mobilization_attempts": 0,
         "email_events": 0,
+        "activity_log": 0,
     }
 
     conn = sqlite3.connect(db_path)
@@ -960,6 +1039,7 @@ def database_record_counts(db_path):
             ("readiness_confirmations", "readiness_confirmations"),
             ("mobilization_attempts", "mobilization_attempts"),
             ("email_events", "email_events"),
+            ("activity_log", "activity_log"),
         ):
             try:
                 counts[key] = conn.execute(
@@ -991,6 +1071,7 @@ def create_backup_archive():
         "readiness_confirmations": 0,
         "mobilization_attempts": 0,
         "email_events": 0,
+        "activity_log": 0,
         "uploaded_files": 0,
     }
 
@@ -1009,7 +1090,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.2",
+        "app_version": "2.3",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -1237,7 +1318,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.2",
+        "app_version": "2.3",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -1268,6 +1349,7 @@ def ensure_db():
         "reset_user_password",
         "change_user_role",
         "edit_user",
+        "activity_log",
     }
     if request.endpoint in admin_only_endpoints and user_authenticated() and not current_user_is_admin():
         flash("Administrator access is required for that page.")
@@ -1367,7 +1449,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.2",
+        "version": "2.3",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -1426,6 +1508,11 @@ def my_account():
             db.execute(
                 "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
                 (generate_password_hash(new_password), now_iso(), user["id"]),
+            )
+            record_activity(
+                db,
+                "Password Changed",
+                "Changed their own DispatchProof password.",
             )
             db.commit()
 
@@ -1499,6 +1586,11 @@ def add_user():
                 now_iso(),
                 now_iso(),
             ))
+            record_activity(
+                db,
+                "User Added",
+                f"Added {full_name} (@{username}) with {role.title()} access.",
+            )
             db.commit()
     except sqlite3.IntegrityError:
         flash("That username is already in use.")
@@ -1528,6 +1620,11 @@ def toggle_user_access(user_id):
             "UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?",
             (new_active, now_iso(), user_id),
         )
+        record_activity(
+            db,
+            "User Access Enabled" if new_active else "User Access Disabled",
+            f"{'Enabled' if new_active else 'Disabled'} access for {user['full_name']} (@{user['username']}).",
+        )
         db.commit()
 
     flash(f"{user['username']} access {'enabled' if new_active else 'disabled'}.")
@@ -1550,6 +1647,11 @@ def reset_user_password(user_id):
         db.execute(
             "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
             (generate_password_hash(new_password), now_iso(), user_id),
+        )
+        record_activity(
+            db,
+            "User Password Reset",
+            f"Administrator reset the password for {user['full_name']} (@{user['username']}).",
         )
         db.commit()
 
@@ -1576,6 +1678,11 @@ def change_user_role(user_id):
         db.execute(
             "UPDATE users SET role = ?, updated_at = ? WHERE id = ?",
             (role, now_iso(), user_id),
+        )
+        record_activity(
+            db,
+            "User Role Changed",
+            f"Changed {user['full_name']} (@{user['username']}) to {role.title()}.",
         )
         db.commit()
 
@@ -1645,6 +1752,22 @@ def edit_user(user_id):
                     now_iso(),
                     user_id,
                 ))
+                changes = []
+                if user["full_name"] != full_name:
+                    changes.append(f"name: {user['full_name']} → {full_name}")
+                if user["username"].lower() != username.lower():
+                    changes.append(f"username: @{user['username']} → @{username}")
+                if user["role"] != role:
+                    changes.append(f"role: {user['role'].title()} → {role.title()}")
+                if int(user["is_active"]) != is_active:
+                    changes.append("access enabled" if is_active else "access disabled")
+
+                record_activity(
+                    db,
+                    "User Updated",
+                    f"Updated {full_name} (@{username})"
+                    + (": " + "; ".join(changes) if changes else "."),
+                )
                 db.commit()
         except sqlite3.IntegrityError:
             flash("That username is already in use.")
@@ -1729,6 +1852,11 @@ def company_settings():
                 logo_filename,
                 now_iso(),
             ))
+            record_activity(
+                db,
+                "Company Settings Updated",
+                f"Updated company branding/settings for {company_name}.",
+            )
             db.commit()
 
         flash("Company branding updated.")
@@ -1754,6 +1882,7 @@ def backup_restore():
         "readiness_responses": 0,
         "mobilization_attempts": 0,
         "outbox_messages": 0,
+        "activity_events": 0,
     }
 
     if db_exists:
@@ -1788,6 +1917,10 @@ def backup_restore():
                 "SELECT COUNT(*) AS c FROM email_events WHERE status = 'OUTBOX'"
             ).fetchone()["c"]
 
+            counts["activity_events"] = db.execute(
+                "SELECT COUNT(*) AS c FROM activity_log"
+            ).fetchone()["c"]
+
     return render_template(
         "backup_restore.html",
         db_exists=db_exists,
@@ -1799,6 +1932,10 @@ def backup_restore():
 @app.get("/backup/download")
 def download_backup():
     archive_path, temp_dir = create_backup_archive()
+    log_activity(
+        "Backup Downloaded",
+        f"Created data backup {archive_path.name}.",
+    )
     response = send_file(
         archive_path,
         as_attachment=True,
@@ -1835,12 +1972,37 @@ def restore_backup():
         flash(error or "Backup restore failed.")
         return redirect(url_for("backup_restore"))
 
+    # A V2.2-or-earlier backup will not contain the V2.3 activity table.
+    # Re-run migrations against the restored database before writing the restore event.
+    init_db()
     restored_jobs = (restore_info or {}).get("live_counts", {}).get("jobs", 0)
+    log_activity(
+        "Backup Restored",
+        f"Restored and verified backup containing {restored_jobs} job(s).",
+    )
     flash(
         f"Backup restored and verified: {restored_jobs} job(s) restored, "
         "along with history, Email Outbox data, and uploaded evidence."
     )
     return redirect(url_for("dashboard"))
+
+
+@app.route("/activity")
+def activity_log():
+    with get_db() as db:
+        events = db.execute("""
+            SELECT a.*, j.job_name, j.project_site
+            FROM activity_log a
+            LEFT JOIN jobs j ON j.id = a.job_id
+            ORDER BY a.id DESC
+            LIMIT 300
+        """).fetchall()
+
+    return render_template(
+        "activity_log.html",
+        events=events,
+    )
+
 
 @app.route("/")
 def dashboard():
@@ -1932,6 +2094,12 @@ def new_job():
                 reminder_hours_before,
             ))
             job_id = cur.lastrowid
+            record_activity(
+                db,
+                "Job Created",
+                f"Created job {request.form['job_name'].strip()} for {request.form['installation_date']}.",
+                job_id=job_id,
+            )
         return redirect(url_for("readiness_request", job_id=job_id))
 
     return render_template(
@@ -1995,6 +2163,11 @@ def send_readiness_email(job_id):
     else:
         flash(f"Email delivery failed: {error}")
 
+    log_activity(
+        "Readiness Request Generated",
+        f"Readiness request for {job['contact_name']} <{job['contact_email']}>: {status}.",
+        job_id=job_id,
+    )
     return redirect(url_for("readiness_request", job_id=job_id))
 
 @app.post("/jobs/<int:job_id>/send-reminder")
@@ -2018,6 +2191,11 @@ def send_reminder(job_id):
     else:
         flash(f"Reminder delivery failed: {error}")
 
+    log_activity(
+        "Readiness Reminder Generated",
+        f"Reminder for {job['contact_name']} <{job['contact_email']}>: {status}.",
+        job_id=job_id,
+    )
     return redirect(url_for("readiness_request", job_id=job_id))
 
 @app.post("/reminders/run")
@@ -2078,6 +2256,9 @@ def public_readiness(token):
         photos = save_photos(valid_uploads, token[:8])
         status = calculate_status(answers, photos)
 
+        confirmed_by = request.form.get("confirmed_by", "").strip()
+        confirmed_title = request.form.get("confirmed_title", "").strip()
+
         with get_db() as db:
             latest = db.execute("SELECT * FROM jobs WHERE public_token = ?", (token,)).fetchone()
             if latest["response_at"]:
@@ -2091,12 +2272,20 @@ def public_readiness(token):
             """, (
                 status,
                 now_iso(),
-                request.form.get("confirmed_by", "").strip(),
-                request.form.get("confirmed_title", "").strip(),
+                confirmed_by,
+                confirmed_title,
                 json.dumps(answers),
                 json.dumps(photos),
                 token,
             ))
+            record_activity(
+                db,
+                "Readiness Submitted",
+                f"Site readiness submitted with status {status} and {len(photos)} photo(s).",
+                job_id=job["id"],
+                actor_type="SITE CONTACT",
+                actor_name=confirmed_by or job["contact_name"] or "Site Contact",
+            )
             db.commit()
 
         return render_template("submitted.html", job=job, status=status)
@@ -2104,8 +2293,8 @@ def public_readiness(token):
     return render_template("public_readiness.html", job=job, checklist=checklist)
 
 
-def save_arrival_submission(job, form, uploaded_files):
-    """Validate and save one arrival record. Used by admin and secure public link."""
+def save_arrival_submission(job, form, uploaded_files, actor_type=None, actor_name=None):
+    """Validate and save one arrival record. Used by internal users and secure public link."""
     if job["arrival_status"]:
         return False, "This mobilization arrival is already locked as evidence.", None
 
@@ -2194,6 +2383,21 @@ def save_arrival_submission(job, form, uploaded_files):
             report_generated_at,
             job["id"],
         ))
+        if cur.rowcount == 1:
+            event_action = "Site Ready on Arrival" if arrival_status == "READY" else "Failed Mobilization Recorded"
+            event_description = (
+                f"{reporter} reported the site ready on arrival."
+                if arrival_status == "READY"
+                else f"{reporter} reported the site not ready: {int(crew_size)} crew affected, {float(hours_lost):g} hour(s) lost."
+            )
+            record_activity(
+                db,
+                event_action,
+                event_description,
+                job_id=job["id"],
+                actor_type=actor_type or "INSTALLER",
+                actor_name=actor_name or reporter,
+            )
         db.commit()
 
     if cur.rowcount != 1:
@@ -2287,6 +2491,12 @@ def complete_job(job_id):
                 arrival_token=?
             WHERE id=?
         """, (completed_at, closed_arrival_token, job_id))
+        record_activity(
+            db,
+            "Job Completed",
+            f"Marked {job['job_name']} complete and revoked the installer link.",
+            job_id=job_id,
+        )
         db.commit()
 
     flash("Job marked complete. All readiness and arrival evidence remains preserved.")
@@ -2306,6 +2516,13 @@ def job_detail(job_id):
             SELECT * FROM mobilization_attempts
             WHERE job_id = ?
             ORDER BY attempt_number DESC
+        """, (job_id,)).fetchall()
+        activity_events = db.execute("""
+            SELECT *
+            FROM activity_log
+            WHERE job_id = ?
+            ORDER BY id DESC
+            LIMIT 100
         """, (job_id,)).fetchall()
 
     if not job:
@@ -2366,6 +2583,7 @@ def job_detail(job_id):
         mobilization_history=mobilization_history,
         current_attempt_number=current_attempt_number,
         arrival_url=arrival_url,
+        activity_events=activity_events,
     )
 
 @app.route("/jobs/<int:job_id>/arrival", methods=["GET", "POST"])
@@ -2389,6 +2607,8 @@ def record_arrival(job_id):
             job,
             request.form,
             request.files.getlist("arrival_photos"),
+            actor_type=current_user_role() or "USER",
+            actor_name=current_display_name() or current_username() or "Internal User",
         )
 
         if not ok:
@@ -2506,11 +2726,17 @@ def reset_job(job_id):
         if job["arrival_status"]:
             attempt_number = archive_current_mobilization(db, job)
             message = f"Mobilization Attempt #{attempt_number} was archived. A new readiness confirmation can now be collected."
+            activity_action = "Next Mobilization Started"
+            activity_description = f"Archived Mobilization Attempt #{attempt_number} and started a new readiness cycle."
         elif job["response_at"]:
             archive_current_confirmation(db, job)
             message = "The previous confirmation was archived. A new readiness confirmation can now be collected."
+            activity_action = "New Confirmation Requested"
+            activity_description = "Archived the current readiness confirmation and started a new confirmation cycle."
         else:
             message = "A new readiness confirmation can now be collected."
+            activity_action = "Readiness Cycle Reset"
+            activity_description = "Started a fresh readiness confirmation cycle."
 
         # Every new confirmation/mobilization gets a fresh installer-arrival link.
         # This revokes any installer link that may have been shared for the prior attempt.
@@ -2541,6 +2767,12 @@ def reset_job(job_id):
                 reminder_count=0
             WHERE id=?
         """, (new_arrival_token, job_id))
+        record_activity(
+            db,
+            activity_action,
+            activity_description,
+            job_id=job_id,
+        )
         db.commit()
 
     flash(message)
