@@ -99,3 +99,15 @@ When **Site Not Ready** is selected:
 - at least two arrival photos are still required
 
 Equipment / Tools Affected and Notes remain optional.
+
+
+## V1.7.2.1 — Restore Fix
+
+The restore routine now removes stale SQLite WAL/SHM/journal files before
+replacing the live database. This prevents an empty post-deploy WAL from
+masking or overwriting a restored database.
+
+Restore now verifies the live job count against the backup before reporting
+success and rolls back if verification fails.
+
+New backups also store record counts in the backup manifest.

@@ -1,2 +1,2 @@
-DispatchProof Version 1.7.2 - Beta Polish
-30-day stay-signed-in option, backup record counts, and required failed-mobilization impact fields.
+DispatchProof Version 1.7.2.1 - Restore Fix
+SQLite WAL/SHM cleanup plus verified restore job counts.
