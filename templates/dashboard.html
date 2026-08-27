@@ -24,30 +24,100 @@
 {% endif %}
 
 <div class="stat-grid">
-  <a class="stat ready {% if status_filter == 'READY' %}selected-stat{% endif %}" href="{{ url_for('dashboard', status='READY') }}">
+  <a class="stat ready {% if status_filter == 'READY' %}selected-stat{% endif %}"
+     href="{{ url_for('dashboard', status='' if status_filter == 'READY' else 'READY', q=search_query or None, client=client_filter or None, project=project_filter or None) }}">
     <strong>{{ counts['READY'] }}</strong><span>Ready to Dispatch</span>
   </a>
-  <a class="stat review {% if status_filter == 'REVIEW' %}selected-stat{% endif %}" href="{{ url_for('dashboard', status='REVIEW') }}">
+  <a class="stat review {% if status_filter == 'REVIEW' %}selected-stat{% endif %}"
+     href="{{ url_for('dashboard', status='' if status_filter == 'REVIEW' else 'REVIEW', q=search_query or None, client=client_filter or None, project=project_filter or None) }}">
     <strong>{{ counts['REVIEW'] }}</strong><span>Needs Review</span>
   </a>
-  <a class="stat blocked {% if status_filter == 'BLOCKED' %}selected-stat{% endif %}" href="{{ url_for('dashboard', status='BLOCKED') }}">
+  <a class="stat blocked {% if status_filter == 'BLOCKED' %}selected-stat{% endif %}"
+     href="{{ url_for('dashboard', status='' if status_filter == 'BLOCKED' else 'BLOCKED', q=search_query or None, client=client_filter or None, project=project_filter or None) }}">
     <strong>{{ counts['BLOCKED'] }}</strong><span>Blocked</span>
   </a>
-  <a class="stat neutral {% if status_filter == 'NO RESPONSE' %}selected-stat{% endif %}" href="{{ url_for('dashboard', status='NO RESPONSE') }}">
+  <a class="stat neutral {% if status_filter == 'NO RESPONSE' %}selected-stat{% endif %}"
+     href="{{ url_for('dashboard', status='' if status_filter == 'NO RESPONSE' else 'NO RESPONSE', q=search_query or None, client=client_filter or None, project=project_filter or None) }}">
     <strong>{{ counts['NO RESPONSE'] }}</strong><span>No Response</span>
   </a>
-  <a class="stat on-site {% if status_filter == 'ON SITE' %}selected-stat{% endif %}" href="{{ url_for('dashboard', status='ON SITE') }}">
+  <a class="stat on-site {% if status_filter == 'ON SITE' %}selected-stat{% endif %}"
+     href="{{ url_for('dashboard', status='' if status_filter == 'ON SITE' else 'ON SITE', q=search_query or None, client=client_filter or None, project=project_filter or None) }}">
     <strong>{{ counts['ON SITE'] }}</strong><span>On Site</span>
   </a>
+</div>
+
+<div class="panel dashboard-filter-panel">
+  <div class="panel-head">
+    <div>
+      <div class="eyebrow">Find Work Fast</div>
+      <h2>Search & Filter</h2>
+      <p>Search job, site, contact, client, project, project number, or email.</p>
+    </div>
+    {% if filters_active %}
+    <a class="btn ghost" href="{{ url_for('dashboard') }}">Clear All</a>
+    {% endif %}
+  </div>
+
+  <form class="dashboard-filter-form" method="get" action="{{ url_for('dashboard') }}">
+    <label class="dashboard-search-field">
+      <span>Search</span>
+      <input type="search" name="q" value="{{ search_query }}"
+             placeholder="Job, site, contact, client, project...">
+    </label>
+
+    <label>
+      <span>Client</span>
+      <select name="client" id="dashboardClientFilter">
+        <option value="">All Clients</option>
+        {% for client in clients %}
+        <option value="{{ client['id'] }}" {% if client_filter == client['id'] %}selected{% endif %}>{{ client['name'] }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      <span>Project</span>
+      <select name="project" id="dashboardProjectFilter">
+        <option value="">All Projects</option>
+        {% for project in projects %}
+        <option value="{{ project['id'] }}"
+                data-client-id="{{ project['client_id'] }}"
+                {% if project_filter == project['id'] %}selected{% endif %}>
+          {{ project['name'] }}{% if project['project_number'] %} · {{ project['project_number'] }}{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      <span>Status</span>
+      <select name="status">
+        <option value="">All Active Statuses</option>
+        <option value="READY" {% if status_filter == 'READY' %}selected{% endif %}>Ready</option>
+        <option value="REVIEW" {% if status_filter == 'REVIEW' %}selected{% endif %}>Review</option>
+        <option value="BLOCKED" {% if status_filter == 'BLOCKED' %}selected{% endif %}>Blocked</option>
+        <option value="NO RESPONSE" {% if status_filter == 'NO RESPONSE' %}selected{% endif %}>No Response</option>
+        <option value="ON SITE" {% if status_filter == 'ON SITE' %}selected{% endif %}>On Site</option>
+      </select>
+    </label>
+
+    <button class="btn primary dashboard-filter-button" type="submit">Apply Filters</button>
+  </form>
+
+  {% if filters_active %}
+  <div class="active-filter-summary">
+    <strong>{{ jobs|length }}</strong> of {{ total_active_jobs }} active job{{ '' if total_active_jobs == 1 else 's' }} shown.
+    {% if search_query %}<span>Search: “{{ search_query }}”</span>{% endif %}
+  </div>
+  {% endif %}
 </div>
 
 <div class="panel">
   <div class="panel-head">
     <div>
-      <h2>{% if status_filter %}{{ status_filter|title }} Jobs{% else %}Upcoming Installations{% endif %}</h2>
-      <p>{% if status_filter %}Showing jobs currently marked {{ status_filter|lower }}.{% else %}Current readiness state for every active job.{% endif %}</p>
+      <h2>{% if filters_active %}Matching Installations{% else %}Upcoming Installations{% endif %}</h2>
+      <p>{% if filters_active %}Showing active jobs that match your current search and filters.{% else %}Current readiness state for every active job.{% endif %}</p>
     </div>
-    {% if status_filter %}<a class="btn ghost" href="{{ url_for('dashboard') }}">Clear Filter</a>{% endif %}
   </div>
 
   {% if jobs %}
@@ -59,7 +129,15 @@
       <tbody>
       {% for job in jobs %}
         <tr>
-          <td><strong>{{ job['job_name'] }}</strong></td>
+          <td>
+            <strong>{{ job['job_name'] }}</strong>
+            {% if job['client_name'] or job['assigned_project_name'] %}
+            <div class="job-org-line">
+              {{ job['client_name'] or 'Unassigned Client' }}
+              {% if job['assigned_project_name'] %} · {{ job['assigned_project_name'] }}{% endif %}
+            </div>
+            {% endif %}
+          </td>
           <td>{{ job['project_site'] or '—' }}</td>
           <td>#{{ job['attempt_number'] }}</td>
           <td>{{ job['installation_date']|pretty_date }}</td>
@@ -74,9 +152,39 @@
   {% else %}
   <div class="empty">
     <div class="empty-icon">✓</div>
-    <h3>{% if status_filter %}No matching jobs{% else %}No jobs yet{% endif %}</h3>
-    <p>{% if status_filter %}There are currently no jobs in this status.{% else %}Create your first installation and send a readiness request.{% endif %}</p>
+    <h3>{% if filters_active %}No matching jobs{% else %}No jobs yet{% endif %}</h3>
+    <p>{% if filters_active %}Try clearing a filter or using a broader search.{% else %}Create your first installation and send a readiness request.{% endif %}</p>
   </div>
   {% endif %}
 </div>
+
+<script>
+(function(){
+  const clientSelect = document.getElementById('dashboardClientFilter');
+  const projectSelect = document.getElementById('dashboardProjectFilter');
+  if (!clientSelect || !projectSelect) return;
+
+  const projectOptions = Array.from(projectSelect.options);
+
+  function filterProjects(){
+    const clientId = clientSelect.value;
+    projectOptions.forEach(option => {
+      if (!option.value) {
+        option.hidden = false;
+        return;
+      }
+      const belongs = !clientId || option.dataset.clientId === clientId;
+      option.hidden = !belongs;
+    });
+
+    const selected = projectSelect.options[projectSelect.selectedIndex];
+    if (selected && selected.hidden) {
+      projectSelect.value = '';
+    }
+  }
+
+  clientSelect.addEventListener('change', filterProjects);
+  filterProjects();
+})();
+</script>
 {% endblock %}

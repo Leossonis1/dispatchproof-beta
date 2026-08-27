@@ -1,2 +1,2 @@
-DispatchProof Version 2.8 - Internal Job Notes
-Adds a private, timestamped office-notes timeline to every job. Notes are available to signed-in office users and excluded from all public/client reports.
+DispatchProof Version 2.9 - Dashboard Search & Filters
+Adds fast active-job search plus client, project, and status filters on the Dashboard.

@@ -661,3 +661,46 @@ Restoring a V2.7.1-or-earlier backup into V2.8 automatically creates the new not
 ### Help Center
 
 Help & Tutorials now includes **Add an Internal Job Note** under Everyday Workflows.
+
+
+## V2.9 — Dashboard Search & Filters
+
+V2.9 makes the active-installation Dashboard easier to use as job volume grows.
+
+### Search
+
+The Dashboard can now search active jobs by:
+
+- Job Name
+- Project / Site
+- Site Contact Name
+- Site Contact Email
+- Client Name
+- Project Name
+- Project Number
+
+Search is case-insensitive.
+
+### Filters
+
+Active jobs can be narrowed by:
+
+- Client
+- Project
+- Status
+
+Client and Project filters work together. When a Client is selected, the Project dropdown only shows projects belonging to that client.
+
+The existing status summary tiles remain usable and now preserve the current Search / Client / Project filters.
+
+### Active filter summary
+
+When any filter is active, DispatchProof shows how many active jobs match and provides a **Clear All** control.
+
+### No database migration
+
+V2.9 changes only Dashboard querying and presentation. It does not add or change database tables, so restoring the latest V2.8 backup remains compatible.
+
+### Help Center
+
+Help & Tutorials now includes **Find a Job on the Dashboard** under Getting Started.
