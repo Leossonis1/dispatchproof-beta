@@ -130,6 +130,7 @@ def get_db():
 def ensure_columns(db):
     existing = {row["name"] for row in db.execute("PRAGMA table_info(jobs)").fetchall()}
     needed = {
+        "arrival_token": "TEXT",
         "arrival_status": "TEXT",
         "arrived_at": "TEXT",
         "arrival_reported_by": "TEXT",
@@ -219,6 +220,31 @@ def ensure_columns(db):
         )
     """)
 
+    # Backfill a separate high-entropy installer-arrival token for older jobs.
+    rows_without_arrival_token = db.execute("""
+        SELECT id FROM jobs
+        WHERE arrival_token IS NULL OR TRIM(arrival_token) = ''
+    """).fetchall()
+
+    for row in rows_without_arrival_token:
+        while True:
+            candidate = secrets.token_urlsafe(24)
+            exists = db.execute(
+                "SELECT 1 FROM jobs WHERE arrival_token = ?",
+                (candidate,),
+            ).fetchone()
+            if not exists:
+                db.execute(
+                    "UPDATE jobs SET arrival_token = ? WHERE id = ?",
+                    (candidate, row["id"]),
+                )
+                break
+
+    db.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_arrival_token
+        ON jobs(arrival_token)
+    """)
+
     # Backfill reminder defaults for jobs upgraded from older builds.
     db.execute("""
         UPDATE jobs
@@ -234,6 +260,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS jobs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             public_token TEXT UNIQUE NOT NULL,
+            arrival_token TEXT UNIQUE,
             job_name TEXT NOT NULL,
             project_site TEXT,
             installation_date TEXT NOT NULL,
@@ -486,9 +513,12 @@ def recover_v130_orphaned_mobilizations(db):
 
         db.execute("DELETE FROM readiness_confirmations WHERE id = ?", (archived["id"],))
 
+        new_arrival_token = secrets.token_urlsafe(24)
+
         db.execute("""
             UPDATE jobs
-            SET status='NO RESPONSE',
+            SET arrival_token=?,
+                status='NO RESPONSE',
                 response_at=NULL,
                 confirmed_by=NULL,
                 confirmed_title=NULL,
@@ -541,6 +571,12 @@ def public_readiness_url(job):
     if base:
         return f"{base}/r/{job['public_token']}"
     return url_for("public_readiness", token=job["public_token"], _external=True)
+
+def public_arrival_url(job):
+    base = public_app_base_url()
+    if base:
+        return f"{base}/a/{job['arrival_token']}"
+    return url_for("public_arrival", token=job["arrival_token"], _external=True)
 
 def smtp_is_configured():
     return bool(SMTP_HOST and SMTP_PORT and SMTP_FROM_EMAIL)
@@ -867,7 +903,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "1.7.2.1",
+        "app_version": "1.8",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -1048,7 +1084,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "1.7.2.1",
+        "app_version": "1.8",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -1061,12 +1097,12 @@ def ensure_db():
     global LAST_REMINDER_SWEEP_AT
     init_db()
 
-    public_endpoints = {"login", "health", "static", "public_readiness"}
+    public_endpoints = {"login", "health", "static", "public_readiness", "public_arrival"}
     if request.endpoint not in public_endpoints and not admin_authenticated():
         return redirect(url_for("login", next=request.full_path if request.query_string else request.path))
 
     # Do not make static/public requests responsible for sending reminders.
-    if request.endpoint in {"static", "health", "public_readiness"}:
+    if request.endpoint in {"static", "health", "public_readiness", "public_arrival"}:
         return
 
     now = datetime.now()
@@ -1127,7 +1163,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "1.7.2.1",
+        "version": "1.8",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -1273,16 +1309,18 @@ def new_job():
         reminder_hours_before = int(request.form.get("reminder_hours_before") or DEFAULT_REMINDER_HOURS_BEFORE)
 
         token = secrets.token_urlsafe(18)
+        arrival_token = secrets.token_urlsafe(24)
         with get_db() as db:
             cur = db.execute("""
                 INSERT INTO jobs (
-                    public_token, job_name, project_site, installation_date,
+                    public_token, arrival_token, job_name, project_site, installation_date,
                     contact_name, contact_email, contact_phone, checklist_json,
                     status, created_at, reminder_enabled, reminder_hours_before,
                     reminder_count
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'NO RESPONSE', ?, ?, ?, 0)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'NO RESPONSE', ?, ?, ?, 0)
             """, (
                 token,
+                arrival_token,
                 request.form["job_name"].strip(),
                 request.form.get("project_site", "").strip(),
                 request.form["installation_date"],
@@ -1455,6 +1493,162 @@ def public_readiness(token):
 
     return render_template("public_readiness.html", job=job, checklist=checklist)
 
+
+def save_arrival_submission(job, form, uploaded_files):
+    """Validate and save one arrival record. Used by admin and secure public link."""
+    if job["arrival_status"]:
+        return False, "This mobilization arrival is already locked as evidence.", None
+
+    if job["status"] != "READY":
+        return False, "Site arrival cannot be recorded until the current readiness request is marked READY.", None
+
+    arrival_status = form.get("arrival_status")
+    reporter = form.get("arrival_reported_by", "").strip()
+
+    if arrival_status not in {"READY", "NOT READY"}:
+        return False, "Choose whether the site was ready on arrival.", None
+
+    if not reporter:
+        return False, "Enter the installer / reporter name.", None
+
+    issues = form.getlist("issues") if arrival_status == "NOT READY" else []
+    crew_size = form.get("crew_size") or None
+    hours_lost = form.get("hours_lost") or None
+    equipment = form.get("equipment_affected", "").strip()
+    notes = form.get("arrival_notes", "").strip()
+
+    valid_uploads = [
+        f for f in uploaded_files
+        if f and f.filename and allowed_file(f.filename)
+    ]
+
+    if arrival_status == "NOT READY":
+        if not issues:
+            return False, "Select at least one reason the site was not ready.", None
+
+        if crew_size is None or hours_lost is None:
+            return False, "Crew Affected and Hours Lost are required for a failed mobilization.", None
+
+        try:
+            crew_value = int(crew_size)
+            hours_value = float(hours_lost)
+        except (TypeError, ValueError):
+            return False, "Enter valid numbers for Crew Affected and Hours Lost.", None
+
+        if crew_value < 1:
+            return False, "Crew Affected must be at least 1.", None
+
+        if hours_value <= 0:
+            return False, "Hours Lost must be greater than 0.", None
+
+        if len(valid_uploads) < 2:
+            return False, "Please add at least 2 arrival photos for a failed mobilization.", None
+
+    photos = save_photos(valid_uploads, f"arrival_{job['id']}")
+    arrival_time = now_iso()
+
+    new_status = job["status"]
+    report_number = job["failed_report_number"]
+    report_generated_at = job["failed_report_generated_at"]
+
+    if arrival_status == "NOT READY":
+        new_status = "BLOCKED"
+        if not report_number:
+            report_number = make_report_number(job["id"], arrival_time)
+        if not report_generated_at:
+            report_generated_at = arrival_time
+    elif arrival_status == "READY" and job["status"] != "BLOCKED":
+        new_status = "READY"
+
+    with get_db() as db:
+        cur = db.execute("""
+            UPDATE jobs
+            SET arrival_status = ?, arrived_at = ?, arrival_reported_by = ?,
+                arrival_issues_json = ?, crew_size = ?, hours_lost = ?,
+                equipment_affected = ?, arrival_notes = ?,
+                arrival_photos_json = ?, status = ?,
+                failed_report_number = ?, failed_report_generated_at = ?
+            WHERE id = ? AND arrival_status IS NULL AND status = 'READY'
+        """, (
+            arrival_status,
+            arrival_time,
+            reporter,
+            json.dumps(issues),
+            int(crew_size) if crew_size else None,
+            float(hours_lost) if hours_lost else None,
+            equipment,
+            notes,
+            json.dumps(photos),
+            new_status,
+            report_number,
+            report_generated_at,
+            job["id"],
+        ))
+        db.commit()
+
+    if cur.rowcount != 1:
+        # A second submission won the race; do not leave orphaned files behind.
+        for filename in photos:
+            try:
+                (UPLOAD_DIR / filename).unlink(missing_ok=True)
+            except OSError:
+                pass
+        return False, "This arrival was already recorded by another submission.", None
+
+    return True, None, arrival_status
+
+
+@app.route("/a/<token>", methods=["GET", "POST"])
+def public_arrival(token):
+    with get_db() as db:
+        job = db.execute(
+            "SELECT * FROM jobs WHERE arrival_token = ?",
+            (token,),
+        ).fetchone()
+
+    if not job:
+        abort(404)
+
+    if request.method == "POST":
+        ok, error, arrival_status = save_arrival_submission(
+            job,
+            request.form,
+            request.files.getlist("arrival_photos"),
+        )
+
+        if not ok:
+            flash(error)
+            return redirect(url_for("public_arrival", token=token))
+
+        return redirect(url_for("public_arrival", token=token, submitted="1"))
+
+    # Fetch again so GET after POST always reflects the locked record.
+    with get_db() as db:
+        job = db.execute(
+            "SELECT * FROM jobs WHERE arrival_token = ?",
+            (token,),
+        ).fetchone()
+
+    if job["arrival_status"]:
+        return render_template(
+            "public_arrival_submitted.html",
+            job=job,
+            arrival_status=job["arrival_status"],
+        )
+
+    if job["status"] != "READY":
+        return render_template(
+            "public_arrival_unavailable.html",
+            job=job,
+        )
+
+    return render_template(
+        "public_arrival.html",
+        job=job,
+        issues=ARRIVAL_ISSUES,
+    )
+
+
 @app.route("/jobs/<int:job_id>")
 def job_detail(job_id):
     with get_db() as db:
@@ -1514,6 +1708,7 @@ def job_detail(job_id):
         })
 
     current_attempt_number = len(mobilization_history) + 1
+    arrival_url = public_arrival_url(job) if job["arrival_token"] else None
 
     return render_template(
         "job_detail.html",
@@ -1526,12 +1721,14 @@ def job_detail(job_id):
         history_items=history_items,
         mobilization_history=mobilization_history,
         current_attempt_number=current_attempt_number,
+        arrival_url=arrival_url,
     )
 
 @app.route("/jobs/<int:job_id>/arrival", methods=["GET", "POST"])
 def record_arrival(job_id):
     with get_db() as db:
         job = db.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+
     if not job:
         abort(404)
 
@@ -1544,91 +1741,15 @@ def record_arrival(job_id):
         return redirect(url_for("job_detail", job_id=job_id))
 
     if request.method == "POST":
-        arrival_status = request.form.get("arrival_status")
-        reporter = request.form.get("arrival_reported_by", "").strip()
+        ok, error, arrival_status = save_arrival_submission(
+            job,
+            request.form,
+            request.files.getlist("arrival_photos"),
+        )
 
-        if arrival_status not in {"READY", "NOT READY"}:
-            flash("Choose whether the site was ready on arrival.")
+        if not ok:
+            flash(error)
             return redirect(url_for("record_arrival", job_id=job_id))
-
-        issues = request.form.getlist("issues") if arrival_status == "NOT READY" else []
-        crew_size = request.form.get("crew_size") or None
-        hours_lost = request.form.get("hours_lost") or None
-        equipment = request.form.get("equipment_affected", "").strip()
-        notes = request.form.get("arrival_notes", "").strip()
-
-        upload_files = request.files.getlist("arrival_photos")
-        valid_uploads = [f for f in upload_files if f and f.filename and allowed_file(f.filename)]
-
-        if arrival_status == "NOT READY":
-            if not issues:
-                flash("Select at least one reason the site was not ready.")
-                return redirect(url_for("record_arrival", job_id=job_id))
-
-            if crew_size is None or hours_lost is None:
-                flash("Crew Affected and Hours Lost are required for a failed mobilization.")
-                return redirect(url_for("record_arrival", job_id=job_id))
-
-            try:
-                crew_value = int(crew_size)
-                hours_value = float(hours_lost)
-            except (TypeError, ValueError):
-                flash("Enter valid numbers for Crew Affected and Hours Lost.")
-                return redirect(url_for("record_arrival", job_id=job_id))
-
-            if crew_value < 1:
-                flash("Crew Affected must be at least 1.")
-                return redirect(url_for("record_arrival", job_id=job_id))
-
-            if hours_value <= 0:
-                flash("Hours Lost must be greater than 0.")
-                return redirect(url_for("record_arrival", job_id=job_id))
-
-            if len(valid_uploads) < 2:
-                flash("Please upload at least 2 arrival photos for a failed mobilization.")
-                return redirect(url_for("record_arrival", job_id=job_id))
-
-        photos = save_photos(valid_uploads, f"arrival_{job_id}")
-        arrival_time = now_iso()
-
-        new_status = job["status"]
-        report_number = job["failed_report_number"]
-        report_generated_at = job["failed_report_generated_at"]
-
-        if arrival_status == "NOT READY":
-            new_status = "BLOCKED"
-            if not report_number:
-                report_number = make_report_number(job_id, arrival_time)
-            if not report_generated_at:
-                report_generated_at = arrival_time
-        elif arrival_status == "READY" and job["status"] != "BLOCKED":
-            new_status = "READY"
-
-        with get_db() as db:
-            db.execute("""
-                UPDATE jobs
-                SET arrival_status = ?, arrived_at = ?, arrival_reported_by = ?,
-                    arrival_issues_json = ?, crew_size = ?, hours_lost = ?,
-                    equipment_affected = ?, arrival_notes = ?,
-                    arrival_photos_json = ?, status = ?,
-                    failed_report_number = ?, failed_report_generated_at = ?
-                WHERE id = ?
-            """, (
-                arrival_status,
-                arrival_time,
-                reporter,
-                json.dumps(issues),
-                int(crew_size) if crew_size else None,
-                float(hours_lost) if hours_lost else None,
-                equipment,
-                notes,
-                json.dumps(photos),
-                new_status,
-                report_number,
-                report_generated_at,
-                job_id,
-            ))
-            db.commit()
 
         if arrival_status == "NOT READY":
             return redirect(url_for("failed_mobilization_report", job_id=job_id))
@@ -1743,9 +1864,14 @@ def reset_job(job_id):
         else:
             message = "A new readiness confirmation can now be collected."
 
+        # Every new confirmation/mobilization gets a fresh installer-arrival link.
+        # This revokes any installer link that may have been shared for the prior attempt.
+        new_arrival_token = secrets.token_urlsafe(24)
+
         db.execute("""
             UPDATE jobs
-            SET status='NO RESPONSE',
+            SET arrival_token=?,
+                status='NO RESPONSE',
                 response_at=NULL,
                 confirmed_by=NULL,
                 confirmed_title=NULL,
@@ -1766,7 +1892,7 @@ def reset_job(job_id):
                 last_reminder_sent_at=NULL,
                 reminder_count=0
             WHERE id=?
-        """, (job_id,))
+        """, (new_arrival_token, job_id))
         db.commit()
 
     flash(message)
