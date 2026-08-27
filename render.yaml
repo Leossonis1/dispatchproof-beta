@@ -14,3 +14,5 @@ services:
         value: DispatchProof Beta
       - key: DISPATCHPROOF_EMAIL_MODE
         value: outbox
+      - key: DISPATCHPROOF_ADMIN_USERNAME
+        value: admin

@@ -1,5 +1,5 @@
 
-from flask import Flask, render_template, request, redirect, url_for, send_from_directory, flash, abort
+from flask import Flask, render_template, request, redirect, url_for, send_from_directory, flash, abort, session
 from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
 from pathlib import Path
@@ -63,6 +63,12 @@ EMAIL_MODE = os.getenv("DISPATCHPROOF_EMAIL_MODE", "outbox").strip().lower()
 if EMAIL_MODE not in {"outbox", "smtp"}:
     EMAIL_MODE = "outbox"
 
+# Single-admin beta login.
+# Username defaults to "admin". On Render, DISPATCHPROOF_ADMIN_PASSWORD must
+# be set as a private environment variable before the internal app can be used.
+ADMIN_USERNAME = os.getenv("DISPATCHPROOF_ADMIN_USERNAME", "admin").strip() or "admin"
+ADMIN_PASSWORD = os.getenv("DISPATCHPROOF_ADMIN_PASSWORD", "")
+
 # Reminder defaults for new jobs.
 DEFAULT_REMINDER_ENABLED = True
 DEFAULT_REMINDER_HOURS_BEFORE = 48
@@ -80,6 +86,10 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 app.secret_key = os.getenv("DISPATCHPROOF_SECRET_KEY", "dev-change-me-before-production")
 app.config["MAX_CONTENT_LENGTH"] = 30 * 1024 * 1024
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = os.getenv("RENDER", "").lower() == "true"
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=12)
 
 DEFAULT_CHECKLIST = [
     "Finished flooring installed",
@@ -738,15 +748,41 @@ def run_due_reminders():
 
     return sent_count, outbox_count, failed_count
 
+
+def admin_login_configured():
+    # Local development gets an explicit dev fallback only when NOT on Render.
+    if ADMIN_PASSWORD:
+        return True
+    return os.getenv("RENDER", "").lower() != "true"
+
+def effective_admin_password():
+    if ADMIN_PASSWORD:
+        return ADMIN_PASSWORD
+    # Local-only fallback for development. Never active on Render.
+    return "dispatchproof-local"
+
+def admin_authenticated():
+    return bool(session.get("dispatchproof_admin"))
+
+def safe_next_url(value):
+    if not value:
+        return url_for("dashboard")
+    # Only allow local absolute paths, never //host or full external URLs.
+    if value.startswith("/") and not value.startswith("//"):
+        return value
+    return url_for("dashboard")
+
 @app.context_processor
 def inject_brand():
     return {
         "company_name": COMPANY_NAME,
         "company_logo_url": COMPANY_LOGO_URL,
-        "app_version": "1.5.1",
+        "app_version": "1.6",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
+        "admin_authenticated": admin_authenticated(),
+        "admin_username": ADMIN_USERNAME,
     }
 
 @app.before_request
@@ -754,8 +790,12 @@ def ensure_db():
     global LAST_REMINDER_SWEEP_AT
     init_db()
 
-    # Do not make static/image requests responsible for sending reminders.
-    if request.endpoint in {"static", "uploaded_file", "health"}:
+    public_endpoints = {"login", "health", "static", "public_readiness"}
+    if request.endpoint not in public_endpoints and not admin_authenticated():
+        return redirect(url_for("login", next=request.full_path if request.query_string else request.path))
+
+    # Do not make static/public requests responsible for sending reminders.
+    if request.endpoint in {"static", "health", "public_readiness"}:
         return
 
     now = datetime.now()
@@ -773,11 +813,48 @@ def ensure_db():
             pass
 
 
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if admin_authenticated():
+        return redirect(safe_next_url(request.args.get("next")))
+
+    configured = admin_login_configured()
+    next_url = request.args.get("next") or request.form.get("next") or ""
+
+    if request.method == "POST":
+        if not configured:
+            flash("Admin login is not configured yet. Add DISPATCHPROOF_ADMIN_PASSWORD in Render Environment.")
+            return render_template("login.html", configured=False, next_url=next_url), 503
+
+        submitted_username = request.form.get("username", "").strip()
+        submitted_password = request.form.get("password", "")
+
+        username_ok = secrets.compare_digest(submitted_username, ADMIN_USERNAME)
+        password_ok = secrets.compare_digest(submitted_password, effective_admin_password())
+
+        if username_ok and password_ok:
+            session.clear()
+            session.permanent = True
+            session["dispatchproof_admin"] = True
+            session["dispatchproof_admin_username"] = ADMIN_USERNAME
+            return redirect(safe_next_url(next_url))
+
+        flash("Incorrect username or password.")
+
+    return render_template("login.html", configured=configured, next_url=next_url)
+
+@app.post("/logout")
+def logout():
+    session.clear()
+    flash("Signed out.")
+    return redirect(url_for("login"))
+
 @app.route("/health")
 def health():
     return {
         "status": "ok",
-        "version": "1.5.1",
+        "version": "1.6",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),

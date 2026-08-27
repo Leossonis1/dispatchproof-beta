@@ -19,10 +19,21 @@
       <a class="{% if request.path == '/jobs/new' %}active{% endif %}" href="{{ url_for('new_job') }}">New Job</a>
       <a class="{% if request.path.startswith('/email-outbox') %}active{% endif %}" href="{{ url_for('email_outbox') }}">Email Outbox</a>
     </nav>
-    <div class="sidebar-note">
-      Pre-Mobilization Proof<br>
-      <span>Avoid wasted trips.</span>
-      <br><small class="version-label">Version {{ app_version }}</small>
+    <div class="sidebar-bottom">
+      {% if admin_authenticated %}
+      <div class="admin-session">
+        <span>Signed in as</span>
+        <strong>{{ admin_username }}</strong>
+        <form method="post" action="{{ url_for('logout') }}">
+          <button class="sidebar-logout" type="submit">Sign Out</button>
+        </form>
+      </div>
+      {% endif %}
+      <div class="sidebar-note">
+        Pre-Mobilization Proof<br>
+        <span>Avoid wasted trips.</span>
+        <br><small class="version-label">Version {{ app_version }}</small>
+      </div>
     </div>
   </aside>
   <main class="main">

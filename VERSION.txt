@@ -1,2 +1,2 @@
-DispatchProof Version 1.5.1 - Free Render Beta
-Outbox Mode patch: free beta never attempts blocked SMTP delivery.
+DispatchProof Version 1.6 - Admin Login
+Internal dashboard protected; public readiness links remain no-login.

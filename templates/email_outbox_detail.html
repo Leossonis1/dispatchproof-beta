@@ -29,9 +29,12 @@
 
   <section class="panel">
     <h2>Confirmation Link</h2>
-    <div class="copy-box">{{ event['public_url'] or '—' }}</div>
+    <div class="copy-box" id="outboxPublicLink">{{ event['public_url'] or '—' }}</div>
     {% if event['public_url'] %}
-      <a class="btn ghost" target="_blank" href="{{ event['public_url'] }}">Open Link</a>
+      <div class="button-row">
+        <button class="btn ghost" type="button" id="copyOutboxLinkButton" onclick="copyOutboxLink()">Copy Link</button>
+        <a class="btn ghost" target="_blank" href="{{ event['public_url'] }}">Open Link</a>
+      </div>
     {% endif %}
   </section>
 </div>
@@ -41,3 +44,20 @@
   <iframe class="email-preview-frame detail-preview" srcdoc="{{ event['body_html']|e }}"></iframe>
 </section>
 {% endblock %}
+
+<script>
+async function copyOutboxLink() {
+  const link = document.getElementById('outboxPublicLink');
+  const button = document.getElementById('copyOutboxLinkButton');
+  if (!link || !button) return;
+
+  const url = link.textContent.trim();
+  try {
+    await navigator.clipboard.writeText(url);
+    button.textContent = 'Copied!';
+    setTimeout(() => button.textContent = 'Copy Link', 1600);
+  } catch (e) {
+    window.prompt('Copy this link:', url);
+  }
+}
+</script>

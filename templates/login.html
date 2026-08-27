@@ -1,0 +1,50 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin Sign In · DispatchProof</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body class="login-body">
+  <main class="login-shell">
+    <div class="login-brand">
+      <div class="brand-mark">✓</div>
+      <strong>DispatchProof</strong>
+    </div>
+
+    <section class="login-card">
+      <div class="eyebrow">Protected Workspace</div>
+      <h1>Admin Sign In</h1>
+      <p>The DispatchProof dashboard, jobs, reports, photos, and Email Outbox are private.</p>
+
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          {% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      {% if configured %}
+      <form method="post" class="login-form">
+        <input type="hidden" name="next" value="{{ next_url }}">
+        <label>Username
+          <input name="username" autocomplete="username" required autofocus>
+        </label>
+        <label>Password
+          <input type="password" name="password" autocomplete="current-password" required>
+        </label>
+        <button class="btn primary wide" type="submit">Sign In</button>
+      </form>
+      {% else %}
+      <div class="config-banner login-config-warning">
+        <strong>Admin password not configured.</strong>
+        <span>Add <code>DISPATCHPROOF_ADMIN_PASSWORD</code> in Render → Environment, then redeploy.</span>
+      </div>
+      {% endif %}
+
+      <p class="login-foot">Public site-readiness links do not require this login.</p>
+    </section>
+  </main>
+</body>
+</html>

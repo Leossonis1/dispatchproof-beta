@@ -1,25 +1,45 @@
-# DispatchProof V1.5.1 — Free Render Beta
+# DispatchProof V1.6 — Admin Login
 
-V1.5.1 makes free-tier email testing intentional.
+V1.6 protects the hosted internal application while keeping individual
+site-readiness links public.
 
-## Free Beta · Outbox Mode
+## Public without login
 
-The Render Blueprint now sets:
+- `/r/<secure-token>` readiness confirmation pages
+- `/health`
+- static assets needed by the public page
 
-`DISPATCHPROOF_EMAIL_MODE=outbox`
+## Admin login required
 
-In this mode:
+- Dashboard
+- New Job
+- Readiness Request management
+- Job details
+- Installer Arrival
+- Failed Mobilization reports
+- Archived reports/history
+- Email Outbox
+- Uploaded evidence photos
 
-- Readiness emails are generated and logged in Email Outbox.
-- Reminder previews are generated and logged in Email Outbox.
-- Nothing is sent externally.
-- SMTP is never attempted.
-- Automatic email reminder delivery is paused.
-- Existing Gmail SMTP environment variables can remain in Render; they are ignored while Outbox Mode is active.
+## Render setup before deploying V1.6
 
-The public readiness-link workflow continues to work normally.
+In Render → `dispatchproof-beta` → Environment, add:
 
-## Later
+`DISPATCHPROOF_ADMIN_USERNAME=admin`
 
-When we decide to enable real outbound email, we can use an HTTPS email API
-or an SMTP-capable hosting plan and explicitly switch email mode.
+`DISPATCHPROOF_ADMIN_PASSWORD=<choose a new unique password>`
+
+Do not use your Gmail password or Google App Password.
+
+The password stays in Render Environment and is never committed to GitHub.
+
+If the password is missing on Render, DispatchProof fails closed: the internal
+app remains locked and the login page explains that admin login is not configured.
+
+## Other V1.6 cleanup
+
+- Copy Link added to Email Outbox detail
+- Public confirmation-complete page no longer contains a Dashboard link
+- secure HttpOnly/Lax session cookie
+- secure cookie enforced on Render HTTPS
+- admin session expires after 12 hours
