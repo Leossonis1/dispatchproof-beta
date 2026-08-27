@@ -111,3 +111,39 @@ Restore now verifies the live job count against the backup before reporting
 success and rolls back if verification fails.
 
 New backups also store record counts in the backup manifest.
+
+
+## V1.8 — Secure Installer Arrival Link
+
+When a job is **READY** and arrival has not yet been recorded, the protected job
+page now shows an **Installer Arrival Link**.
+
+The office can:
+
+- Copy Installer Link
+- Open External Page
+- Record Internally
+
+The installer link:
+
+- uses a separate high-entropy token from the site-readiness link
+- opens without an admin login
+- exposes only the current job's installer-arrival form
+- cannot access the dashboard, reports, Email Outbox, backups, or other jobs
+- only accepts an arrival while the current job is READY
+- locks after the first successful arrival submission
+- automatically rotates whenever a new confirmation/mobilization starts
+
+The public installer form supports:
+
+- Site Ready / Site Not Ready
+- installer/reporter name
+- failure reasons
+- required Crew Affected + Hours Lost on failed mobilizations
+- optional equipment/tools and notes
+- Take Photo
+- Choose Existing Photos
+- two-photo minimum for Site Not Ready
+
+This is the first field-crew workflow that does not require sharing the DispatchProof
+admin password.

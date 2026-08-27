@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Arrival Recorded · DispatchProof</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body class="public-body">
+  <main class="public-shell compact">
+    <div class="public-brand">DispatchProof <span>· secure field link</span></div>
+    <section class="public-card center">
+      <div class="big-check {{ 'arrival-submit-failed' if arrival_status == 'NOT READY' else '' }}">
+        {{ '!' if arrival_status == 'NOT READY' else '✓' }}
+      </div>
+      <div class="eyebrow">Installer Arrival Recorded</div>
+      <h1>{{ 'Site Not Ready' if arrival_status == 'NOT READY' else 'Site Ready' }}</h1>
+      <p>
+        {% if arrival_status == 'NOT READY' %}
+          The failed mobilization evidence has been saved and the arrival record is now locked.
+        {% else %}
+          The arrival confirmation has been saved and the record is now locked.
+        {% endif %}
+      </p>
+      <div class="public-arrival-summary">
+        <strong>{{ job['job_name'] }}</strong>
+        <span>{{ job['project_site'] or '' }}</span>
+        <span>Recorded {{ job['arrived_at']|pretty_datetime }}</span>
+      </div>
+      <span class="badge {{ 'blocked' if arrival_status == 'NOT READY' else 'ready' }}">
+        {{ 'BLOCKED' if arrival_status == 'NOT READY' else 'READY' }}
+      </span>
+    </section>
+    <p class="public-foot">No account required · Secured by DispatchProof</p>
+  </main>
+</body>
+</html>

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Arrival Not Available · DispatchProof</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body class="public-body">
+  <main class="public-shell compact">
+    <div class="public-brand">DispatchProof <span>· secure field link</span></div>
+    <section class="public-card center">
+      <div class="waiting-icon">…</div>
+      <div class="eyebrow">Installer Arrival</div>
+      <h1>Arrival recording is not available yet</h1>
+      <p>The current mobilization has not been cleared as Ready to Dispatch. Contact your installation coordinator if you believe this is incorrect.</p>
+      <div class="public-arrival-summary">
+        <strong>{{ job['job_name'] }}</strong>
+        <span>{{ job['project_site'] or '' }}</span>
+        <span>Scheduled {{ job['installation_date']|pretty_date }}</span>
+      </div>
+    </section>
+    <p class="public-foot">No account required · Secured by DispatchProof</p>
+  </main>
+</body>
+</html>

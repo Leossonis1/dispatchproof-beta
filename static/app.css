@@ -656,3 +656,62 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(15,98,254,.12);bo
   color:#d92d20;
   font-weight:900;
 }
+
+
+/* DispatchProof V1.8 secure installer arrival link */
+.installer-link-panel{
+  border-color:#bdd0f8;
+  background:linear-gradient(180deg,#ffffff 0%,#fbfdff 100%);
+  margin-bottom:20px;
+}
+.installer-link-head{align-items:flex-start}
+.secure-link-badge{
+  display:inline-flex;
+  align-items:center;
+  border-radius:999px;
+  background:#eef4ff;
+  color:#175cd3;
+  padding:7px 10px;
+  font-size:10px;
+  font-weight:900;
+  letter-spacing:.04em;
+  white-space:nowrap;
+}
+.installer-copy-box{
+  margin:15px 0 13px;
+  overflow-wrap:anywhere;
+}
+.installer-security-note{margin:13px 0 0}
+.installer-why-box{margin-top:18px}
+.public-arrival-time{margin-top:12px}
+.public-arrival-submit{padding-bottom:0}
+.public-arrival-summary{
+  display:grid;
+  justify-items:center;
+  gap:4px;
+  margin:18px 0;
+  padding:14px 16px;
+  width:100%;
+  box-sizing:border-box;
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:#f8fafc;
+}
+.public-arrival-summary strong{color:#101828}
+.public-arrival-summary span{font-size:12px;color:var(--muted)}
+.arrival-submit-failed{
+  background:#fff0ee!important;
+  color:#d92d20!important;
+}
+.waiting-icon{
+  width:56px;height:56px;border-radius:50%;
+  margin:0 auto 16px;
+  display:grid;place-items:center;
+  background:#eef2f7;color:#667085;
+  font-size:28px;font-weight:900;
+}
+
+@media(max-width:700px){
+  .installer-link-head{display:grid;gap:10px}
+  .secure-link-badge{justify-self:start}
+}

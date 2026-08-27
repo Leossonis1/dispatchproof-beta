@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Installer Arrival · DispatchProof</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body class="public-body">
+  <main class="public-shell">
+    <div class="public-brand">DispatchProof <span>· secure field link</span></div>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        {% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <section class="public-card">
+      <div class="eyebrow">Installer Arrival</div>
+      <h1>{{ job['job_name'] }}</h1>
+      <p>{{ job['project_site'] or '' }}</p>
+      <div class="date-chip">Scheduled installation: {{ job['installation_date']|pretty_date }}</div>
+
+      <div class="why-box installer-why-box">
+        <strong>Record what you actually find on arrival</strong>
+        <span>This secure link only submits the arrival record for this mobilization. No account or admin password is required.</span>
+      </div>
+
+      <form method="post" enctype="multipart/form-data" id="publicArrivalForm">
+        <div class="public-section">
+          <h2>1. Site condition on arrival</h2>
+          <div class="arrival-choice-grid">
+            <label class="arrival-choice ready-choice" id="readyChoice">
+              <input required type="radio" name="arrival_status" value="READY">
+              <span class="arrival-choice-icon">✓</span>
+              <strong>Site Ready</strong>
+              <small>Conditions are acceptable. Begin installation.</small>
+            </label>
+
+            <label class="arrival-choice failed-choice" id="failedChoice">
+              <input required type="radio" name="arrival_status" value="NOT READY">
+              <span class="arrival-choice-icon">!</span>
+              <strong>Site Not Ready</strong>
+              <small>Document the issue before the crew leaves.</small>
+            </label>
+          </div>
+        </div>
+
+        <div class="public-section">
+          <h2>2. Installer / Reporter</h2>
+          <label>Installer / Reporter Name
+            <input required name="arrival_reported_by" placeholder="Mike Davis" autocomplete="name">
+          </label>
+          <div class="arrival-time-note public-arrival-time">
+            <strong>Arrival time</strong>
+            <span>Timestamp is recorded automatically when submitted.</span>
+          </div>
+        </div>
+
+        <div id="notReadyFields" class="hidden-fields">
+          <div class="public-section">
+            <h2>3. What prevented installation?</h2>
+            <p>Select all that apply.</p>
+            <div class="issue-grid">
+              {% for issue in issues %}
+              <label class="issue-check">
+                <input type="checkbox" name="issues" value="{{ issue }}">
+                <span>{{ issue }}</span>
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="public-section">
+            <h2>4. Mobilization Impact</h2>
+            <div class="grid-2">
+              <label>Crew Affected <span class="required-on-failure">*</span>
+                <input id="crewSize" type="number" min="1" step="1" name="crew_size" inputmode="numeric" placeholder="4">
+              </label>
+              <label>Hours Lost <span class="required-on-failure">*</span>
+                <input id="hoursLost" type="number" min="0.25" step="0.25" name="hours_lost" inputmode="decimal" placeholder="5">
+              </label>
+              <label>Equipment / Tools Affected
+                <input name="equipment_affected" placeholder="1 lift, box truck">
+              </label>
+              <label>Notes
+                <input name="arrival_notes" placeholder="Describe what prevented installation">
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="public-section">
+          <h2><span id="photoStep">3</span>. Arrival Photos</h2>
+          <p id="arrivalPhotoHelp">Photograph the actual site condition before work begins. Photos are optional when the site is ready.</p>
+
+          <div class="field-photo-capture" id="arrivalPhotoCapture" data-photo-capture data-min="0">
+            <div class="field-photo-actions">
+              <label class="field-photo-action camera-action">
+                <span class="field-photo-action-icon">●</span>
+                <span>
+                  <strong>Take Photo</strong>
+                  <small>Open the phone camera</small>
+                </span>
+                <input class="photo-camera-input" type="file" accept="image/*" capture="environment">
+              </label>
+
+              <label class="field-photo-action">
+                <span class="field-photo-action-icon gallery-icon">▣</span>
+                <span>
+                  <strong>Choose Existing Photos</strong>
+                  <small>Select from this device</small>
+                </span>
+                <input class="photo-gallery-input" type="file" accept="image/*" multiple>
+              </label>
+            </div>
+
+            <input class="photo-submit-input" type="file" name="arrival_photos" accept="image/*" multiple hidden>
+
+            <div class="field-photo-status">
+              <span class="field-photo-counter">No photos added yet</span>
+            </div>
+
+            <div class="field-photo-preview" aria-live="polite"></div>
+          </div>
+        </div>
+
+        <div class="public-section public-arrival-submit">
+          <p class="legal-note">By submitting, you confirm this record reflects the site conditions found when the installation crew arrived.</p>
+          <button class="btn primary wide" type="submit">Submit Site Arrival</button>
+        </div>
+      </form>
+    </section>
+
+    <p class="public-foot">No account required · Secure job-specific link · DispatchProof</p>
+  </main>
+
+<script src="{{ url_for('static', filename='photo_capture.js') }}"></script>
+<script>
+const radios = document.querySelectorAll('input[name="arrival_status"]');
+const notReady = document.getElementById('notReadyFields');
+const readyChoice = document.getElementById('readyChoice');
+const failedChoice = document.getElementById('failedChoice');
+const photoHelp = document.getElementById('arrivalPhotoHelp');
+const photoStep = document.getElementById('photoStep');
+const arrivalPhotoRoot = document.getElementById('arrivalPhotoCapture');
+const crewSize = document.getElementById('crewSize');
+const hoursLost = document.getElementById('hoursLost');
+
+function refreshArrivalFields() {
+  const selected = document.querySelector('input[name="arrival_status"]:checked');
+  readyChoice.classList.remove('selected-ready');
+  failedChoice.classList.remove('selected-failed');
+
+  if (selected && selected.value === 'NOT READY') {
+    notReady.classList.add('show');
+    failedChoice.classList.add('selected-failed');
+    photoStep.textContent = '5';
+    photoHelp.innerHTML = '<strong>Minimum 2 photos required for a failed mobilization.</strong> Photograph the actual condition before the crew leaves.';
+    crewSize.required = true;
+    hoursLost.required = true;
+    if (arrivalPhotoRoot.photoCapture) arrivalPhotoRoot.photoCapture.setMinimum(2);
+  } else {
+    notReady.classList.remove('show');
+    photoStep.textContent = '3';
+    if (selected && selected.value === 'READY') {
+      readyChoice.classList.add('selected-ready');
+    }
+    photoHelp.textContent = 'Photograph the actual site condition before work begins. Photos are optional when the site is ready.';
+    crewSize.required = false;
+    hoursLost.required = false;
+    if (arrivalPhotoRoot.photoCapture) arrivalPhotoRoot.photoCapture.setMinimum(0);
+  }
+}
+
+radios.forEach(r => r.addEventListener('change', refreshArrivalFields));
+
+document.getElementById('publicArrivalForm').addEventListener('submit', (e) => {
+  const selected = document.querySelector('input[name="arrival_status"]:checked');
+
+  if (selected && selected.value === 'NOT READY') {
+    const issueCount = document.querySelectorAll('input[name="issues"]:checked').length;
+
+    if (issueCount < 1) {
+      e.preventDefault();
+      alert('Select at least one reason the site was not ready.');
+      return;
+    }
+
+    if (!crewSize.value || Number(crewSize.value) < 1) {
+      e.preventDefault();
+      alert('Enter the number of crew members affected.');
+      crewSize.focus();
+      return;
+    }
+
+    if (!hoursLost.value || Number(hoursLost.value) <= 0) {
+      e.preventDefault();
+      alert('Enter the hours lost for the failed mobilization.');
+      hoursLost.focus();
+      return;
+    }
+
+    const capture = arrivalPhotoRoot.photoCapture;
+    if (!capture || capture.count() < 2) {
+      e.preventDefault();
+      alert('Please add at least 2 arrival photos for a failed mobilization.');
+    }
+  }
+});
+
+refreshArrivalFields();
+</script>
+</body>
+</html>

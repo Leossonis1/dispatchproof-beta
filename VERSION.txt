@@ -1,2 +1,2 @@
-DispatchProof Version 1.7.2.1 - Restore Fix
-SQLite WAL/SHM cleanup plus verified restore job counts.
+DispatchProof Version 1.8 - Secure Installer Arrival Link
+No-login job-specific installer arrival workflow with rotating secure tokens.
