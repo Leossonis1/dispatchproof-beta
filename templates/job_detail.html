@@ -102,6 +102,24 @@
 </section>
 {% endif %}
 
+
+<section class="panel client-report-panel">
+  <div class="panel-head">
+    <div>
+      <div class="eyebrow">Client Communication</div>
+      <h2>Installation Report</h2>
+      <p>Share a branded live report with a client PM, superintendent, or other stakeholder. The secure report includes readiness, evidence, arrival results, and this job's audit trail.</p>
+    </div>
+    <span class="secure-link-badge">SECURE LINK</span>
+  </div>
+  <div class="button-row">
+    <a class="btn primary" href="{{ url_for('client_report', job_id=job['id']) }}">Client Report & Email</a>
+    {% if client_report_url %}
+      <a class="btn ghost" target="_blank" rel="noopener" href="{{ client_report_url }}">Preview Client Report</a>
+    {% endif %}
+  </div>
+</section>
+
 <div class="split">
   <section class="panel">
     <h2>Readiness Summary</h2>

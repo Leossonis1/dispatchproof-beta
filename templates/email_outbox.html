@@ -6,7 +6,7 @@
   <div>
     <div class="eyebrow">Communication</div>
     <h1>Email Outbox</h1>
-    <p>See every readiness request and reminder DispatchProof generated.</p>
+    <p>See every readiness request, reminder, and client report DispatchProof generated.</p>
   </div>
   <span class="smtp-pill {{ 'connected' if email_delivery_enabled else 'test-mode' }}">
     {{ 'LIVE EMAIL' if email_delivery_enabled else 'OUTBOX MODE' }}
@@ -45,7 +45,7 @@
   <div class="empty">
     <div class="empty-icon">✉</div>
     <h3>No email activity yet</h3>
-    <p>Send a readiness request and it will appear here.</p>
+    <p>Generate an email action and it will appear here.</p>
   </div>
   {% endif %}
 </div>

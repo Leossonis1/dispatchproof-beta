@@ -405,3 +405,71 @@ remain preserved exactly as before.
 
 Activity records live in SQLite and are automatically included in normal
 DispatchProof backups.
+
+
+## V2.4 — Client Reports
+
+DispatchProof can now turn a running installation record into a branded,
+client-facing report.
+
+### Client Report & Email
+
+Every job has an **Installation Report** panel with:
+
+- Client Report & Email
+- Preview Client Report
+
+The internal Client Report page lets the office:
+
+- enter any client recipient name and email
+- generate/send a branded client-report email
+- copy the secure report link
+- open the report for preview
+- rotate the secure link to revoke previously shared access
+
+While Free Beta Outbox Mode is active, client-report emails are generated and
+logged in Email Outbox but are not sent externally.
+
+### Secure live report
+
+The client receives a high-entropy no-login URL that exposes only that job's
+client report. It does not expose DispatchProof dashboard, users, backups,
+company settings, Email Outbox, or other jobs.
+
+The report includes:
+
+- current job status and install date
+- site contact
+- readiness confirmation and checklist
+- pre-dispatch evidence photos
+- installer arrival result
+- failed mobilization details when applicable
+- mobilization history
+- job-specific audit trail
+- company branding/contact information
+
+Client-report evidence photos use a dedicated token-protected evidence route.
+The route verifies that the requested photo actually belongs to the job before
+serving it.
+
+### Link rotation
+
+The report token is separate from the readiness token and installer-arrival
+token. **Rotate Secure Link** immediately invalidates the old client report URL
+without changing readiness or installer links.
+
+### Audit trail
+
+V2.4 records:
+
+- Client Report Generated
+- Client Report Link Rotated
+
+No client-report token or email content is written into the activity
+description.
+
+### Print / Save PDF
+
+The public report has a **Print / Save PDF** button using the browser's native
+print workflow. This keeps the beta lightweight while still giving a client or
+office user a clean PDF-style copy when needed.
