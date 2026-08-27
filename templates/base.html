@@ -5,6 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}DispatchProof{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
 <body>
@@ -12,12 +13,13 @@
   <aside class="sidebar">
     <div class="brand">
       <div class="brand-mark">✓</div>
-      <div>DispatchProof</div>
+      <div>{{ product_name }}</div>
     </div>
     <nav>
       <a class="{% if request.path == '/' %}active{% endif %}" href="{{ url_for('dashboard') }}">Dashboard</a>
       <a class="{% if request.path == '/jobs/new' %}active{% endif %}" href="{{ url_for('new_job') }}">New Job</a>
       <a class="{% if request.path.startswith('/email-outbox') %}active{% endif %}" href="{{ url_for('email_outbox') }}">Email Outbox</a>
+      <a class="{% if request.path.startswith('/backup') %}active{% endif %}" href="{{ url_for('backup_restore') }}">Backup & Restore</a>
     </nav>
     <div class="sidebar-bottom">
       {% if admin_authenticated %}
@@ -30,8 +32,8 @@
       </div>
       {% endif %}
       <div class="sidebar-note">
-        Pre-Mobilization Proof<br>
-        <span>Avoid wasted trips.</span>
+        {{ product_tagline }}<br>
+        <span>{{ product_subtag }}</span>
         <br><small class="version-label">Version {{ app_version }}</small>
       </div>
     </div>

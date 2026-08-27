@@ -404,3 +404,76 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(15,98,254,.12);bo
 .login-foot{text-align:center!important;font-size:12px;margin:20px 0 0!important}
 .login-config-warning{display:grid;gap:5px;margin-top:20px}
 .login-config-warning code{font-size:11px}
+
+
+/* DispatchProof V1.7 backup + brand polish */
+.login-brand-footer{
+  border-top:1px solid #e1e7ef;
+  margin-top:22px;
+  padding-top:18px;
+  display:grid;
+  justify-items:center;
+  gap:3px;
+}
+.login-brand-footer strong{font-size:15px;color:#0b2348}
+.login-brand-footer span{font-size:11px;color:#667085}
+
+.backup-alert{
+  display:grid;
+  grid-template-columns:42px 1fr;
+  gap:13px;
+  align-items:center;
+  border:1px solid #f0cf82;
+  background:#fff8e8;
+  color:#694d0a;
+  border-radius:12px;
+  padding:14px 16px;
+  margin-bottom:20px;
+}
+.backup-alert>div:last-child{display:grid;gap:3px}
+.backup-alert span{font-size:13px}
+.backup-alert-icon{
+  width:42px;height:42px;border-radius:50%;
+  background:#ffefc1;display:grid;place-items:center;
+  font-weight:900;font-size:18px
+}
+.backup-grid .panel{position:relative}
+.backup-icon{
+  width:46px;height:46px;border-radius:12px;
+  display:grid;place-items:center;
+  background:#eef4ff;color:#0f62fe;
+  font-size:24px;font-weight:800;
+  margin-bottom:14px
+}
+.backup-details{margin:18px 0}
+.restore-form{display:grid;gap:16px;margin-top:18px}
+.restore-form label{display:grid;gap:8px;font-size:13px;font-weight:750}
+.restore-form input[type=file]{
+  border:1px dashed #bdc9db;border-radius:10px;
+  background:#f8fafc;padding:15px;font:inherit
+}
+.restore-warning{
+  display:grid;gap:3px;
+  background:#fff4f2;border-left:4px solid #d92d20;
+  border-radius:8px;padding:11px 12px;color:#7a271a
+}
+.restore-warning span{font-size:12px}
+.backup-how{margin-top:20px}
+.backup-steps{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:15px
+}
+.backup-steps>div{
+  border:1px solid var(--border);background:#f8fafc;
+  border-radius:10px;padding:14px
+}
+.backup-steps span{
+  display:grid;place-items:center;width:28px;height:28px;
+  border-radius:50%;background:#e8f0ff;color:#0f62fe;
+  font-size:12px;font-weight:900;margin-bottom:9px
+}
+.backup-steps strong{display:block;font-size:13px}
+.backup-steps p{margin:4px 0 0;color:var(--muted);font-size:12px}
+
+@media(max-width:760px){
+  .backup-steps{grid-template-columns:1fr}
+}

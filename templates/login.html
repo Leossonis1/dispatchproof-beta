@@ -5,19 +5,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Admin Sign In · DispatchProof</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
 <body class="login-body">
   <main class="login-shell">
     <div class="login-brand">
       <div class="brand-mark">✓</div>
-      <strong>DispatchProof</strong>
+      <strong>{{ product_name }}</strong>
     </div>
 
     <section class="login-card">
-      <div class="eyebrow">Protected Workspace</div>
-      <h1>Admin Sign In</h1>
-      <p>The DispatchProof dashboard, jobs, reports, photos, and Email Outbox are private.</p>
+      <div class="eyebrow">{{ product_tagline }}</div>
+      <h1>Welcome Back</h1>
+      <p>Sign in to manage readiness requests, field proof, mobilization history, and reports.</p>
 
       {% with messages = get_flashed_messages() %}
         {% if messages %}
@@ -43,6 +44,10 @@
       </div>
       {% endif %}
 
+      <div class="login-brand-footer">
+        <strong>{{ product_name }}</strong>
+        <span>{{ product_subtag }}</span>
+      </div>
       <p class="login-foot">Public site-readiness links do not require this login.</p>
     </section>
   </main>

@@ -1,2 +1,2 @@
-DispatchProof Version 1.6 - Admin Login
-Internal dashboard protected; public readiness links remain no-login.
+DispatchProof Version 1.7 - Backup & Branding
+Portable beta backup/restore plus DispatchProof branding polish.

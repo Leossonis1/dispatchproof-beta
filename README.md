@@ -1,45 +1,44 @@
-# DispatchProof V1.6 — Admin Login
+# DispatchProof V1.7 — Backup & Branding
 
-V1.6 protects the hosted internal application while keeping individual
-site-readiness links public.
+V1.7 adds a portable beta-data backup system so free Render resets no longer
+have to erase test history permanently.
 
-## Public without login
+## Backup & Restore
 
-- `/r/<secure-token>` readiness confirmation pages
-- `/health`
-- static assets needed by the public page
+Admin navigation now includes **Backup & Restore**.
 
-## Admin login required
+Download Backup ZIP includes:
 
-- Dashboard
-- New Job
-- Readiness Request management
-- Job details
-- Installer Arrival
-- Failed Mobilization reports
-- Archived reports/history
-- Email Outbox
-- Uploaded evidence photos
+- `dispatchproof.db`
+- all uploaded readiness photos
+- all uploaded arrival photos
+- jobs
+- readiness confirmations
+- mobilization history
+- failed mobilization report data
+- Email Outbox history
+- a backup manifest
 
-## Render setup before deploying V1.6
+Restore validates and stages the backup before replacing current beta data.
 
-In Render → `dispatchproof-beta` → Environment, add:
+## Recommended Free Render routine
 
-`DISPATCHPROOF_ADMIN_USERNAME=admin`
+1. Before a deploy/restart, download a backup.
+2. Let Render redeploy.
+3. If the dashboard returns empty, open Backup & Restore.
+4. Upload the saved ZIP.
+5. Continue testing.
 
-`DISPATCHPROOF_ADMIN_PASSWORD=<choose a new unique password>`
+## Branding polish
 
-Do not use your Gmail password or Google App Password.
+- DispatchProof favicon
+- cleaner branded admin login
+- consistent DispatchProof naming
+- beta label removed from generated email header
+- sidebar tagline driven from product branding constants
 
-The password stays in Render Environment and is never committed to GitHub.
+## Important
 
-If the password is missing on Render, DispatchProof fails closed: the internal
-app remains locked and the login page explains that admin login is not configured.
-
-## Other V1.6 cleanup
-
-- Copy Link added to Email Outbox detail
-- Public confirmation-complete page no longer contains a Dashboard link
-- secure HttpOnly/Lax session cookie
-- secure cookie enforced on Render HTTPS
-- admin session expires after 12 hours
+This backup approach is meant for the current free beta. It is not a replacement
+for durable hosted storage. Later we should move to PostgreSQL/object storage or
+a persistent disk.

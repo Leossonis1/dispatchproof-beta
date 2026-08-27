@@ -11,7 +11,7 @@ services:
       - key: DISPATCHPROOF_SECRET_KEY
         generateValue: true
       - key: DISPATCHPROOF_COMPANY_NAME
-        value: DispatchProof Beta
+        value: DispatchProof
       - key: DISPATCHPROOF_EMAIL_MODE
         value: outbox
       - key: DISPATCHPROOF_ADMIN_USERNAME

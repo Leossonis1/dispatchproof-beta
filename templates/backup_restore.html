@@ -1,0 +1,65 @@
+
+{% extends "base.html" %}
+{% block title %}Backup & Restore · DispatchProof{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">Data Protection</div>
+    <h1>Backup & Restore</h1>
+    <p>Protect beta jobs, history, reports, and uploaded evidence from free-host resets.</p>
+  </div>
+</div>
+
+<div class="backup-alert">
+  <div class="backup-alert-icon">!</div>
+  <div>
+    <strong>Free Render storage is temporary.</strong>
+    <span>Download a backup whenever you have test data you care about, especially before a deploy or restart.</span>
+  </div>
+</div>
+
+<div class="split backup-grid">
+  <section class="panel">
+    <div class="backup-icon">↓</div>
+    <h2>Download Backup</h2>
+    <p>Create one ZIP containing the DispatchProof database plus all uploaded site and arrival photos.</p>
+
+    <dl class="details backup-details">
+      <div><dt>Database</dt><dd>{{ 'Available' if db_exists else 'Not created yet' }}</dd></div>
+      <div><dt>Uploaded Files</dt><dd>{{ upload_count }}</dd></div>
+      <div><dt>Backup Includes</dt><dd>Jobs · History · Outbox · Evidence</dd></div>
+    </dl>
+
+    <a class="btn primary wide" href="{{ url_for('download_backup') }}">Download Backup ZIP</a>
+  </section>
+
+  <section class="panel">
+    <div class="backup-icon">↑</div>
+    <h2>Restore Backup</h2>
+    <p>Upload a DispatchProof backup ZIP after a Render reset or redeploy.</p>
+
+    <form method="post" action="{{ url_for('restore_backup') }}" enctype="multipart/form-data" class="restore-form"
+          onsubmit="return confirm('Restore this backup? Current jobs and uploaded evidence will be replaced by the backup contents.');">
+      <label>DispatchProof Backup ZIP
+        <input type="file" name="backup_file" accept=".zip,application/zip" required>
+      </label>
+
+      <div class="restore-warning">
+        <strong>Restore replaces current beta data.</strong>
+        <span>Download a backup of the current data first if you need to keep it.</span>
+      </div>
+
+      <button class="btn danger wide" type="submit">Restore Backup</button>
+    </form>
+  </section>
+</div>
+
+<section class="panel backup-how">
+  <h2>Free Beta Routine</h2>
+  <div class="backup-steps">
+    <div><span>1</span><strong>Before Deploy</strong><p>Download a backup ZIP.</p></div>
+    <div><span>2</span><strong>Deploy / Restart</strong><p>Let Render rebuild the app.</p></div>
+    <div><span>3</span><strong>Restore</strong><p>Upload the backup ZIP if the dashboard comes back empty.</p></div>
+  </div>
+</section>
+{% endblock %}

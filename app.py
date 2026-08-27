@@ -1,5 +1,5 @@
 
-from flask import Flask, render_template, request, redirect, url_for, send_from_directory, flash, abort, session
+from flask import Flask, render_template, request, redirect, url_for, send_from_directory, send_file, flash, abort, session
 from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
 from pathlib import Path
@@ -8,6 +8,9 @@ import json
 import secrets
 import os
 import smtplib
+import shutil
+import tempfile
+import zipfile
 from email.message import EmailMessage
 from datetime import datetime, timedelta
 
@@ -36,8 +39,11 @@ RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
 
 # V1.4 company placeholders. Later these become company settings.
-COMPANY_NAME = os.getenv("DISPATCHPROOF_COMPANY_NAME", "Your Company")
+COMPANY_NAME = os.getenv("DISPATCHPROOF_COMPANY_NAME", "DispatchProof")
 COMPANY_LOGO_URL = None
+PRODUCT_NAME = "DispatchProof"
+PRODUCT_TAGLINE = "Pre-Mobilization Proof"
+PRODUCT_SUBTAG = "Avoid wasted trips."
 
 # Generic SMTP configuration.
 # Example Gmail values:
@@ -556,7 +562,7 @@ def build_readiness_email(job, public_url, reminder=False):
     <html>
       <body style="font-family:Arial,sans-serif;background:#f5f7fb;padding:28px;color:#152033;">
         <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #dfe5ee;border-radius:14px;padding:28px;">
-          <div style="font-size:22px;font-weight:800;color:#0b2348;margin-bottom:4px;">{COMPANY_NAME}</div>
+          <div style="font-size:22px;font-weight:800;color:#0b2348;margin-bottom:4px;">{PRODUCT_NAME}</div>
           <div style="font-size:12px;color:#6b7280;margin-bottom:24px;">Powered by DispatchProof</div>
 
           <h2 style="margin:0 0 8px;font-size:24px;">{job['job_name']}</h2>
@@ -772,12 +778,158 @@ def safe_next_url(value):
         return value
     return url_for("dashboard")
 
+
+def backup_filename():
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return f"dispatchproof_backup_{stamp}.zip"
+
+def create_backup_archive():
+    """Create a portable backup containing SQLite data and uploaded evidence."""
+    temp_dir = Path(tempfile.mkdtemp(prefix="dispatchproof_backup_"))
+    archive_path = temp_dir / backup_filename()
+
+    # Ask SQLite to checkpoint WAL before copying.
+    if DB_PATH.exists():
+        try:
+            with get_db() as db:
+                db.execute("PRAGMA wal_checkpoint(FULL)")
+                db.commit()
+        except Exception:
+            pass
+
+    metadata = {
+        "product": PRODUCT_NAME,
+        "backup_format": 1,
+        "created_at": now_iso(),
+        "app_version": "1.7",
+        "database_file": "dispatchproof.db",
+        "uploads_folder": "uploads",
+    }
+
+    with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("backup_manifest.json", json.dumps(metadata, indent=2))
+
+        if DB_PATH.exists():
+            z.write(DB_PATH, "dispatchproof.db")
+
+        if UPLOAD_DIR.exists():
+            for p in UPLOAD_DIR.rglob("*"):
+                if p.is_file():
+                    z.write(p, Path("uploads") / p.relative_to(UPLOAD_DIR))
+
+    return archive_path, temp_dir
+
+def validate_backup_zip(zip_path):
+    """Validate archive layout before any current data is touched."""
+    try:
+        with zipfile.ZipFile(zip_path, "r") as z:
+            names = set(z.namelist())
+            if "backup_manifest.json" not in names:
+                return False, "Backup manifest is missing."
+
+            manifest = json.loads(z.read("backup_manifest.json").decode("utf-8"))
+            if manifest.get("product") != PRODUCT_NAME:
+                return False, "This does not appear to be a DispatchProof backup."
+
+            if "dispatchproof.db" not in names:
+                return False, "Backup database is missing."
+
+            # Basic zip-slip protection.
+            for name in names:
+                path = Path(name)
+                if path.is_absolute() or ".." in path.parts:
+                    return False, "Backup contains an unsafe file path."
+
+        return True, None
+    except zipfile.BadZipFile:
+        return False, "The selected file is not a valid ZIP backup."
+    except Exception as exc:
+        return False, f"Backup could not be validated: {exc}"
+
+def restore_backup_archive(zip_path):
+    """Atomically stage and restore database/uploads from a validated backup."""
+    valid, error = validate_backup_zip(zip_path)
+    if not valid:
+        return False, error
+
+    stage_dir = Path(tempfile.mkdtemp(prefix="dispatchproof_restore_"))
+    try:
+        with zipfile.ZipFile(zip_path, "r") as z:
+            z.extractall(stage_dir)
+
+        staged_db = stage_dir / "dispatchproof.db"
+        staged_uploads = stage_dir / "uploads"
+
+        # Open the staged DB to catch obviously corrupt SQLite files.
+        try:
+            test = sqlite3.connect(staged_db)
+            test.execute("PRAGMA quick_check").fetchone()
+            test.close()
+        except Exception as exc:
+            return False, f"Backup database is not readable: {exc}"
+
+        # Preserve current data until staged content has validated.
+        safety_dir = Path(tempfile.mkdtemp(prefix="dispatchproof_pre_restore_"))
+        old_db = safety_dir / "dispatchproof.db"
+        old_uploads = safety_dir / "uploads"
+
+        try:
+            if DB_PATH.exists():
+                shutil.copy2(DB_PATH, old_db)
+            if UPLOAD_DIR.exists():
+                shutil.copytree(UPLOAD_DIR, old_uploads)
+
+            DATA_DIR.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(staged_db, DB_PATH)
+
+            if UPLOAD_DIR.exists():
+                shutil.rmtree(UPLOAD_DIR)
+            UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+            if staged_uploads.exists():
+                for p in staged_uploads.rglob("*"):
+                    if p.is_file():
+                        dest = UPLOAD_DIR / p.relative_to(staged_uploads)
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(p, dest)
+
+            # Apply any schema migrations required by the current version.
+            init_db()
+
+            shutil.rmtree(safety_dir, ignore_errors=True)
+            return True, None
+
+        except Exception as exc:
+            # Best-effort rollback.
+            try:
+                if old_db.exists():
+                    shutil.copy2(old_db, DB_PATH)
+                if UPLOAD_DIR.exists():
+                    shutil.rmtree(UPLOAD_DIR)
+                UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+                if old_uploads.exists():
+                    for p in old_uploads.rglob("*"):
+                        if p.is_file():
+                            dest = UPLOAD_DIR / p.relative_to(old_uploads)
+                            dest.parent.mkdir(parents=True, exist_ok=True)
+                            shutil.copy2(p, dest)
+            except Exception:
+                pass
+            return False, f"Restore failed and current data was preserved when possible: {exc}"
+        finally:
+            shutil.rmtree(safety_dir, ignore_errors=True)
+    finally:
+        shutil.rmtree(stage_dir, ignore_errors=True)
+
 @app.context_processor
 def inject_brand():
     return {
         "company_name": COMPANY_NAME,
         "company_logo_url": COMPANY_LOGO_URL,
-        "app_version": "1.6",
+        "product_name": PRODUCT_NAME,
+        "product_tagline": PRODUCT_TAGLINE,
+        "product_subtag": PRODUCT_SUBTAG,
+        "app_version": "1.7",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -854,12 +1006,69 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "1.6",
+        "version": "1.7",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
         "email_delivery_enabled": email_delivery_enabled(),
     }, 200
+
+
+@app.route("/backup")
+def backup_restore():
+    db_exists = DB_PATH.exists()
+    upload_count = 0
+    if UPLOAD_DIR.exists():
+        upload_count = sum(1 for p in UPLOAD_DIR.rglob("*") if p.is_file())
+
+    return render_template(
+        "backup_restore.html",
+        db_exists=db_exists,
+        upload_count=upload_count,
+        data_dir=str(DATA_DIR),
+    )
+
+@app.get("/backup/download")
+def download_backup():
+    archive_path, temp_dir = create_backup_archive()
+    response = send_file(
+        archive_path,
+        as_attachment=True,
+        download_name=archive_path.name,
+        mimetype="application/zip",
+        max_age=0,
+    )
+
+    # Flask sends lazily, so cleanup after response closes.
+    response.call_on_close(lambda: shutil.rmtree(temp_dir, ignore_errors=True))
+    return response
+
+@app.post("/backup/restore")
+def restore_backup():
+    uploaded = request.files.get("backup_file")
+    if not uploaded or not uploaded.filename:
+        flash("Choose a DispatchProof backup ZIP first.")
+        return redirect(url_for("backup_restore"))
+
+    if not uploaded.filename.lower().endswith(".zip"):
+        flash("Restore requires a DispatchProof ZIP backup.")
+        return redirect(url_for("backup_restore"))
+
+    temp_dir = Path(tempfile.mkdtemp(prefix="dispatchproof_restore_upload_"))
+    temp_zip = temp_dir / "restore.zip"
+    uploaded.save(temp_zip)
+
+    try:
+        ok, error = restore_backup_archive(temp_zip)
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+    if not ok:
+        flash(error or "Backup restore failed.")
+        return redirect(url_for("backup_restore"))
+
+    flash("Backup restored successfully. Jobs, history, Email Outbox data, and uploaded evidence were restored.")
+    return redirect(url_for("dashboard"))
 
 @app.route("/")
 def dashboard():
