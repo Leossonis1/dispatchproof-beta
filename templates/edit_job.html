@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Edit Job Details · DispatchProof{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <a class="back-link" href="{{ url_for('job_detail', job_id=job['id']) }}">← Back to Job</a>
+    <div class="eyebrow">Job Setup</div>
+    <h1>Edit Job Details</h1>
+    <p>Update scheduling and contact information without changing readiness, evidence, or job history.</p>
+  </div>
+  <span class="badge {{ job['status']|lower|replace(' ', '-') }}">{{ job['status'] }}</span>
+</div>
+
+<div class="edit-job-notice">
+  <strong>What this changes</strong>
+  <span>Job/site name, installation date, contact information, and reminder settings.</span>
+  <small>Client/Project assignment, readiness checklist, responses, photos, arrival records, reports, Office Notes, and audit history are not changed here.</small>
+</div>
+
+<form class="form-card" method="post">
+  <section>
+    <div class="eyebrow">Installation</div>
+    <h2>Job Details</h2>
+
+    <div class="form-grid two">
+      <label>Job Name
+        <input required name="job_name" value="{{ form_values.job_name|e }}">
+      </label>
+
+      <label>Project / Site
+        <input name="project_site" value="{{ form_values.project_site|e }}">
+      </label>
+
+      <label>Installation Date
+        <input required type="date" name="installation_date" value="{{ form_values.installation_date|e }}">
+      </label>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Contact</div>
+    <h2>Site Contact</h2>
+
+    <div class="form-grid two">
+      <label>Site Contact
+        <input required name="contact_name" value="{{ form_values.contact_name|e }}">
+      </label>
+
+      <label>Email
+        <input required type="email" name="contact_email" value="{{ form_values.contact_email|e }}">
+      </label>
+
+      <label>Phone <span class="muted">(optional)</span>
+        <input name="contact_phone" value="{{ form_values.contact_phone|e }}">
+      </label>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Follow-Up</div>
+    <h2>Email Reminder</h2>
+    <p class="section-copy">These settings apply to the current readiness request workflow.</p>
+
+    <div class="reminder-edit-grid">
+      <label class="check-card">
+        <input type="checkbox" name="reminder_enabled" {% if form_values.reminder_enabled %}checked{% endif %}>
+        <span>
+          <strong>Automatic reminder enabled</strong>
+          <small>Generate the reminder when the readiness request is still unanswered.</small>
+        </span>
+      </label>
+
+      <label>Reminder Window
+        <select name="reminder_hours_before">
+          <option value="24" {% if form_values.reminder_hours_before == 24 %}selected{% endif %}>24 hours before installation</option>
+          <option value="48" {% if form_values.reminder_hours_before == 48 %}selected{% endif %}>48 hours before installation</option>
+          <option value="72" {% if form_values.reminder_hours_before == 72 %}selected{% endif %}>72 hours before installation</option>
+        </select>
+      </label>
+    </div>
+  </section>
+
+  <div class="form-actions">
+    <a class="btn ghost" href="{{ url_for('job_detail', job_id=job['id']) }}">Cancel</a>
+    <button class="btn primary" type="submit">Save Job Details</button>
+  </div>
+</form>
+{% endblock %}

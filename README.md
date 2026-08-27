@@ -758,3 +758,56 @@ V2.10 does not change the database schema, so the latest V2.9 backup remains com
 ### Help Center
 
 Help & Tutorials now includes **Duplicate a Job** under Getting Started.
+
+
+## V2.11 — Edit Job Details
+
+V2.11 adds a safe way to correct or reschedule an active installation without rebuilding the job.
+
+### Editable fields
+
+From Job Detail, click **Edit Job Details** to change:
+
+- Job Name
+- Project / Site
+- Installation Date
+- Site Contact Name
+- Site Contact Email
+- Site Contact Phone
+- Automatic Reminder enabled/disabled
+- Reminder Window (24 / 48 / 72 hours)
+
+### Preserved job records
+
+Editing Job Details does **not** change:
+
+- Client / Project assignment
+- readiness checklist
+- readiness response
+- readiness photos
+- arrival / failed mobilization records
+- evidence
+- client report links
+- combined reports
+- Office Notes
+- existing Job Activity
+
+Completed jobs remain locked.
+
+### Audit trail
+
+When any editable value changes, DispatchProof writes a **Job Details Updated** event to that job's audit trail.
+
+The event records each changed field as:
+
+`Old Value → New Value`
+
+If the form is saved without changing anything, no update event is created.
+
+### No database migration
+
+V2.11 does not add or change database tables. The latest V2.10 backup is fully compatible.
+
+### Help Center
+
+Help & Tutorials now includes **Edit Job Details** under Getting Started.

@@ -2310,3 +2310,63 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(15,98,254,.12);bo
     justify-content:flex-start;
   }
 }
+
+
+/* DispatchProof V2.11 — Edit Job Details */
+.edit-job-notice{
+  display:grid;
+  gap:4px;
+  margin:-6px 0 18px;
+  padding:14px 16px;
+  border:1px solid #d9e2ef;
+  border-left:4px solid #667085;
+  border-radius:10px;
+  background:#f8fafc;
+}
+.edit-job-notice strong{
+  color:#101828;
+  font-size:12px;
+}
+.edit-job-notice span{
+  color:#475467;
+  font-size:11px;
+  line-height:1.4;
+}
+.edit-job-notice small{
+  color:#667085;
+  font-size:10px;
+  line-height:1.4;
+}
+.reminder-edit-grid{
+  display:grid;
+  grid-template-columns:minmax(280px,1.25fr) minmax(220px,.75fr);
+  gap:12px;
+  align-items:end;
+}
+.reminder-edit-grid>label:not(.check-card){
+  display:grid;
+  gap:7px;
+  color:#344054;
+  font-size:11px;
+  font-weight:800;
+}
+.reminder-edit-grid select{
+  width:100%;
+  min-height:42px;
+  padding:9px 10px;
+  border:1px solid #cfd8e6;
+  border-radius:8px;
+  background:#fff;
+  color:#101828;
+  font:inherit;
+}
+.section-copy{
+  margin:-2px 0 12px;
+  color:#667085;
+  font-size:11px;
+}
+@media(max-width:720px){
+  .reminder-edit-grid{
+    grid-template-columns:1fr;
+  }
+}
