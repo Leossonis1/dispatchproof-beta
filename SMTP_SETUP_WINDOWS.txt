@@ -1,0 +1,31 @@
+
+DISPATCHPROOF V1.4 - WINDOWS SMTP SETUP
+
+You do NOT need to configure email just to test V1.4.
+Without SMTP, messages go to the built-in Email Outbox.
+
+To use real email with Gmail:
+
+1. Your Google account must have 2-Step Verification enabled.
+2. Create a Google App Password for DispatchProof.
+3. In the Command Prompt where you run DispatchProof, set:
+
+set DISPATCHPROOF_SMTP_HOST=smtp.gmail.com
+set DISPATCHPROOF_SMTP_PORT=587
+set DISPATCHPROOF_SMTP_USERNAME=YOUR_EMAIL@gmail.com
+set DISPATCHPROOF_SMTP_PASSWORD=YOUR_16_CHARACTER_APP_PASSWORD
+set DISPATCHPROOF_SMTP_FROM_EMAIL=YOUR_EMAIL@gmail.com
+set DISPATCHPROOF_SMTP_FROM_NAME=YOUR COMPANY NAME
+set DISPATCHPROOF_SMTP_USE_TLS=true
+
+4. Then run:
+
+python app.py
+
+IMPORTANT:
+- These "set" commands apply only to that Command Prompt window.
+- Do not put your real password in screenshots you share.
+- Use an App Password, not your normal Google password.
+
+For Outlook, Microsoft 365, or another SMTP provider, use that provider's
+SMTP host/port/login values instead.

@@ -1,0 +1,148 @@
+
+{% extends "base.html" %}
+{% block title %}Record Site Arrival · DispatchProof{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <a class="text-link" href="{{ url_for('job_detail', job_id=job['id']) }}">← Back to job</a>
+    <div class="eyebrow">Installer Arrival</div>
+    <h1>{{ job['job_name'] }}</h1>
+    <p>Record the actual site condition when the installation crew arrives.</p>
+  </div>
+</div>
+
+<form class="form-card" method="post" enctype="multipart/form-data" id="arrivalForm">
+  <div class="arrival-choice-grid">
+    <label class="arrival-choice ready-choice" id="readyChoice">
+      <input required type="radio" name="arrival_status" value="READY">
+      <span class="arrival-choice-icon">✓</span>
+      <strong>Site Ready</strong>
+      <small>Conditions are acceptable. Begin installation.</small>
+    </label>
+    <label class="arrival-choice failed-choice" id="failedChoice">
+      <input required type="radio" name="arrival_status" value="NOT READY">
+      <span class="arrival-choice-icon">!</span>
+      <strong>Site Not Ready</strong>
+      <small>Document the issue and failed mobilization.</small>
+    </label>
+  </div>
+
+  <div class="section-break">
+    <div class="grid-2">
+      <label>Installer / Reporter Name
+        <input required name="arrival_reported_by" placeholder="Mike Davis">
+      </label>
+      <div class="arrival-time-note">
+        <strong>Arrival time</strong>
+        <span>Timestamp will be recorded automatically when submitted.</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="notReadyFields" class="hidden-fields">
+    <div class="section-break">
+      <h2>What prevented installation?</h2>
+      <p>Select all that apply.</p>
+      <div class="issue-grid">
+        {% for issue in issues %}
+        <label class="issue-check">
+          <input type="checkbox" name="issues" value="{{ issue }}">
+          <span>{{ issue }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="section-break">
+      <h2>Mobilization Impact</h2>
+      <div class="grid-2">
+        <label>Crew Size
+          <input type="number" min="1" step="1" name="crew_size" placeholder="4">
+        </label>
+        <label>Hours Lost
+          <input type="number" min="0" step="0.25" name="hours_lost" placeholder="5">
+        </label>
+        <label>Equipment / Tools Affected
+          <input name="equipment_affected" placeholder="1 lift, box truck">
+        </label>
+        <label>Notes
+          <input name="arrival_notes" placeholder="Ceiling grid incomplete in installation area">
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-break">
+    <h2>Arrival Photos</h2>
+    <p id="arrivalPhotoHelp">Photograph the actual site condition before work begins or the crew leaves.</p>
+    <input class="file-input" id="arrivalPhotos" type="file" name="arrival_photos" accept="image/*" multiple>
+    <div class="photo-preview-grid" id="arrivalPhotoPreview"></div>
+  </div>
+
+  <div class="form-actions">
+    <a class="btn ghost" href="{{ url_for('job_detail', job_id=job['id']) }}">Cancel</a>
+    <button class="btn primary" type="submit">Save Site Arrival</button>
+  </div>
+</form>
+
+<script>
+const radios = document.querySelectorAll('input[name="arrival_status"]');
+const notReady = document.getElementById('notReadyFields');
+const readyChoice = document.getElementById('readyChoice');
+const failedChoice = document.getElementById('failedChoice');
+const photoHelp = document.getElementById('arrivalPhotoHelp');
+const arrivalPhotos = document.getElementById('arrivalPhotos');
+const arrivalPreview = document.getElementById('arrivalPhotoPreview');
+
+function refreshArrivalFields() {
+  const selected = document.querySelector('input[name="arrival_status"]:checked');
+  readyChoice.classList.remove('selected-ready');
+  failedChoice.classList.remove('selected-failed');
+
+  if (selected && selected.value === 'NOT READY') {
+    notReady.classList.add('show');
+    failedChoice.classList.add('selected-failed');
+    photoHelp.innerHTML = '<strong>Minimum 2 photos required for a failed mobilization.</strong> Photograph the actual site condition before the crew leaves.';
+  } else {
+    notReady.classList.remove('show');
+    if (selected && selected.value === 'READY') {
+      readyChoice.classList.add('selected-ready');
+    }
+    photoHelp.textContent = 'Photograph the actual site condition before work begins. Photos are optional when the site is ready.';
+  }
+}
+
+function previewFiles(input, container) {
+  container.innerHTML = '';
+  Array.from(input.files).forEach(file => {
+    if (!file.type.startsWith('image/')) return;
+    const img = document.createElement('img');
+    img.alt = file.name;
+    img.src = URL.createObjectURL(file);
+    img.onload = () => URL.revokeObjectURL(img.src);
+    container.appendChild(img);
+  });
+}
+
+radios.forEach(r => r.addEventListener('change', refreshArrivalFields));
+arrivalPhotos.addEventListener('change', () => previewFiles(arrivalPhotos, arrivalPreview));
+
+document.getElementById('arrivalForm').addEventListener('submit', (e) => {
+  const selected = document.querySelector('input[name="arrival_status"]:checked');
+  if (selected && selected.value === 'NOT READY') {
+    const issueCount = document.querySelectorAll('input[name="issues"]:checked').length;
+    if (issueCount < 1) {
+      e.preventDefault();
+      alert('Select at least one reason the site was not ready.');
+      return;
+    }
+    if (arrivalPhotos.files.length < 2) {
+      e.preventDefault();
+      alert('Please upload at least 2 arrival photos for a failed mobilization.');
+    }
+  }
+});
+
+refreshArrivalFields();
+</script>
+{% endblock %}

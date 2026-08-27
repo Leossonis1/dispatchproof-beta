@@ -1,0 +1,261 @@
+
+{% extends "base.html" %}
+{% block title %}{{ job['job_name'] }} · DispatchProof{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <a class="text-link" href="{{ url_for('dashboard') }}">← Back to dashboard</a>
+    <h1>{{ job['job_name'] }}</h1>
+    <p>{{ job['project_site'] or 'No project/site description' }} · Mobilization Attempt #{{ current_attempt_number }}</p>
+  </div>
+  <span class="badge {{ job['status']|lower|replace(' ', '-') }}">{{ job['status'] }}</span>
+</div>
+
+{% if job['arrival_status'] == 'NOT READY' %}
+<div class="dispatch-gate dispatch-failed">
+  <div class="dispatch-icon">!</div>
+  <div>
+    <strong>Failed Mobilization Documented</strong>
+    <span>The arrival record for this mobilization is locked as evidence.</span>
+  </div>
+  <span class="btn locked-btn">✓ Arrival Locked</span>
+</div>
+{% elif job['arrival_status'] == 'READY' %}
+<div class="dispatch-gate dispatch-ready">
+  <div class="dispatch-icon">✓</div>
+  <div>
+    <strong>Site Ready on Arrival</strong>
+    <span>The installer confirmed acceptable conditions and the arrival record is locked.</span>
+  </div>
+  <span class="btn locked-btn">✓ Arrival Locked</span>
+</div>
+{% elif job['status'] == 'READY' %}
+<div class="dispatch-gate dispatch-ready">
+  <div class="dispatch-icon">✓</div>
+  <div>
+    <strong>Ready to Dispatch</strong>
+    <span>The current readiness confirmation is complete. Record the actual site condition when the crew arrives.</span>
+  </div>
+  <a class="btn primary" href="{{ url_for('record_arrival', job_id=job['id']) }}">Record Site Arrival</a>
+</div>
+{% elif job['status'] == 'REVIEW' %}
+<div class="dispatch-gate dispatch-review">
+  <div class="dispatch-icon">!</div>
+  <div>
+    <strong>Readiness Needs Review — Hold Dispatch</strong>
+    <span>The current response needs office review before the crew is dispatched.</span>
+  </div>
+  <a class="btn ghost" href="{{ url_for('readiness_request', job_id=job['id']) }}">Review Readiness</a>
+</div>
+{% elif job['status'] == 'BLOCKED' %}
+<div class="dispatch-gate dispatch-blocked">
+  <div class="dispatch-icon">×</div>
+  <div>
+    <strong>Site Not Ready — Do Not Dispatch</strong>
+    <span>The current readiness response contains a blocking condition.</span>
+  </div>
+  <a class="btn ghost" href="{{ url_for('readiness_request', job_id=job['id']) }}">View Readiness</a>
+</div>
+{% else %}
+<div class="dispatch-gate dispatch-waiting">
+  <div class="dispatch-icon">…</div>
+  <div>
+    <strong>Awaiting Site Confirmation — Do Not Dispatch</strong>
+    <span>The site contact has not completed the current readiness request.</span>
+  </div>
+  <a class="btn primary" href="{{ url_for('readiness_request', job_id=job['id']) }}">Readiness Link</a>
+</div>
+{% endif %}
+
+<div class="split">
+  <section class="panel">
+    <h2>Readiness Summary</h2>
+    <dl class="details">
+      <div><dt>Install Date</dt><dd>{{ job['installation_date']|pretty_date }}</dd></div>
+      <div><dt>Requested From</dt><dd>{{ job['contact_name'] }}</dd></div>
+      <div><dt>Response</dt><dd>{{ job['response_at']|pretty_datetime if job['response_at'] else 'Not received' }}</dd></div>
+      <div><dt>Confirmed By</dt><dd>{% if job['confirmed_by'] %}{{ job['confirmed_by'] }} · {{ job['confirmed_title'] }}{% else %}—{% endif %}</dd></div>
+    </dl>
+    {% if job['response_at'] %}
+    <div class="button-row">
+      <form method="post" action="{{ url_for('reset_job', job_id=job['id']) }}" onsubmit="return confirm('{% if job['arrival_status'] %}Archive this entire mobilization attempt and start the next one? All readiness and arrival evidence will be preserved.{% else %}Archive this confirmation and request a new one? The current evidence will be preserved in Confirmation History.{% endif %}');">
+        <button class="btn ghost" type="submit">{% if job['arrival_status'] %}Start Next Mobilization{% else %}Request New Confirmation{% endif %}</button>
+      </form>
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <h2>Checklist Response</h2>
+    {% if answers %}
+      <div class="response-list">
+      {% for item in checklist %}
+        <div class="response-row">
+          <span>{{ item }}</span>
+          {% set value = answers.get(item, '') %}
+          <strong class="{{ 'yes' if value == 'yes' else 'no' }}">{{ value|upper }}</strong>
+        </div>
+      {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-mini">Waiting for the site contact to respond.</div>
+    {% endif %}
+  </section>
+</div>
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Pre-Dispatch Site Photos</h2>
+      <p>Evidence submitted with the current readiness confirmation.</p>
+    </div>
+  </div>
+  {% if photos %}
+    <div class="photo-grid">
+      {% for photo in photos %}
+        <a target="_blank" href="{{ url_for('uploaded_file', filename=photo) }}">
+          <img src="{{ url_for('uploaded_file', filename=photo) }}" alt="Site readiness photo">
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-mini">No current photos submitted yet.</div>
+  {% endif %}
+</section>
+
+{% if job['arrival_status'] %}
+<section class="panel arrival-summary {{ 'arrival-failed' if job['arrival_status'] == 'NOT READY' else 'arrival-ready' }}">
+  <div class="panel-head">
+    <div>
+      <div class="eyebrow">Installer Arrival</div>
+      <h2>{{ 'Site Not Ready' if job['arrival_status'] == 'NOT READY' else 'Site Ready on Arrival' }}</h2>
+      <p>Recorded {{ job['arrived_at']|pretty_datetime }} by {{ job['arrival_reported_by'] or 'Installer' }}.</p>
+    </div>
+    {% if job['arrival_status'] == 'NOT READY' %}
+      <a class="btn danger" href="{{ url_for('failed_mobilization_report', job_id=job['id']) }}">Failed Mobilization Report</a>
+    {% endif %}
+  </div>
+
+  {% if job['arrival_status'] == 'NOT READY' %}
+  <div class="impact-grid">
+    <div><span>Crew</span><strong>{{ job['crew_size']|pretty_number }}</strong></div>
+    <div><span>Hours Lost</span><strong>{{ job['hours_lost']|pretty_number }}</strong></div>
+    <div><span>Equipment</span><strong>{{ job['equipment_affected'] or '—' }}</strong></div>
+  </div>
+
+  {% if arrival_issues %}
+  <div class="issue-chips">
+    {% for issue in arrival_issues %}<span>{{ issue }}</span>{% endfor %}
+  </div>
+  {% endif %}
+
+  {% if job['arrival_notes'] %}
+    <div class="notes-box"><strong>Installer notes</strong><p>{{ job['arrival_notes'] }}</p></div>
+  {% endif %}
+  {% endif %}
+
+  {% if arrival_photos %}
+    <div class="photo-grid arrival-photos">
+      {% for photo in arrival_photos %}
+        <a target="_blank" href="{{ url_for('uploaded_file', filename=photo) }}">
+          <img src="{{ url_for('uploaded_file', filename=photo) }}" alt="Arrival condition photo">
+        </a>
+      {% endfor %}
+    </div>
+  {% endif %}
+</section>
+{% endif %}
+
+
+{% if mobilization_history %}
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Mobilization History</h2>
+      <p>Completed mobilization attempts are locked and preserved as evidence. Starting a new attempt never changes the prior record.</p>
+    </div>
+  </div>
+
+  <div class="history-list">
+    {% for attempt in mobilization_history %}
+    <details class="history-item mobilization-history-item">
+      <summary>
+        <span>
+          <strong>Attempt #{{ attempt.attempt_number }}</strong>
+          · {{ attempt.arrived_at|pretty_datetime if attempt.arrived_at else attempt.response_at|pretty_datetime }}
+        </span>
+        <span class="badge {{ 'blocked' if attempt.arrival_status == 'NOT READY' else 'ready' }}">
+          {{ 'FAILED MOBILIZATION' if attempt.arrival_status == 'NOT READY' else 'COMPLETED' }}
+        </span>
+      </summary>
+      <div class="history-content">
+        <div class="attempt-summary-grid">
+          <div><span>Readiness Confirmed By</span><strong>{{ attempt.confirmed_by or '—' }}</strong></div>
+          <div><span>Arrival Reported By</span><strong>{{ attempt.arrival_reported_by or '—' }}</strong></div>
+          <div><span>Crew</span><strong>{{ attempt.crew_size|pretty_number }}</strong></div>
+          <div><span>Hours Lost</span><strong>{{ attempt.hours_lost|pretty_number }}</strong></div>
+        </div>
+
+        {% if attempt.arrival_issues %}
+        <div class="issue-chips">
+          {% for issue in attempt.arrival_issues %}<span>{{ issue }}</span>{% endfor %}
+        </div>
+        {% endif %}
+
+        {% if attempt.arrival_notes %}
+        <div class="notes-box"><strong>Installer notes</strong><p>{{ attempt.arrival_notes }}</p></div>
+        {% endif %}
+
+        {% if attempt.arrival_status == 'NOT READY' %}
+        <div class="button-row">
+          <a class="btn danger" href="{{ url_for('archived_failed_mobilization_report', job_id=job['id'], attempt_id=attempt.id) }}">
+            View Archived Failed Mobilization Report
+          </a>
+        </div>
+        {% endif %}
+      </div>
+    </details>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if history_items %}
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Confirmation History</h2>
+      <p>Prior readiness confirmations are preserved and cannot be overwritten by requesting a new one.</p>
+    </div>
+  </div>
+
+  <div class="history-list">
+    {% for item in history_items %}
+    <details class="history-item">
+      <summary>
+        <span>{{ item.response_at|pretty_datetime }} · {{ item.confirmed_by or 'Unknown' }}</span>
+        <span class="badge {{ item.status|lower|replace(' ', '-') }}">{{ item.status }}</span>
+      </summary>
+      <div class="history-content">
+        <p><strong>Confirmed by:</strong> {{ item.confirmed_by or '—' }}{% if item.confirmed_title %} · {{ item.confirmed_title }}{% endif %}</p>
+        <div class="response-list compact-response">
+          {% for label, value in item.answers.items() %}
+          <div class="response-row"><span>{{ label }}</span><strong class="{{ 'yes' if value == 'yes' else 'no' }}">{{ value|upper }}</strong></div>
+          {% endfor %}
+        </div>
+        {% if item.photos %}
+        <div class="photo-grid history-photos">
+          {% for photo in item.photos %}
+            <a target="_blank" href="{{ url_for('uploaded_file', filename=photo) }}">
+              <img src="{{ url_for('uploaded_file', filename=photo) }}" alt="Archived readiness photo">
+            </a>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </details>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

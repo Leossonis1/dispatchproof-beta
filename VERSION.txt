@@ -1,0 +1,2 @@
+DispatchProof Version 1.5 - Render Beta
+Public deployment build with Gunicorn, Render URL handling, health checks, and configurable data storage.

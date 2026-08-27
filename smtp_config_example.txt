@@ -1,0 +1,15 @@
+
+# DispatchProof V1.4 SMTP configuration
+# Copy these values into your Windows environment before starting the app.
+
+DISPATCHPROOF_COMPANY_NAME=Your Company
+DISPATCHPROOF_SECRET_KEY=change-this-before-production
+
+# Gmail example:
+DISPATCHPROOF_SMTP_HOST=smtp.gmail.com
+DISPATCHPROOF_SMTP_PORT=587
+DISPATCHPROOF_SMTP_USERNAME=you@gmail.com
+DISPATCHPROOF_SMTP_PASSWORD=your-google-app-password
+DISPATCHPROOF_SMTP_FROM_EMAIL=you@gmail.com
+DISPATCHPROOF_SMTP_FROM_NAME=Your Company
+DISPATCHPROOF_SMTP_USE_TLS=true

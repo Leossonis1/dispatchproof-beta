@@ -1,0 +1,79 @@
+
+{% extends "base.html" %}
+{% block title %}Dashboard · DispatchProof{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">Operations</div>
+    <h1>Dashboard</h1>
+    <p>Know what is ready before the crew leaves.</p>
+  </div>
+  <a class="btn primary" href="{{ url_for('new_job') }}">+ New Job</a>
+</div>
+
+{% if due_reminder_count %}
+<div class="reminder-banner">
+  <div>
+    <strong>{{ due_reminder_count }} readiness reminder{{ '' if due_reminder_count == 1 else 's' }} due</strong>
+    <span>These jobs have no response and are inside their reminder window.</span>
+  </div>
+  <form method="post" action="{{ url_for('run_reminders_now') }}">
+    <button class="btn primary" type="submit">Send Due Reminders</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="stat-grid">
+  <a class="stat ready {% if status_filter == 'READY' %}selected-stat{% endif %}" href="{{ url_for('dashboard', status='READY') }}">
+    <strong>{{ counts['READY'] }}</strong><span>Ready to Dispatch</span>
+  </a>
+  <a class="stat review {% if status_filter == 'REVIEW' %}selected-stat{% endif %}" href="{{ url_for('dashboard', status='REVIEW') }}">
+    <strong>{{ counts['REVIEW'] }}</strong><span>Needs Review</span>
+  </a>
+  <a class="stat blocked {% if status_filter == 'BLOCKED' %}selected-stat{% endif %}" href="{{ url_for('dashboard', status='BLOCKED') }}">
+    <strong>{{ counts['BLOCKED'] }}</strong><span>Blocked</span>
+  </a>
+  <a class="stat neutral {% if status_filter == 'NO RESPONSE' %}selected-stat{% endif %}" href="{{ url_for('dashboard', status='NO RESPONSE') }}">
+    <strong>{{ counts['NO RESPONSE'] }}</strong><span>No Response</span>
+  </a>
+</div>
+
+<div class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>{% if status_filter %}{{ status_filter|title }} Jobs{% else %}Upcoming Installations{% endif %}</h2>
+      <p>{% if status_filter %}Showing jobs currently marked {{ status_filter|lower }}.{% else %}Current readiness state for every active job.{% endif %}</p>
+    </div>
+    {% if status_filter %}<a class="btn ghost" href="{{ url_for('dashboard') }}">Clear Filter</a>{% endif %}
+  </div>
+
+  {% if jobs %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Job</th><th>Project / Site</th><th>Attempt</th><th>Install Date</th><th>Status</th><th>Contact</th><th></th></tr>
+      </thead>
+      <tbody>
+      {% for job in jobs %}
+        <tr>
+          <td><strong>{{ job['job_name'] }}</strong></td>
+          <td>{{ job['project_site'] or '—' }}</td>
+          <td>#{{ job['attempt_number'] }}</td>
+          <td>{{ job['installation_date']|pretty_date }}</td>
+          <td><span class="badge {{ job['status']|lower|replace(' ', '-') }}">{{ job['status'] }}</span></td>
+          <td>{{ job['contact_name'] }}</td>
+          <td><a class="text-link" href="{{ url_for('job_detail', job_id=job['id']) }}">View →</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">
+    <div class="empty-icon">✓</div>
+    <h3>{% if status_filter %}No matching jobs{% else %}No jobs yet{% endif %}</h3>
+    <p>{% if status_filter %}There are currently no jobs in this status.{% else %}Create your first installation and send a readiness request.{% endif %}</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

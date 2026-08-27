@@ -1,0 +1,52 @@
+
+{% extends "base.html" %}
+{% block title %}Email Outbox · DispatchProof{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">Communication</div>
+    <h1>Email Outbox</h1>
+    <p>See every readiness request and reminder DispatchProof generated.</p>
+  </div>
+  <span class="smtp-pill {{ 'connected' if smtp_configured else 'test-mode' }}">
+    {{ 'SMTP CONNECTED' if smtp_configured else 'TEST MODE' }}
+  </span>
+</div>
+
+{% if not smtp_configured %}
+<div class="config-banner">
+  <strong>Nothing is leaving your computer yet.</strong>
+  <span>Until SMTP is configured, Send Email and Reminder actions are stored here for testing.</span>
+</div>
+{% endif %}
+
+<div class="panel">
+  {% if events %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Job</th><th>Type</th><th>Recipient</th><th>Status</th><th>Created</th><th></th></tr>
+      </thead>
+      <tbody>
+      {% for event in events %}
+      <tr>
+        <td><strong>{{ event['job_name'] }}</strong></td>
+        <td>{{ event['event_type']|replace('_', ' ')|title }}</td>
+        <td>{{ event['recipient_email'] }}</td>
+        <td><span class="email-status {{ event['status']|lower }}">{{ event['status'] }}</span></td>
+        <td>{{ event['created_at']|pretty_datetime }}</td>
+        <td><a class="text-link" href="{{ url_for('email_outbox_detail', event_id=event['id']) }}">View →</a></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">
+    <div class="empty-icon">✉</div>
+    <h3>No email activity yet</h3>
+    <p>Send a readiness request and it will appear here.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

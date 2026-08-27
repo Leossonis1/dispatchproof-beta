@@ -1,0 +1,76 @@
+
+{% extends "base.html" %}
+{% block title %}New Job · DispatchProof{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">Jobs</div>
+    <h1>Create New Job</h1>
+    <p>Only collect what we need to verify readiness.</p>
+  </div>
+</div>
+
+<form class="form-card" method="post">
+  <div class="grid-2">
+    <label>Job Name
+      <input required name="job_name" placeholder="Mercy Medical Center - Casework">
+    </label>
+    <label>Project / Site
+      <input name="project_site" placeholder="North Tower - Level 2">
+    </label>
+    <label>Installation Date
+      <input required type="date" name="installation_date">
+    </label>
+    <label>Site Contact
+      <input required name="contact_name" placeholder="GC superintendent or customer">
+    </label>
+    <label>Email
+      <input required type="email" name="contact_email" placeholder="name@company.com">
+    </label>
+    <label>Phone <span class="muted">(optional)</span>
+      <input name="contact_phone" placeholder="330-555-0152">
+    </label>
+  </div>
+
+  <div class="section-break">
+    <div>
+      <h2>Email Reminder</h2>
+      <p>DispatchProof can remind the site contact if the readiness request still has no response.</p>
+    </div>
+    <div class="reminder-settings">
+      <label class="toggle-row">
+        <input type="checkbox" name="reminder_enabled" {% if default_reminder_enabled %}checked{% endif %}>
+        <span>
+          <strong>Automatic reminder enabled</strong>
+          <small>V1.4 checks reminders when the app is running. Hosted production will use a scheduled worker.</small>
+        </span>
+      </label>
+      <label>Reminder window
+        <select name="reminder_hours_before">
+          <option value="24">24 hours before installation</option>
+          <option value="48" selected>48 hours before installation</option>
+          <option value="72">72 hours before installation</option>
+        </select>
+      </label>
+    </div>
+  </div>
+
+  <div class="section-break">
+    <div>
+      <h2>Readiness Checklist</h2>
+      <p>These items will appear on the no-login site confirmation page.</p>
+    </div>
+  </div>
+
+  <div class="checklist-editor">
+    {% for item in default_checklist %}
+      <input name="checklist" value="{{ item }}">
+    {% endfor %}
+  </div>
+
+  <div class="form-actions">
+    <a class="btn ghost" href="{{ url_for('dashboard') }}">Cancel</a>
+    <button class="btn primary" type="submit">Create Job</button>
+  </div>
+</form>
+{% endblock %}

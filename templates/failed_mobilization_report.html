@@ -1,0 +1,138 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Failed Mobilization Report · {{ job['job_name'] }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body class="report-body">
+  <main class="report-shell">
+    <div class="report-toolbar no-print">
+      <a class="btn ghost" href="{{ url_for('job_detail', job_id=job['id']) }}">← Back to Job</a>
+      <button class="btn primary" onclick="window.print()">Print / Save as PDF</button>
+    </div>
+
+    <section class="report-page">
+      <header class="report-header">
+        <div class="report-brand-wrap">
+          <div class="company-placeholder">
+            {% if company_logo_url %}
+              <img src="{{ company_logo_url }}" alt="{{ company_name }} logo">
+            {% else %}
+              <span class="company-logo-box">LOGO</span>
+            {% endif %}
+            <div>
+              <strong>{{ company_name }}</strong>
+              <small>Installation Documentation</small>
+            </div>
+          </div>
+          <div class="powered-by">Powered by DispatchProof · Pre-Mobilization Proof</div>
+        </div>
+        <div class="report-alert">FAILED MOBILIZATION</div>
+      </header>
+
+      <div class="report-identity">
+        <div>
+          <span>REPORT NUMBER</span>
+          <strong>{{ job['failed_report_number'] or '—' }}</strong>
+        </div>
+        <div>
+          <span>GENERATED</span>
+          <strong>{{ job['failed_report_generated_at']|pretty_datetime }}</strong>
+        </div>
+      </div>
+
+      <h1>Failed Mobilization Report{% if archived_attempt_number %} · Attempt #{{ archived_attempt_number }}{% endif %}</h1>
+      <p class="report-lead">Documented comparison of pre-dispatch site readiness and actual conditions found by the installation crew.</p>
+
+      <div class="report-summary-grid">
+        <div><span>Job</span><strong>{{ job['job_name'] }}</strong></div>
+        <div><span>Project / Site</span><strong>{{ job['project_site'] or '—' }}</strong></div>
+        <div><span>Scheduled Installation</span><strong>{{ job['installation_date']|pretty_date }}</strong></div>
+        <div><span>Site Contact</span><strong>{{ job['contact_name'] }}</strong></div>
+      </div>
+
+      <section class="report-section before-section">
+        <div class="section-label before-label">BEFORE DISPATCH</div>
+        <h2>1. Site Readiness Confirmation</h2>
+        <div class="report-meta">
+          <p><strong>Confirmed:</strong> {{ job['response_at']|pretty_datetime }}</p>
+          <p><strong>Confirmed by:</strong> {{ job['confirmed_by'] or '—' }}{% if job['confirmed_title'] %} · {{ job['confirmed_title'] }}{% endif %}</p>
+        </div>
+
+        {% if answers %}
+        <table class="report-table">
+          <thead><tr><th>Readiness Condition</th><th>Response</th></tr></thead>
+          <tbody>
+          {% for item in checklist %}
+            <tr>
+              <td>{{ item }}</td>
+              <td><strong class="{{ 'yes' if answers.get(item) == 'yes' else 'no' }}">{{ answers.get(item, '—')|upper }}</strong></td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+          <p>No pre-dispatch readiness confirmation was recorded.</p>
+        {% endif %}
+
+        {% if pre_photos %}
+        <h3>Pre-Dispatch Photos</h3>
+        <div class="report-photo-grid">
+          {% for photo in pre_photos %}
+            <img src="{{ url_for('uploaded_file', filename=photo) }}" alt="Pre-dispatch site photo">
+          {% endfor %}
+        </div>
+        {% endif %}
+      </section>
+
+      <section class="report-section failed after-section">
+        <div class="section-label after-label">ON ARRIVAL</div>
+        <h2>2. Conditions Found by Installation Crew</h2>
+        <div class="report-meta">
+          <p><strong>Arrival recorded:</strong> {{ job['arrived_at']|pretty_datetime }}</p>
+          <p><strong>Reported by:</strong> {{ job['arrival_reported_by'] or '—' }}</p>
+        </div>
+
+        {% if arrival_issues %}
+        <div class="issue-chips">
+          {% for issue in arrival_issues %}<span>{{ issue }}</span>{% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="report-summary-grid impact">
+          <div><span>Crew Affected</span><strong>{{ job['crew_size']|pretty_number }}</strong></div>
+          <div><span>Hours Lost</span><strong>{{ job['hours_lost']|pretty_number }}{% if job['hours_lost'] is not none %} hours{% endif %}</strong></div>
+          <div><span>Total Man-Hours</span><strong>{{ man_hours|pretty_number }}{% if man_hours is not none %} man-hours{% endif %}</strong></div>
+          <div><span>Equipment / Tools</span><strong>{{ job['equipment_affected'] or '—' }}</strong></div>
+        </div>
+
+        {% if job['arrival_notes'] %}
+          <div class="report-note"><strong>Installer Notes</strong><p>{{ job['arrival_notes'] }}</p></div>
+        {% endif %}
+
+        {% if arrival_photos %}
+        <h3>Arrival Condition Photos</h3>
+        <div class="report-photo-grid">
+          {% for photo in arrival_photos %}
+            <img src="{{ url_for('uploaded_file', filename=photo) }}" alt="Arrival site condition photo">
+          {% endfor %}
+        </div>
+        {% endif %}
+      </section>
+
+      <section class="report-section conclusion">
+        <h2>3. Mobilization Result</h2>
+        <p><strong>Installation could not proceed because the site conditions found on arrival were not ready for the scheduled work.</strong></p>
+        <p>This report preserves the readiness confirmation, timestamps, responses, and photographic evidence associated with this mobilization.</p>
+      </section>
+
+      <footer class="report-footer">
+        {{ job['failed_report_number'] or '' }} · Generated by DispatchProof
+      </footer>
+    </section>
+  </main>
+</body>
+</html>

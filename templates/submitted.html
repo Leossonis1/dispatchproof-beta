@@ -1,0 +1,29 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Submitted · DispatchProof</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body class="public-body">
+  <main class="public-shell compact">
+    <div class="public-brand">{{ company_name }} <span>· powered by DispatchProof</span></div>
+    <section class="public-card center">
+      <div class="big-check">✓</div>
+      <h1>Confirmation received</h1>
+      <p>Thank you. The installation team has your site-readiness response.</p>
+      <span class="badge {{ status|lower|replace(' ', '-') }}">{{ status }}</span>
+
+      <div class="button-row prototype-only" style="justify-content:center; margin-top:22px;">
+        <a class="btn ghost" href="{{ url_for('dashboard') }}">← Back to Dashboard</a>
+      </div>
+
+      <p class="legal-note prototype-only" style="margin-top:16px;">
+        Prototype navigation only. External contacts will not have access to the internal dashboard in production.
+      </p>
+    </section>
+  </main>
+</body>
+</html>

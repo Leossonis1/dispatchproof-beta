@@ -1,0 +1,99 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Site Readiness Confirmation · DispatchProof</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body class="public-body">
+  <main class="public-shell">
+    <div class="public-brand">{{ company_name }} <span>· powered by DispatchProof</span></div>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        {% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <section class="public-card">
+      <div class="eyebrow">Site Readiness Confirmation</div>
+      <h1>{{ job['job_name'] }}</h1>
+      <p>{{ job['project_site'] or '' }}</p>
+      <div class="date-chip">Installation: {{ job['installation_date']|pretty_date }}</div>
+
+      <div class="why-box">
+        <strong>Why this matters</strong>
+        <span>This confirmation helps prevent unnecessary mobilization, delays, and return trips.</span>
+      </div>
+
+      <form method="post" enctype="multipart/form-data" id="readinessForm">
+        <div class="public-section">
+          <h2>1. Confirm the following conditions</h2>
+          <p>Please answer based on the actual site condition today.</p>
+          <div class="answer-list">
+            {% for item in checklist %}
+              <div class="answer-row">
+                <span>{{ item }}</span>
+                <div class="yn">
+                  <label class="yes-option"><input required type="radio" name="item_{{ loop.index0 }}" value="yes"> Yes</label>
+                  <label class="no-option"><input required type="radio" name="item_{{ loop.index0 }}" value="no"> No</label>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="public-section">
+          <h2>2. Upload site photos</h2>
+          <p><strong>Minimum 2 photos required.</strong> Show the installation area and delivery/access route.</p>
+          <input class="file-input" id="readinessPhotos" type="file" name="photos" accept="image/*" multiple required>
+          <div class="photo-preview-grid" id="readinessPhotoPreview"></div>
+        </div>
+
+        <div class="public-section">
+          <h2>3. Confirmation</h2>
+          <div class="grid-2">
+            <label>Your Name
+              <input required name="confirmed_by" placeholder="John Smith">
+            </label>
+            <label>Title
+              <input required name="confirmed_title" placeholder="Superintendent">
+            </label>
+          </div>
+          <p class="legal-note">By submitting, you confirm the information above is true and reflects current site conditions for this installation.</p>
+        </div>
+
+        <button class="btn primary wide" type="submit">Submit Confirmation</button>
+      </form>
+    </section>
+    <p class="public-foot">No account required · Secured by DispatchProof</p>
+  </main>
+
+<script>
+function previewFiles(input, container) {
+  container.innerHTML = '';
+  Array.from(input.files).forEach(file => {
+    if (!file.type.startsWith('image/')) return;
+    const img = document.createElement('img');
+    img.alt = file.name;
+    img.src = URL.createObjectURL(file);
+    img.onload = () => URL.revokeObjectURL(img.src);
+    container.appendChild(img);
+  });
+}
+
+const readinessPhotos = document.getElementById('readinessPhotos');
+const readinessPreview = document.getElementById('readinessPhotoPreview');
+readinessPhotos.addEventListener('change', () => previewFiles(readinessPhotos, readinessPreview));
+
+document.getElementById('readinessForm').addEventListener('submit', (e) => {
+  if (readinessPhotos.files.length < 2) {
+    e.preventDefault();
+    alert('Please upload at least 2 site photos.');
+  }
+});
+</script>
+</body>
+</html>
