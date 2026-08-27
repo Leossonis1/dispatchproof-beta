@@ -203,6 +203,18 @@ def ensure_columns(db):
     """)
 
     db.execute("""
+        CREATE TABLE IF NOT EXISTS job_notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id INTEGER NOT NULL,
+            note_text TEXT NOT NULL,
+            actor_type TEXT NOT NULL,
+            actor_name TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(job_id) REFERENCES jobs(id) ON DELETE CASCADE
+        )
+    """)
+
+    db.execute("""
         CREATE TABLE IF NOT EXISTS app_migrations (
             migration_key TEXT PRIMARY KEY,
             applied_at TEXT NOT NULL,
@@ -471,6 +483,10 @@ def init_db():
         db.execute("""
             CREATE INDEX IF NOT EXISTS idx_jobs_project_id
             ON jobs(project_id, installation_date)
+        """)
+        db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_job_notes_job_id
+            ON job_notes(job_id, created_at DESC, id DESC)
         """)
 
         activity_migration = db.execute(
@@ -1553,6 +1569,7 @@ def database_record_counts(db_path):
         "mobilization_attempts": 0,
         "email_events": 0,
         "activity_log": 0,
+        "job_notes": 0,
     }
 
     conn = sqlite3.connect(db_path)
@@ -1568,6 +1585,7 @@ def database_record_counts(db_path):
             ("mobilization_attempts", "mobilization_attempts"),
             ("email_events", "email_events"),
             ("activity_log", "activity_log"),
+            ("job_notes", "job_notes"),
             ("clients", "clients"),
             ("projects", "projects"),
         ):
@@ -1602,6 +1620,7 @@ def create_backup_archive():
         "mobilization_attempts": 0,
         "email_events": 0,
         "activity_log": 0,
+        "job_notes": 0,
         "uploaded_files": 0,
     }
 
@@ -1620,7 +1639,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.7.1",
+        "app_version": "2.8",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -1848,7 +1867,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.7.1",
+        "app_version": "2.8",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -1991,7 +2010,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.7.1",
+        "version": "2.8",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -2425,6 +2444,7 @@ def backup_restore():
         "mobilization_attempts": 0,
         "outbox_messages": 0,
         "activity_events": 0,
+        "job_notes": 0,
         "clients": 0,
         "projects": 0,
     }
@@ -2463,6 +2483,9 @@ def backup_restore():
 
             counts["activity_events"] = db.execute(
                 "SELECT COUNT(*) AS c FROM activity_log"
+            ).fetchone()["c"]
+            counts["job_notes"] = db.execute(
+                "SELECT COUNT(*) AS c FROM job_notes"
             ).fetchone()["c"]
             counts["clients"] = db.execute(
                 "SELECT COUNT(*) AS c FROM clients"
@@ -3808,6 +3831,43 @@ def complete_job(job_id):
     return redirect(url_for("job_detail", job_id=job_id))
 
 
+@app.post("/jobs/<int:job_id>/notes")
+def add_job_note(job_id):
+    note_text = request.form.get("note_text", "").strip()
+
+    if not note_text:
+        flash("Enter a note before saving.")
+        return redirect(url_for("job_detail", job_id=job_id) + "#internal-notes")
+
+    if len(note_text) > 2000:
+        flash("Internal notes can be up to 2,000 characters.")
+        return redirect(url_for("job_detail", job_id=job_id) + "#internal-notes")
+
+    with get_db() as db:
+        job = db.execute(
+            "SELECT id FROM jobs WHERE id = ?",
+            (job_id,),
+        ).fetchone()
+        if not job:
+            abort(404)
+
+        db.execute("""
+            INSERT INTO job_notes (
+                job_id, note_text, actor_type, actor_name, created_at
+            ) VALUES (?, ?, ?, ?, ?)
+        """, (
+            job_id,
+            note_text,
+            current_user_role() or "USER",
+            current_display_name() or current_username() or "Internal User",
+            now_iso(),
+        ))
+        db.commit()
+
+    flash("Internal job note saved.")
+    return redirect(url_for("job_detail", job_id=job_id) + "#internal-notes")
+
+
 @app.route("/jobs/<int:job_id>")
 def job_detail(job_id):
     with get_db() as db:
@@ -3825,6 +3885,13 @@ def job_detail(job_id):
         activity_events = db.execute("""
             SELECT *
             FROM activity_log
+            WHERE job_id = ?
+            ORDER BY id DESC
+            LIMIT 100
+        """, (job_id,)).fetchall()
+        job_notes = db.execute("""
+            SELECT *
+            FROM job_notes
             WHERE job_id = ?
             ORDER BY id DESC
             LIMIT 100
@@ -3902,6 +3969,7 @@ def job_detail(job_id):
         arrival_url=arrival_url,
         client_report_url=client_report_url,
         activity_events=activity_events,
+        job_notes=job_notes,
         assigned_client=assigned_client,
         assigned_project=assigned_project,
         assignment_clients=assignment_clients,
