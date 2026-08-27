@@ -304,3 +304,44 @@ The existing **Stay signed in on this device** option works for all internal use
 Additional users and their password hashes live in SQLite, so normal DispatchProof
 backups preserve them automatically. The permanent Owner credentials remain in
 Render Environment and are not stored in the backup.
+
+
+## V2.2 — User Account & Admin Editing
+
+### My Account
+
+Every signed-in internal user now has a **My Account** page.
+
+Database-backed Operations and Administrator users can change their own password by:
+
+1. entering the current password
+2. choosing a new password of at least 8 characters
+3. confirming the new password
+
+DispatchProof verifies the existing hashed password before changing it and refuses
+to reuse the current password.
+
+The permanent Owner account remains controlled by Render Environment, so its
+My Account page clearly explains that the Owner password must be changed through
+`DISPATCHPROOF_ADMIN_PASSWORD`.
+
+### Edit User
+
+Administrators can now open a proper **Edit User** screen from Users & Access.
+
+Editable fields:
+
+- Full Name
+- Username
+- Role
+- Enabled / Disabled access
+
+Protection rules remain in place:
+
+- the permanent Owner username cannot be reused
+- usernames remain unique
+- an administrator cannot disable their own current account
+- an administrator cannot demote their own current account while using it
+
+The existing administrator password-reset control remains available for account
+recovery, while users can now handle normal password changes themselves.

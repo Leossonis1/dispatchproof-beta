@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}My Account · DispatchProof{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">Account</div>
+    <h1>My Account</h1>
+    <p>Review your DispatchProof access and manage your own sign-in credentials.</p>
+  </div>
+</div>
+
+<div class="account-grid">
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <h2>Account Details</h2>
+        <p>Your current internal DispatchProof identity.</p>
+      </div>
+    </div>
+
+    <dl class="details account-details">
+      <div><dt>Name</dt><dd>{{ current_display_name }}</dd></div>
+      <div><dt>Username</dt><dd>{{ admin_username }}</dd></div>
+      <div>
+        <dt>Access Level</dt>
+        <dd>
+          {% if current_user_role == 'OWNER' %}Owner
+          {% elif current_user_role == 'ADMIN' %}Administrator
+          {% else %}Operations
+          {% endif %}
+        </dd>
+      </div>
+      {% if user %}
+      <div><dt>Last Sign In</dt><dd>{{ user['last_login_at']|pretty_datetime if user['last_login_at'] else 'Current session' }}</dd></div>
+      {% endif %}
+    </dl>
+
+    <div class="account-permission-note">
+      {% if current_user_role == 'OWNER' %}
+        <strong>Permanent Owner</strong>
+        <span>This account is controlled by Render Environment and cannot be disabled from inside DispatchProof.</span>
+      {% elif current_user_role == 'ADMIN' %}
+        <strong>Administrator</strong>
+        <span>You can manage operational workflows, company settings, users, and backups.</span>
+      {% else %}
+        <strong>Operations</strong>
+        <span>You can manage jobs, readiness, field arrivals, reports, and Email Outbox.</span>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <h2>Change Password</h2>
+        {% if owner_account %}
+          <p>The permanent Owner password is intentionally managed outside the app.</p>
+        {% else %}
+          <p>Change your own password without asking an administrator.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if owner_account %}
+      <div class="owner-password-note">
+        <strong>Owner password is Render-controlled</strong>
+        <p>Change <code>DISPATCHPROOF_ADMIN_PASSWORD</code> in Render → Environment if the permanent Owner password ever needs to change.</p>
+      </div>
+    {% else %}
+      <form method="post" class="form-stack account-password-form">
+        <label>Current Password
+          <input required type="password" name="current_password" autocomplete="current-password">
+        </label>
+
+        <label>New Password
+          <input required type="password" name="new_password" minlength="8" autocomplete="new-password" placeholder="At least 8 characters">
+        </label>
+
+        <label>Confirm New Password
+          <input required type="password" name="confirm_password" minlength="8" autocomplete="new-password">
+        </label>
+
+        <button class="btn primary wide" type="submit">Change My Password</button>
+      </form>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

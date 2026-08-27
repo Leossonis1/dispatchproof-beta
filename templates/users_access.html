@@ -88,13 +88,7 @@
           </div>
 
           <div class="user-actions">
-            <form method="post" action="{{ url_for('change_user_role', user_id=user['id']) }}" class="user-role-form">
-              <select name="role" aria-label="Role for {{ user['username'] }}">
-                <option value="OPERATIONS" {% if user['role'] == 'OPERATIONS' %}selected{% endif %}>Operations</option>
-                <option value="ADMIN" {% if user['role'] == 'ADMIN' %}selected{% endif %}>Administrator</option>
-              </select>
-              <button class="btn ghost small-btn" type="submit">Update Role</button>
-            </form>
+            <a class="btn ghost small-btn" href="{{ url_for('edit_user', user_id=user['id']) }}">Edit User</a>
 
             <form method="post" action="{{ url_for('toggle_user_access', user_id=user['id']) }}">
               <button class="btn ghost small-btn" type="submit">
@@ -104,7 +98,7 @@
           </div>
 
           <details class="password-reset">
-            <summary>Reset Password</summary>
+            <summary>Administrator Password Reset</summary>
             <form method="post" action="{{ url_for('reset_user_password', user_id=user['id']) }}">
               <input required type="password" name="new_password" minlength="8" autocomplete="new-password" placeholder="New password">
               <button class="btn ghost small-btn" type="submit">Set Password</button>

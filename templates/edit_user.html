@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ user['full_name'] }} · DispatchProof{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">Users & Access</div>
+    <h1>Edit User</h1>
+    <p>Update this user's identity, role, and access status without recreating the account.</p>
+  </div>
+  <a class="btn ghost" href="{{ url_for('users_access') }}">← Back to Users & Access</a>
+</div>
+
+<div class="edit-user-grid">
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <h2>{{ user['full_name'] }}</h2>
+        <p>@{{ user['username'] }}</p>
+      </div>
+      <span class="access-state {{ 'active-user' if user['is_active'] else 'inactive-user' }}">
+        {{ 'ACTIVE' if user['is_active'] else 'DISABLED' }}
+      </span>
+    </div>
+
+    <form method="post" class="form-stack">
+      <label>Full Name
+        <input required name="full_name" value="{{ user['full_name'] }}">
+      </label>
+
+      <label>Username
+        <input required name="username" minlength="3" value="{{ user['username'] }}" autocomplete="off">
+      </label>
+
+      <label>Role
+        <select name="role">
+          <option value="OPERATIONS" {% if user['role'] == 'OPERATIONS' %}selected{% endif %}>Operations</option>
+          <option value="ADMIN" {% if user['role'] == 'ADMIN' %}selected{% endif %}>Administrator</option>
+        </select>
+      </label>
+
+      <label class="access-toggle-row">
+        <input type="checkbox" name="is_active" value="1" {% if user['is_active'] %}checked{% endif %} {% if is_self %}disabled{% endif %}>
+        <span>
+          <strong>Account enabled</strong>
+          <small>{% if is_self %}You cannot disable the account you are currently using.{% else %}Disabled users cannot sign in.{% endif %}</small>
+        </span>
+      </label>
+
+      {% if is_self and user['is_active'] %}
+        <input type="hidden" name="is_active" value="1">
+      {% endif %}
+
+      <div class="edit-user-actions">
+        <a class="btn ghost" href="{{ url_for('users_access') }}">Cancel</a>
+        <button class="btn primary" type="submit">Save User Changes</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <h2>Access Guide</h2>
+        <p>Use the least privilege needed for the person's job.</p>
+      </div>
+    </div>
+
+    <div class="role-guide">
+      <div>
+        <span class="access-role operations-role">OPERATIONS</span>
+        <strong>Run the work</strong>
+        <p>Jobs, readiness, installer arrivals, reports, Completed Jobs, and Email Outbox.</p>
+      </div>
+      <div>
+        <span class="access-role admin-role">ADMINISTRATOR</span>
+        <strong>Manage DispatchProof</strong>
+        <p>Everything Operations can do, plus Company Settings, Users & Access, and Backup & Restore.</p>
+      </div>
+    </div>
+
+    <div class="edit-user-meta">
+      <div><span>Created</span><strong>{{ user['created_at']|pretty_datetime }}</strong></div>
+      <div><span>Last Sign In</span><strong>{{ user['last_login_at']|pretty_datetime if user['last_login_at'] else 'Never' }}</strong></div>
+    </div>
+  </section>
+</div>
+{% endblock %}

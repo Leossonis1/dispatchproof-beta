@@ -1,2 +1,2 @@
-DispatchProof Version 2.1 - Users & Access
-Adds multi-user internal logins with Owner, Administrator, and Operations permissions.
+DispatchProof Version 2.2 - User Account Polish
+Adds self-service password changes and full administrator editing for additional users.
