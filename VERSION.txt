@@ -1,2 +1,2 @@
-DispatchProof Version 1.8 - Secure Installer Arrival Link
-No-login job-specific installer arrival workflow with rotating secure tokens.
+DispatchProof Version 1.8.1 - Installer Copy Link Fix
+Repairs installer-link JavaScript placement and adds a clipboard fallback.

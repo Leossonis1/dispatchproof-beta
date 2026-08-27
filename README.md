@@ -147,3 +147,19 @@ The public installer form supports:
 
 This is the first field-crew workflow that does not require sharing the DispatchProof
 admin password.
+
+
+## V1.8.1 — Installer Copy Link Fix
+
+The V1.8 Installer Arrival Link button rendered correctly, but its JavaScript
+was accidentally inserted inside the HTML title block and therefore never
+executed.
+
+V1.8.1:
+
+- moves the copy script into the page body where it executes normally
+- copies directly from the secure installer URL stored on the button
+- uses the modern Clipboard API when available
+- falls back to the legacy browser copy method
+- shows "Copied!" after success
+- falls back to a manual copy prompt only if both browser copy methods fail

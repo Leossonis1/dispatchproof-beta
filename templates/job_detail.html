@@ -1,22 +1,5 @@
-
 {% extends "base.html" %}
-{% block title %}{{ job['job_name'] }} · DispatchProof<script>
-async function copyInstallerArrivalLink() {
-  const link = document.getElementById('installerArrivalLink');
-  const button = document.getElementById('copyInstallerLinkButton');
-  if (!link || !button) return;
-
-  const url = link.textContent.trim();
-  try {
-    await navigator.clipboard.writeText(url);
-    button.textContent = 'Copied!';
-    setTimeout(() => button.textContent = 'Copy Installer Link', 1600);
-  } catch (e) {
-    window.prompt('Copy this installer link:', url);
-  }
-}
-</script>
-{% endblock %}
+{% block title %}{{ job['job_name'] }} · DispatchProof{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
@@ -97,7 +80,7 @@ async function copyInstallerArrivalLink() {
   <div class="copy-box installer-copy-box" id="installerArrivalLink">{{ arrival_url }}</div>
 
   <div class="button-row">
-    <button class="btn primary" type="button" id="copyInstallerLinkButton" onclick="copyInstallerArrivalLink()">Copy Installer Link</button>
+    <button class="btn primary" type="button" id="copyInstallerLinkButton" data-copy-url="{{ arrival_url|e }}" onclick="copyInstallerArrivalLink(this)">Copy Installer Link</button>
     <a class="btn ghost" target="_blank" rel="noopener" href="{{ arrival_url }}">Open External Page</a>
     <a class="btn ghost" href="{{ url_for('record_arrival', job_id=job['id']) }}">Record Internally</a>
   </div>
@@ -299,4 +282,62 @@ async function copyInstallerArrivalLink() {
   </div>
 </section>
 {% endif %}
+
+<script>
+function legacyCopyText(text) {
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.setAttribute('readonly', '');
+  area.style.position = 'fixed';
+  area.style.left = '-9999px';
+  area.style.top = '0';
+  document.body.appendChild(area);
+  area.focus();
+  area.select();
+  area.setSelectionRange(0, area.value.length);
+
+  let copied = false;
+  try {
+    copied = document.execCommand('copy');
+  } catch (e) {
+    copied = false;
+  }
+
+  document.body.removeChild(area);
+  return copied;
+}
+
+async function copyInstallerArrivalLink(button) {
+  if (!button) return;
+  const url = (button.dataset.copyUrl || '').trim();
+  if (!url) return;
+
+  let copied = false;
+
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(url);
+      copied = true;
+    } catch (e) {
+      copied = false;
+    }
+  }
+
+  if (!copied) {
+    copied = legacyCopyText(url);
+  }
+
+  if (copied) {
+    const original = button.textContent;
+    button.textContent = 'Copied!';
+    button.disabled = true;
+    setTimeout(() => {
+      button.textContent = original;
+      button.disabled = false;
+    }, 1600);
+  } else {
+    window.prompt('Copy this installer link:', url);
+  }
+}
+</script>
 {% endblock %}
