@@ -5,12 +5,26 @@
 <div class="page-head">
   <div>
     <div class="eyebrow">Jobs</div>
-    <h1>Create New Job</h1>
-    <p>Only collect what we need to verify readiness.</p>
+    <h1>{% if duplicate_source %}Duplicate Job{% else %}Create New Job{% endif %}</h1>
+    <p>{% if duplicate_source %}Review the copied setup, choose the new installation date, and make any changes before creating the fresh job.{% else %}Only collect what we need to verify readiness.{% endif %}</p>
   </div>
 </div>
 
+{% if duplicate_source %}
+<div class="duplicate-job-banner">
+  <div class="duplicate-job-icon">↻</div>
+  <div>
+    <strong>Copying setup from {{ duplicate_source['job_name'] }}</strong>
+    <span>Client/project, site, contact, checklist, and reminder settings are copied. The new job starts fresh with NO RESPONSE.</span>
+    <small>Readiness responses, arrival records, photos/evidence, reports, activity history, and Office Notes are not copied.</small>
+  </div>
+</div>
+{% endif %}
+
 <form class="form-card" method="post">
+  {% if duplicate_source %}
+  <input type="hidden" name="duplicate_source_id" value="{{ duplicate_source['id'] }}">
+  {% endif %}
 
     <div class="job-assignment-create">
       <div class="eyebrow">Optional Organization</div>
@@ -49,22 +63,22 @@
 
   <div class="grid-2">
     <label>Job Name
-      <input required name="job_name" placeholder="Mercy Medical Center - Casework">
+      <input required name="job_name" value="{{ form_values.job_name|e }}" placeholder="Mercy Medical Center - Casework">
     </label>
     <label>Project / Site
-      <input name="project_site" placeholder="North Tower - Level 2">
+      <input name="project_site" value="{{ form_values.project_site|e }}" placeholder="North Tower - Level 2">
     </label>
     <label>Installation Date
-      <input required type="date" name="installation_date">
+      <input required type="date" name="installation_date" value="{{ form_values.installation_date|e }}">
     </label>
     <label>Site Contact
-      <input required name="contact_name" placeholder="GC superintendent or customer">
+      <input required name="contact_name" value="{{ form_values.contact_name|e }}" placeholder="GC superintendent or customer">
     </label>
     <label>Email
-      <input required type="email" name="contact_email" placeholder="name@company.com">
+      <input required type="email" name="contact_email" value="{{ form_values.contact_email|e }}" placeholder="name@company.com">
     </label>
     <label>Phone <span class="muted">(optional)</span>
-      <input name="contact_phone" placeholder="330-555-0152">
+      <input name="contact_phone" value="{{ form_values.contact_phone|e }}" placeholder="330-555-0152">
     </label>
   </div>
 
@@ -83,9 +97,9 @@
       </label>
       <label>Reminder window
         <select name="reminder_hours_before">
-          <option value="24">24 hours before installation</option>
-          <option value="48" selected>48 hours before installation</option>
-          <option value="72">72 hours before installation</option>
+          <option value="24" {% if default_reminder_hours == 24 %}selected{% endif %}>24 hours before installation</option>
+          <option value="48" {% if default_reminder_hours == 48 %}selected{% endif %}>48 hours before installation</option>
+          <option value="72" {% if default_reminder_hours == 72 %}selected{% endif %}>72 hours before installation</option>
         </select>
       </label>
     </div>
@@ -105,7 +119,11 @@
   </div>
 
   <div class="form-actions">
+    {% if duplicate_source %}
+    <a class="btn ghost" href="{{ url_for('job_detail', job_id=duplicate_source['id']) }}">Cancel</a>
+    {% else %}
     <a class="btn ghost" href="{{ url_for('dashboard') }}">Cancel</a>
+    {% endif %}
     <button class="btn primary" type="submit">Create Job</button>
   </div>
 </form>

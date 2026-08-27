@@ -7,7 +7,10 @@
     <h1>{{ job['job_name'] }}</h1>
     <p>{{ job['project_site'] or 'No project/site description' }} · Mobilization Attempt #{{ current_attempt_number }}</p>
   </div>
-  <span class="badge {{ job['status']|lower|replace(' ', '-') }}">{{ job['status'] }}</span>
+  <div class="page-head-actions">
+    <a class="btn ghost" href="{{ url_for('new_job', duplicate_from=job['id']) }}">Duplicate Job</a>
+    <span class="badge {{ job['status']|lower|replace(' ', '-') }}">{{ job['status'] }}</span>
+  </div>
 </div>
 
 {% if job['status'] == 'COMPLETED' %}

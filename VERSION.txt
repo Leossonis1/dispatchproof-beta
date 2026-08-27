@@ -1,2 +1,2 @@
-DispatchProof Version 2.9 - Dashboard Search & Filters
-Adds fast active-job search plus client, project, and status filters on the Dashboard.
+DispatchProof Version 2.10 - Duplicate Job
+Adds a safe repeat-job workflow that copies setup fields into a fresh New Job form without copying readiness, evidence, reports, activity, or internal notes.

@@ -704,3 +704,57 @@ V2.9 changes only Dashboard querying and presentation. It does not add or change
 ### Help Center
 
 Help & Tutorials now includes **Find a Job on the Dashboard** under Getting Started.
+
+
+## V2.10 — Duplicate Job
+
+V2.10 adds a fast way to create repeat installations without retyping the same setup.
+
+### Duplicate Job
+
+Every Job Detail page now has a **Duplicate Job** button.
+
+The duplicate form copies:
+
+- Client
+- Project
+- Job Name
+- Project / Site
+- Site Contact Name
+- Site Contact Email
+- Site Contact Phone
+- Readiness Checklist
+- Automatic Reminder setting
+- Reminder window
+
+The Installation Date is intentionally left blank so the office must choose the date for the new install.
+
+### Fresh lifecycle
+
+A duplicated job is always a brand-new installation with new secure tokens and **NO RESPONSE** status.
+
+DispatchProof does **not** copy:
+
+- readiness responses
+- readiness photos
+- arrival records
+- failed mobilization details
+- arrival photos
+- client report links
+- combined-report history
+- activity history
+- Office Notes
+
+This prevents old evidence or private communication from being accidentally attached to a new installation.
+
+### Audit trail
+
+The new job receives its normal **Job Created** activity plus a **Job Duplicated** activity that identifies the source job without copying its history.
+
+### No database migration
+
+V2.10 does not change the database schema, so the latest V2.9 backup remains compatible.
+
+### Help Center
+
+Help & Tutorials now includes **Duplicate a Job** under Getting Started.
