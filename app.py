@@ -1,6 +1,7 @@
 
 from flask import Flask, render_template, request, redirect, url_for, send_from_directory, send_file, flash, abort, session
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.middleware.proxy_fix import ProxyFix
 from pathlib import Path
 import sqlite3
@@ -269,6 +270,18 @@ def ensure_columns(db):
 def init_db():
     with get_db() as db:
         db.executescript("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            full_name TEXT NOT NULL,
+            username TEXT UNIQUE NOT NULL COLLATE NOCASE,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'OPERATIONS',
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            last_login_at TEXT,
+            updated_at TEXT
+        );
+
         CREATE TABLE IF NOT EXISTS app_settings (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             company_name TEXT NOT NULL,
@@ -859,8 +872,33 @@ def effective_admin_password():
     # Local-only fallback for development. Never active on Render.
     return "dispatchproof-local"
 
+def user_authenticated():
+    # Backward compatible with older V2.0 sessions during deploy transitions.
+    return bool(session.get("dispatchproof_authenticated") or session.get("dispatchproof_admin"))
+
+def current_username():
+    return session.get("dispatchproof_username") or session.get("dispatchproof_admin_username") or ""
+
+def current_display_name():
+    return session.get("dispatchproof_display_name") or current_username()
+
+def current_user_role():
+    # Legacy owner/admin sessions are always administrators.
+    if session.get("dispatchproof_owner"):
+        return "OWNER"
+    role = (session.get("dispatchproof_role") or "").upper()
+    if role in {"ADMIN", "OPERATIONS"}:
+        return role
+    if session.get("dispatchproof_admin"):
+        return "OWNER"
+    return ""
+
+def current_user_is_admin():
+    return current_user_role() in {"OWNER", "ADMIN"}
+
 def admin_authenticated():
-    return bool(session.get("dispatchproof_admin"))
+    # Kept for older templates; this now means "signed in".
+    return user_authenticated()
 
 def safe_next_url(value):
     if not value:
@@ -959,7 +997,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.0.1",
+        "app_version": "2.1",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -1187,12 +1225,15 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.0.1",
+        "app_version": "2.1",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
-        "admin_authenticated": admin_authenticated(),
-        "admin_username": ADMIN_USERNAME,
+        "admin_authenticated": user_authenticated(),
+        "admin_username": current_username(),
+        "current_display_name": current_display_name(),
+        "current_user_role": current_user_role(),
+        "current_user_is_admin": current_user_is_admin(),
     }
 
 @app.before_request
@@ -1201,8 +1242,23 @@ def ensure_db():
     init_db()
 
     public_endpoints = {"login", "health", "static", "public_readiness", "public_arrival", "company_logo"}
-    if request.endpoint not in public_endpoints and not admin_authenticated():
+    if request.endpoint not in public_endpoints and not user_authenticated():
         return redirect(url_for("login", next=request.full_path if request.query_string else request.path))
+
+    admin_only_endpoints = {
+        "company_settings",
+        "backup_restore",
+        "download_backup",
+        "restore_backup",
+        "users_access",
+        "add_user",
+        "toggle_user_access",
+        "reset_user_password",
+        "change_user_role",
+    }
+    if request.endpoint in admin_only_endpoints and user_authenticated() and not current_user_is_admin():
+        flash("Administrator access is required for that page.")
+        return redirect(url_for("dashboard"))
 
     # Do not make static/public requests responsible for sending reminders.
     if request.endpoint in {"static", "health", "public_readiness", "public_arrival", "company_logo"}:
@@ -1226,35 +1282,67 @@ def ensure_db():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    if admin_authenticated():
+    if user_authenticated():
         return redirect(safe_next_url(request.args.get("next")))
 
     configured = admin_login_configured()
     next_url = request.args.get("next") or request.form.get("next") or ""
 
     if request.method == "POST":
-        if not configured:
-            flash("Admin login is not configured yet. Add DISPATCHPROOF_ADMIN_PASSWORD in Render Environment.")
-            return render_template("login.html", configured=False, next_url=next_url), 503
-
         submitted_username = request.form.get("username", "").strip()
         submitted_password = request.form.get("password", "")
+        stay_signed_in = request.form.get("stay_signed_in") == "1"
 
-        username_ok = secrets.compare_digest(submitted_username, ADMIN_USERNAME)
-        password_ok = secrets.compare_digest(submitted_password, effective_admin_password())
+        # Permanent owner account remains backed by Render Environment.
+        owner_ok = False
+        if configured:
+            username_ok = secrets.compare_digest(submitted_username, ADMIN_USERNAME)
+            password_ok = secrets.compare_digest(submitted_password, effective_admin_password())
+            owner_ok = username_ok and password_ok
 
-        if username_ok and password_ok:
-            stay_signed_in = request.form.get("stay_signed_in") == "1"
+        if owner_ok:
             session.clear()
             session.permanent = stay_signed_in
+            session["dispatchproof_authenticated"] = True
             session["dispatchproof_admin"] = True
+            session["dispatchproof_owner"] = True
+            session["dispatchproof_username"] = ADMIN_USERNAME
             session["dispatchproof_admin_username"] = ADMIN_USERNAME
+            session["dispatchproof_display_name"] = ADMIN_USERNAME
+            session["dispatchproof_role"] = "OWNER"
             session["dispatchproof_stay_signed_in"] = stay_signed_in
             return redirect(safe_next_url(next_url))
 
+        # Additional users are stored securely in SQLite using password hashes.
+        with get_db() as db:
+            user = db.execute(
+                "SELECT * FROM users WHERE username = ? COLLATE NOCASE",
+                (submitted_username,),
+            ).fetchone()
+
+            if user and user["is_active"] and check_password_hash(user["password_hash"], submitted_password):
+                db.execute(
+                    "UPDATE users SET last_login_at = ?, updated_at = ? WHERE id = ?",
+                    (now_iso(), now_iso(), user["id"]),
+                )
+                db.commit()
+
+                session.clear()
+                session.permanent = stay_signed_in
+                session["dispatchproof_authenticated"] = True
+                session["dispatchproof_admin"] = True
+                session["dispatchproof_owner"] = False
+                session["dispatchproof_user_id"] = user["id"]
+                session["dispatchproof_username"] = user["username"]
+                session["dispatchproof_admin_username"] = user["username"]
+                session["dispatchproof_display_name"] = user["full_name"]
+                session["dispatchproof_role"] = user["role"]
+                session["dispatchproof_stay_signed_in"] = stay_signed_in
+                return redirect(safe_next_url(next_url))
+
         flash("Incorrect username or password.")
 
-    return render_template("login.html", configured=configured, next_url=next_url)
+    return render_template("login.html", configured=True, next_url=next_url)
 
 @app.post("/logout")
 def logout():
@@ -1266,7 +1354,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.0.1",
+        "version": "2.1",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -1282,6 +1370,151 @@ def company_logo():
     if not filename:
         abort(404)
     return send_from_directory(UPLOAD_DIR, filename)
+
+
+
+@app.route("/settings/users")
+def users_access():
+    with get_db() as db:
+        users = db.execute("""
+            SELECT id, full_name, username, role, is_active, created_at, last_login_at
+            FROM users
+            ORDER BY
+                CASE role WHEN 'ADMIN' THEN 0 ELSE 1 END,
+                LOWER(full_name),
+                LOWER(username)
+        """).fetchall()
+
+    return render_template(
+        "users_access.html",
+        users=users,
+        owner_username=ADMIN_USERNAME,
+    )
+
+
+@app.post("/settings/users/add")
+def add_user():
+    full_name = request.form.get("full_name", "").strip()
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
+    role = request.form.get("role", "OPERATIONS").strip().upper()
+
+    if not full_name or not username or not password:
+        flash("Full Name, Username, and Temporary Password are required.")
+        return redirect(url_for("users_access"))
+
+    if role not in {"ADMIN", "OPERATIONS"}:
+        role = "OPERATIONS"
+
+    if len(username) < 3:
+        flash("Username must be at least 3 characters.")
+        return redirect(url_for("users_access"))
+
+    if len(password) < 8:
+        flash("Temporary Password must be at least 8 characters.")
+        return redirect(url_for("users_access"))
+
+    if username.lower() == ADMIN_USERNAME.lower():
+        flash("That username belongs to the permanent Owner account.")
+        return redirect(url_for("users_access"))
+
+    try:
+        with get_db() as db:
+            db.execute("""
+                INSERT INTO users (
+                    full_name, username, password_hash, role,
+                    is_active, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, 1, ?, ?)
+            """, (
+                full_name,
+                username,
+                generate_password_hash(password),
+                role,
+                now_iso(),
+                now_iso(),
+            ))
+            db.commit()
+    except sqlite3.IntegrityError:
+        flash("That username is already in use.")
+        return redirect(url_for("users_access"))
+
+    flash(f"User {username} added.")
+    return redirect(url_for("users_access"))
+
+
+@app.post("/settings/users/<int:user_id>/toggle-access")
+def toggle_user_access(user_id):
+    with get_db() as db:
+        user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not user:
+            abort(404)
+
+        # Prevent an admin from disabling the account currently being used.
+        if session.get("dispatchproof_user_id") == user_id:
+            flash("You cannot disable the account you are currently signed in with.")
+            return redirect(url_for("users_access"))
+
+        new_active = 0 if user["is_active"] else 1
+
+        # Never allow the final enabled DB admin to be disabled by another DB admin.
+        # The ENV-backed Owner always remains available regardless.
+        db.execute(
+            "UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?",
+            (new_active, now_iso(), user_id),
+        )
+        db.commit()
+
+    flash(f"{user['username']} access {'enabled' if new_active else 'disabled'}.")
+    return redirect(url_for("users_access"))
+
+
+@app.post("/settings/users/<int:user_id>/reset-password")
+def reset_user_password(user_id):
+    new_password = request.form.get("new_password", "")
+
+    if len(new_password) < 8:
+        flash("New password must be at least 8 characters.")
+        return redirect(url_for("users_access"))
+
+    with get_db() as db:
+        user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not user:
+            abort(404)
+
+        db.execute(
+            "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
+            (generate_password_hash(new_password), now_iso(), user_id),
+        )
+        db.commit()
+
+    flash(f"Password reset for {user['username']}.")
+    return redirect(url_for("users_access"))
+
+
+@app.post("/settings/users/<int:user_id>/role")
+def change_user_role(user_id):
+    role = request.form.get("role", "OPERATIONS").strip().upper()
+    if role not in {"ADMIN", "OPERATIONS"}:
+        flash("Invalid role.")
+        return redirect(url_for("users_access"))
+
+    with get_db() as db:
+        user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not user:
+            abort(404)
+
+        if session.get("dispatchproof_user_id") == user_id and role != "ADMIN":
+            flash("You cannot remove administrator access from the account you are currently using.")
+            return redirect(url_for("users_access"))
+
+        db.execute(
+            "UPDATE users SET role = ?, updated_at = ? WHERE id = ?",
+            (role, now_iso(), user_id),
+        )
+        db.commit()
+
+    flash(f"{user['username']} role updated.")
+    return redirect(url_for("users_access"))
 
 
 @app.route("/settings/company", methods=["GET", "POST"])
@@ -1366,6 +1599,7 @@ def backup_restore():
     counts = {
         "jobs": 0,
         "completed_jobs": 0,
+        "users": 0,
         "readiness_responses": 0,
         "mobilization_attempts": 0,
         "outbox_messages": 0,
@@ -1380,6 +1614,10 @@ def backup_restore():
             counts["completed_jobs"] = db.execute(
                 "SELECT COUNT(*) AS c FROM jobs WHERE status = 'COMPLETED'"
             ).fetchone()["c"]
+
+            counts["users"] = db.execute(
+                "SELECT COUNT(*) AS c FROM users"
+            ).fetchone()["c"] + 1  # Include permanent ENV-backed Owner.
 
             current_responses = db.execute(
                 "SELECT COUNT(*) AS c FROM jobs WHERE response_at IS NOT NULL"
