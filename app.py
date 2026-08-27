@@ -1620,7 +1620,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.6",
+        "app_version": "2.7",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -1848,7 +1848,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.6",
+        "app_version": "2.7",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -1991,7 +1991,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.6",
+        "version": "2.7",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -3083,6 +3083,11 @@ def update_job_assignment(job_id):
 
     flash("Client / project assignment updated.")
     return redirect(url_for("job_detail", job_id=job_id))
+
+
+@app.route("/help")
+def help_center():
+    return render_template("help.html")
 
 
 @app.route("/activity")
