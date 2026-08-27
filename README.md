@@ -242,3 +242,65 @@ The company identity remains compact by:
 - allowing multi-line company names
 - keeping the DispatchProof attribution smaller beneath the company name
 - preserving the full company name in the hover title
+
+
+## V2.1 — Users & Access
+
+DispatchProof now supports multiple internal office logins.
+
+### Permanent Owner
+
+The existing Render Environment login remains the permanent **Owner** account:
+
+- username: `DISPATCHPROOF_ADMIN_USERNAME`
+- password: `DISPATCHPROOF_ADMIN_PASSWORD`
+
+The Owner cannot be disabled from inside DispatchProof, so the application always
+has a recovery administrator.
+
+### Additional users
+
+Administrators can open **Users & Access** to:
+
+- add users
+- create a temporary password
+- choose Operations or Administrator access
+- enable / disable access
+- change a user's role
+- reset a user's password
+- see the user's last sign-in time
+
+Passwords for additional users are stored as one-way Werkzeug password hashes,
+never plain text.
+
+### Permissions
+
+**Operations**
+- Dashboard
+- New Job
+- Completed Jobs
+- readiness workflow
+- installer arrival workflow
+- reports
+- Email Outbox
+
+**Administrator**
+- everything Operations can do
+- Company Settings
+- Users & Access
+- Backup & Restore
+
+**Owner**
+- permanent environment-backed administrator
+- cannot be disabled from inside the application
+
+Company Settings, user management, and Backup & Restore are hidden from Operations
+users and server-side permission checks prevent direct URL access.
+
+The existing **Stay signed in on this device** option works for all internal users.
+
+### Backups
+
+Additional users and their password hashes live in SQLite, so normal DispatchProof
+backups preserve them automatically. The permanent Owner credentials remain in
+Render Environment and are not stored in the backup.

@@ -905,3 +905,153 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(15,98,254,.12);bo
     font-size:18px;
   }
 }
+
+
+/* DispatchProof V2.1 Users & Access */
+.session-role{
+  display:block;
+  margin-top:3px;
+  color:#9fb6d5;
+  font-size:9px;
+  text-transform:uppercase;
+  letter-spacing:.07em;
+  font-weight:800;
+}
+.owner-card{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:20px;
+  background:#f6f9ff;
+  border:1px solid #bfd0f4;
+  border-left:4px solid var(--brand-accent, #0f62fe);
+  border-radius:12px;
+  padding:18px 20px;
+  margin-bottom:18px;
+}
+.owner-card h2{margin:3px 0 4px}
+.owner-card p{margin:0;color:#667085}
+.users-layout{
+  display:grid;
+  grid-template-columns:minmax(300px,.8fr) minmax(480px,1.4fr);
+  gap:18px;
+}
+.form-stack select,
+.user-role-form select{
+  width:100%;
+  border:1px solid #cfd8e6;
+  border-radius:8px;
+  padding:10px 11px;
+  background:white;
+  color:#101828;
+  font:inherit;
+  box-sizing:border-box;
+}
+.access-explainer{
+  display:grid;
+  grid-template-columns:auto 1fr;
+  gap:5px 10px;
+  padding:12px;
+  border-radius:9px;
+  background:#f8fafc;
+  border:1px solid #e4e7ec;
+  font-size:11px;
+}
+.access-explainer strong{color:#101828}
+.access-explainer span{color:#667085}
+.user-card-list{display:grid;gap:12px}
+.user-access-card{
+  border:1px solid #d8e0ec;
+  border-radius:11px;
+  padding:15px;
+  background:#fff;
+}
+.user-access-card.disabled-user{
+  background:#f8fafc;
+  opacity:.82;
+}
+.user-access-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:14px;
+}
+.user-access-head>div{display:grid;gap:2px}
+.user-access-head strong{font-size:15px}
+.user-access-head span{color:#667085;font-size:11px}
+.access-state,
+.access-role{
+  display:inline-flex;
+  align-items:center;
+  width:max-content;
+  border-radius:999px;
+  padding:5px 8px;
+  font-size:9px;
+  font-weight:900;
+  letter-spacing:.04em;
+}
+.active-user{background:#eaf8ef;color:#027a48}
+.inactive-user{background:#f2f4f7;color:#667085}
+.owner-role,
+.admin-role{background:#eef4ff;color:#175cd3}
+.operations-role{background:#f2f4f7;color:#475467}
+.user-meta-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin:12px 0;
+  padding-top:11px;
+  border-top:1px solid #e4e7ec;
+  color:#667085;
+  font-size:10px;
+}
+.user-actions{
+  display:flex;
+  align-items:flex-end;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.user-role-form{
+  display:grid;
+  grid-template-columns:minmax(150px,1fr) auto;
+  gap:7px;
+  flex:1 1 290px;
+}
+.small-btn{
+  padding:9px 11px!important;
+  min-height:38px;
+}
+.password-reset{
+  margin-top:11px;
+  padding-top:10px;
+  border-top:1px solid #e4e7ec;
+}
+.password-reset summary{
+  cursor:pointer;
+  color:#175cd3;
+  font-size:11px;
+  font-weight:800;
+}
+.password-reset form{
+  display:grid;
+  grid-template-columns:1fr auto;
+  gap:7px;
+  margin-top:9px;
+}
+.password-reset input{
+  min-width:0;
+}
+.compact-empty{
+  min-height:210px!important;
+}
+
+@media(max-width:900px){
+  .users-layout{grid-template-columns:1fr}
+}
+@media(max-width:620px){
+  .owner-card{align-items:flex-start;flex-direction:column}
+  .user-meta-row{align-items:flex-start;flex-direction:column}
+  .user-role-form{grid-template-columns:1fr}
+  .password-reset form{grid-template-columns:1fr}
+}

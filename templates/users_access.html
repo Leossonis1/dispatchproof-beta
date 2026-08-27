@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Users & Access · DispatchProof{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">Settings</div>
+    <h1>Users & Access</h1>
+    <p>Add office users without sharing the permanent Owner password. Control who can administer DispatchProof.</p>
+  </div>
+</div>
+
+<section class="owner-card">
+  <div>
+    <div class="eyebrow">Permanent Owner</div>
+    <h2>{{ owner_username }}</h2>
+    <p>This account is controlled by the Render environment variables and cannot be disabled from inside DispatchProof.</p>
+  </div>
+  <span class="access-role owner-role">OWNER</span>
+</section>
+
+<div class="users-layout">
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <h2>Add User</h2>
+        <p>Create a separate internal login for an office team member.</p>
+      </div>
+    </div>
+
+    <form method="post" action="{{ url_for('add_user') }}" class="form-stack">
+      <label>Full Name
+        <input required name="full_name" placeholder="Sarah Johnson">
+      </label>
+
+      <label>Username
+        <input required name="username" minlength="3" autocomplete="off" placeholder="sarah">
+      </label>
+
+      <label>Temporary Password
+        <input required type="password" name="password" minlength="8" autocomplete="new-password" placeholder="At least 8 characters">
+      </label>
+
+      <label>Role
+        <select name="role">
+          <option value="OPERATIONS">Operations</option>
+          <option value="ADMIN">Administrator</option>
+        </select>
+      </label>
+
+      <div class="access-explainer">
+        <strong>Operations</strong>
+        <span>Dashboard, jobs, readiness, installer arrivals, reports, and Email Outbox.</span>
+        <strong>Administrator</strong>
+        <span>Everything above plus Company Settings, Users & Access, and Backup & Restore.</span>
+      </div>
+
+      <button class="btn primary wide" type="submit">Add User</button>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <h2>Current Users</h2>
+        <p>{{ users|length }} additional account{{ '' if users|length == 1 else 's' }}.</p>
+      </div>
+    </div>
+
+    {% if users %}
+      <div class="user-card-list">
+      {% for user in users %}
+        <article class="user-access-card {% if not user['is_active'] %}disabled-user{% endif %}">
+          <div class="user-access-head">
+            <div>
+              <strong>{{ user['full_name'] }}</strong>
+              <span>@{{ user['username'] }}</span>
+            </div>
+            <span class="access-state {{ 'active-user' if user['is_active'] else 'inactive-user' }}">
+              {{ 'ACTIVE' if user['is_active'] else 'DISABLED' }}
+            </span>
+          </div>
+
+          <div class="user-meta-row">
+            <span class="access-role {{ 'admin-role' if user['role'] == 'ADMIN' else 'operations-role' }}">
+              {{ 'ADMINISTRATOR' if user['role'] == 'ADMIN' else 'OPERATIONS' }}
+            </span>
+            <span>Last sign in: {{ user['last_login_at']|pretty_datetime if user['last_login_at'] else 'Never' }}</span>
+          </div>
+
+          <div class="user-actions">
+            <form method="post" action="{{ url_for('change_user_role', user_id=user['id']) }}" class="user-role-form">
+              <select name="role" aria-label="Role for {{ user['username'] }}">
+                <option value="OPERATIONS" {% if user['role'] == 'OPERATIONS' %}selected{% endif %}>Operations</option>
+                <option value="ADMIN" {% if user['role'] == 'ADMIN' %}selected{% endif %}>Administrator</option>
+              </select>
+              <button class="btn ghost small-btn" type="submit">Update Role</button>
+            </form>
+
+            <form method="post" action="{{ url_for('toggle_user_access', user_id=user['id']) }}">
+              <button class="btn ghost small-btn" type="submit">
+                {{ 'Disable Access' if user['is_active'] else 'Enable Access' }}
+              </button>
+            </form>
+          </div>
+
+          <details class="password-reset">
+            <summary>Reset Password</summary>
+            <form method="post" action="{{ url_for('reset_user_password', user_id=user['id']) }}">
+              <input required type="password" name="new_password" minlength="8" autocomplete="new-password" placeholder="New password">
+              <button class="btn ghost small-btn" type="submit">Set Password</button>
+            </form>
+          </details>
+        </article>
+      {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty compact-empty">
+        <div class="empty-icon">✓</div>
+        <h3>No additional users yet</h3>
+        <p>The permanent Owner account is the only internal login.</p>
+      </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

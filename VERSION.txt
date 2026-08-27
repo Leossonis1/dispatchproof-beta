@@ -1,2 +1,2 @@
-DispatchProof Version 2.0.1 - Sidebar Brand Polish
-Long company names now wrap cleanly in the sidebar instead of truncating with ellipses.
+DispatchProof Version 2.1 - Users & Access
+Adds multi-user internal logins with Owner, Administrator, and Operations permissions.

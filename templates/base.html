@@ -28,14 +28,18 @@
       <a class="{% if request.path == '/jobs/new' %}active{% endif %}" href="{{ url_for('new_job') }}">New Job</a>
       <a class="{% if request.path == '/completed' %}active{% endif %}" href="{{ url_for('completed_jobs') }}">Completed Jobs</a>
       <a class="{% if request.path.startswith('/email-outbox') %}active{% endif %}" href="{{ url_for('email_outbox') }}">Email Outbox</a>
+      {% if current_user_is_admin %}
       <a class="{% if request.path.startswith('/settings/company') %}active{% endif %}" href="{{ url_for('company_settings') }}">Company Settings</a>
+      <a class="{% if request.path.startswith('/settings/users') %}active{% endif %}" href="{{ url_for('users_access') }}">Users & Access</a>
       <a class="{% if request.path.startswith('/backup') %}active{% endif %}" href="{{ url_for('backup_restore') }}">Backup & Restore</a>
+      {% endif %}
     </nav>
     <div class="sidebar-bottom">
       {% if admin_authenticated %}
       <div class="admin-session">
         <span>Signed in as</span>
-        <strong>{{ admin_username }}</strong>
+        <strong>{{ current_display_name }}</strong>
+        <small class="session-role">{{ 'Owner' if current_user_role == 'OWNER' else ('Administrator' if current_user_role == 'ADMIN' else 'Operations') }}</small>
         <form method="post" action="{{ url_for('logout') }}">
           <button class="sidebar-logout" type="submit">Sign Out</button>
         </form>
