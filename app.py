@@ -13,6 +13,7 @@ import shutil
 import tempfile
 import zipfile
 import re
+import html as html_lib
 from email.message import EmailMessage
 from datetime import datetime, timedelta
 
@@ -133,6 +134,7 @@ def ensure_columns(db):
     existing = {row["name"] for row in db.execute("PRAGMA table_info(jobs)").fetchall()}
     needed = {
         "arrival_token": "TEXT",
+        "client_report_token": "TEXT",
         "completed_at": "TEXT",
         "arrival_status": "TEXT",
         "arrived_at": "TEXT",
@@ -243,6 +245,26 @@ def ensure_columns(db):
                 )
                 break
 
+    # Backfill an independent high-entropy client-report token for older jobs.
+    rows_without_client_report_token = db.execute("""
+        SELECT id FROM jobs
+        WHERE client_report_token IS NULL OR TRIM(client_report_token) = ''
+    """).fetchall()
+
+    for row in rows_without_client_report_token:
+        while True:
+            candidate = secrets.token_urlsafe(24)
+            exists = db.execute(
+                "SELECT 1 FROM jobs WHERE client_report_token = ?",
+                (candidate,),
+            ).fetchone()
+            if not exists:
+                db.execute(
+                    "UPDATE jobs SET client_report_token = ? WHERE id = ?",
+                    (candidate, row["id"]),
+                )
+                break
+
     db.execute("""
         CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_arrival_token
         ON jobs(arrival_token)
@@ -309,6 +331,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             public_token TEXT UNIQUE NOT NULL,
             arrival_token TEXT UNIQUE,
+            client_report_token TEXT UNIQUE,
             job_name TEXT NOT NULL,
             project_site TEXT,
             installation_date TEXT NOT NULL,
@@ -678,6 +701,171 @@ def public_arrival_url(job):
     if base:
         return f"{base}/a/{job['arrival_token']}"
     return url_for("public_arrival", token=job["arrival_token"], _external=True)
+
+def public_client_report_url(job):
+    base = public_app_base_url()
+    if base:
+        return f"{base}/c/{job['client_report_token']}"
+    return url_for("public_client_report", token=job["client_report_token"], _external=True)
+
+
+def parse_json_list(value):
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+        return parsed if isinstance(parsed, list) else []
+    except Exception:
+        return []
+
+def parse_json_dict(value):
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(value)
+        return parsed if isinstance(parsed, dict) else {}
+    except Exception:
+        return {}
+
+def client_report_data(job):
+    """Build a client-safe report payload for one job."""
+    with get_db() as db:
+        activity_events = db.execute("""
+            SELECT *
+            FROM activity_log
+            WHERE job_id = ?
+            ORDER BY id ASC
+        """, (job["id"],)).fetchall()
+
+        attempts = db.execute("""
+            SELECT *
+            FROM mobilization_attempts
+            WHERE job_id = ?
+            ORDER BY attempt_number ASC
+        """, (job["id"],)).fetchall()
+
+    checklist = parse_json_list(job["checklist_json"])
+    answers = parse_json_dict(job["response_json"])
+    photos = parse_json_list(job["photo_json"])
+    arrival_issues = parse_json_list(job["arrival_issues_json"])
+    arrival_photos = parse_json_list(job["arrival_photos_json"])
+
+    mobilization_history = []
+    for row in attempts:
+        mobilization_history.append({
+            "attempt_number": row["attempt_number"],
+            "readiness_status": row["readiness_status"],
+            "response_at": row["response_at"],
+            "confirmed_by": row["confirmed_by"],
+            "confirmed_title": row["confirmed_title"],
+            "answers": parse_json_dict(row["response_json"]),
+            "photos": parse_json_list(row["photo_json"]),
+            "arrival_status": row["arrival_status"],
+            "arrived_at": row["arrived_at"],
+            "arrival_reported_by": row["arrival_reported_by"],
+            "arrival_issues": parse_json_list(row["arrival_issues_json"]),
+            "crew_size": row["crew_size"],
+            "hours_lost": row["hours_lost"],
+            "equipment_affected": row["equipment_affected"],
+            "arrival_notes": row["arrival_notes"],
+            "arrival_photos": parse_json_list(row["arrival_photos_json"]),
+            "failed_report_number": row["failed_report_number"],
+        })
+
+    return {
+        "checklist": checklist,
+        "answers": answers,
+        "photos": photos,
+        "arrival_issues": arrival_issues,
+        "arrival_photos": arrival_photos,
+        "activity_events": activity_events,
+        "mobilization_history": mobilization_history,
+    }
+
+def job_evidence_filenames(job):
+    """Return only evidence filenames that belong to this job."""
+    allowed = set(parse_json_list(job["photo_json"]))
+    allowed.update(parse_json_list(job["arrival_photos_json"]))
+
+    with get_db() as db:
+        confirmations = db.execute("""
+            SELECT photo_json
+            FROM readiness_confirmations
+            WHERE job_id = ?
+        """, (job["id"],)).fetchall()
+        attempts = db.execute("""
+            SELECT photo_json, arrival_photos_json
+            FROM mobilization_attempts
+            WHERE job_id = ?
+        """, (job["id"],)).fetchall()
+
+    for row in confirmations:
+        allowed.update(parse_json_list(row["photo_json"]))
+    for row in attempts:
+        allowed.update(parse_json_list(row["photo_json"]))
+        allowed.update(parse_json_list(row["arrival_photos_json"]))
+
+    return {name for name in allowed if name}
+
+def build_client_report_email(job, report_url, recipient_name=""):
+    settings = get_app_settings()
+    brand_name = settings.get("company_name") or COMPANY_NAME
+    brand_tagline = settings.get("company_tagline") or PRODUCT_TAGLINE
+    brand_accent = normalize_hex_color(settings.get("accent_color"))
+    logo_url = company_logo_external_url(settings)
+
+    esc_brand = html_lib.escape(str(brand_name))
+    esc_tagline = html_lib.escape(str(brand_tagline))
+    esc_job = html_lib.escape(str(job["job_name"]))
+    esc_site = html_lib.escape(str(job["project_site"] or ""))
+    esc_status = html_lib.escape(str(job["status"]))
+    esc_recipient = html_lib.escape(str(recipient_name or ""))
+    esc_url = html_lib.escape(str(report_url), quote=True)
+
+    subject = f"Installation Report: {job['job_name']}"
+    greeting = f"Hi {esc_recipient}," if esc_recipient else "Hello,"
+
+    html = f"""
+    <html>
+      <body style="font-family:Arial,sans-serif;background:#f5f7fb;padding:28px;color:#152033;">
+        <div style="max-width:660px;margin:0 auto;background:#ffffff;border:1px solid #dfe5ee;border-radius:14px;padding:28px;">
+          {f'<img src="{logo_url}" alt="{esc_brand} logo" style="max-height:54px;max-width:180px;object-fit:contain;margin-bottom:10px;display:block;">' if logo_url else ''}
+          <div style="font-size:22px;font-weight:800;color:#0b2348;margin-bottom:4px;">{esc_brand}</div>
+          <div style="font-size:12px;color:#6b7280;margin-bottom:2px;">{esc_tagline}</div>
+          <div style="font-size:11px;color:#98a2b3;margin-bottom:24px;">Powered by DispatchProof</div>
+
+          <p style="line-height:1.55;">{greeting}</p>
+          <p style="line-height:1.55;">
+            A current installation report is available for <strong>{esc_job}</strong>
+            {f' at {esc_site}' if esc_site else ''}.
+          </p>
+
+          <div style="background:#f8fafc;border:1px solid #dfe5ee;border-radius:10px;padding:14px;margin:18px 0;">
+            <div style="font-size:12px;color:#667085;">CURRENT STATUS</div>
+            <div style="font-size:20px;font-weight:800;margin-top:3px;">{esc_status}</div>
+            <div style="font-size:12px;color:#667085;margin-top:5px;">Scheduled installation: {format_date(job['installation_date'])}</div>
+          </div>
+
+          <p style="line-height:1.55;color:#475467;">
+            The report includes readiness confirmation, submitted evidence photos,
+            installer arrival information, mobilization history when applicable,
+            and the job audit trail.
+          </p>
+
+          <div style="margin:26px 0;">
+            <a href="{esc_url}" style="display:inline-block;background:{brand_accent};color:white;text-decoration:none;font-weight:700;padding:13px 18px;border-radius:9px;">
+              View Installation Report
+            </a>
+          </div>
+
+          <p style="font-size:12px;color:#6b7280;line-height:1.5;">
+            This secure report link reflects the current DispatchProof record for this job.
+          </p>
+        </div>
+      </body>
+    </html>
+    """
+    return subject, html
 
 def smtp_is_configured():
     return bool(SMTP_HOST and SMTP_PORT and SMTP_FROM_EMAIL)
@@ -1090,7 +1278,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.3",
+        "app_version": "2.4",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -1318,7 +1506,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.3",
+        "app_version": "2.4",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -1334,7 +1522,10 @@ def ensure_db():
     global LAST_REMINDER_SWEEP_AT
     init_db()
 
-    public_endpoints = {"login", "health", "static", "public_readiness", "public_arrival", "company_logo"}
+    public_endpoints = {
+        "login", "health", "static", "public_readiness", "public_arrival",
+        "public_client_report", "client_report_asset", "company_logo"
+    }
     if request.endpoint not in public_endpoints and not user_authenticated():
         return redirect(url_for("login", next=request.full_path if request.query_string else request.path))
 
@@ -1449,7 +1640,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.3",
+        "version": "2.4",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -2071,17 +2262,20 @@ def new_job():
 
         token = secrets.token_urlsafe(18)
         arrival_token = secrets.token_urlsafe(24)
+        client_report_token = secrets.token_urlsafe(24)
         with get_db() as db:
             cur = db.execute("""
                 INSERT INTO jobs (
-                    public_token, arrival_token, job_name, project_site, installation_date,
+                    public_token, arrival_token, client_report_token,
+                    job_name, project_site, installation_date,
                     contact_name, contact_email, contact_phone, checklist_json,
                     status, created_at, reminder_enabled, reminder_hours_before,
                     reminder_count
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'NO RESPONSE', ?, ?, ?, 0)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NO RESPONSE', ?, ?, ?, 0)
             """, (
                 token,
                 arrival_token,
+                client_report_token,
                 request.form["job_name"].strip(),
                 request.form.get("project_site", "").strip(),
                 request.form["installation_date"],
@@ -2203,6 +2397,152 @@ def run_reminders_now():
     sent, outbox, failed = run_due_reminders()
     flash(f"Reminder check complete: {sent} sent, {outbox} saved to outbox, {failed} failed.")
     return redirect(url_for("dashboard"))
+
+
+@app.route("/jobs/<int:job_id>/client-report", methods=["GET", "POST"])
+def client_report(job_id):
+    with get_db() as db:
+        job = db.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+
+    if not job:
+        abort(404)
+
+    report_url = public_client_report_url(job)
+
+    if request.method == "POST":
+        recipient_name = request.form.get("recipient_name", "").strip()
+        recipient_email = request.form.get("recipient_email", "").strip()
+
+        if not recipient_email or "@" not in recipient_email:
+            flash("Enter a valid client email address.")
+            return redirect(url_for("client_report", job_id=job_id))
+
+        subject, html = build_client_report_email(
+            job,
+            report_url,
+            recipient_name=recipient_name,
+        )
+        sent, error = send_smtp_message(
+            recipient_email,
+            recipient_name,
+            subject,
+            html,
+        )
+
+        if sent:
+            status = "SENT"
+        elif EMAIL_MODE == "outbox":
+            status = "OUTBOX"
+        else:
+            status = "FAILED"
+
+        with get_db() as db:
+            log_email_event(
+                db,
+                job_id,
+                "CLIENT_REPORT",
+                recipient_email,
+                recipient_name,
+                subject,
+                html,
+                report_url,
+                status,
+                error,
+            )
+            record_activity(
+                db,
+                "Client Report Generated",
+                f"Client report for {recipient_email}: {status}.",
+                job_id=job_id,
+            )
+            db.commit()
+
+        if status == "SENT":
+            flash(f"Client report emailed to {recipient_email}.")
+        elif status == "OUTBOX":
+            flash("Client report generated in Outbox Mode. Nothing was sent externally.")
+        else:
+            flash(f"Client report delivery failed: {error}")
+
+        return redirect(url_for("client_report", job_id=job_id))
+
+    return render_template(
+        "client_report.html",
+        job=job,
+        report_url=report_url,
+    )
+
+
+@app.post("/jobs/<int:job_id>/client-report/rotate")
+def rotate_client_report(job_id):
+    with get_db() as db:
+        job = db.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+        if not job:
+            abort(404)
+
+        while True:
+            new_token = secrets.token_urlsafe(24)
+            exists = db.execute(
+                "SELECT 1 FROM jobs WHERE client_report_token = ?",
+                (new_token,),
+            ).fetchone()
+            if not exists:
+                break
+
+        db.execute(
+            "UPDATE jobs SET client_report_token = ? WHERE id = ?",
+            (new_token, job_id),
+        )
+        record_activity(
+            db,
+            "Client Report Link Rotated",
+            "Revoked the previous client report link and generated a new secure link.",
+            job_id=job_id,
+        )
+        db.commit()
+
+    flash("Client report link rotated. The previous link no longer works.")
+    return redirect(url_for("client_report", job_id=job_id))
+
+
+@app.route("/c/<token>")
+def public_client_report(token):
+    with get_db() as db:
+        job = db.execute(
+            "SELECT * FROM jobs WHERE client_report_token = ?",
+            (token,),
+        ).fetchone()
+
+    if not job:
+        abort(404)
+
+    report = client_report_data(job)
+    return render_template(
+        "public_client_report.html",
+        job=job,
+        report=report,
+        report_token=token,
+        generated_at=now_iso(),
+    )
+
+
+@app.route("/c/<token>/evidence/<path:filename>")
+def client_report_asset(token, filename):
+    with get_db() as db:
+        job = db.execute(
+            "SELECT * FROM jobs WHERE client_report_token = ?",
+            (token,),
+        ).fetchone()
+
+    if not job:
+        abort(404)
+
+    allowed = job_evidence_filenames(job)
+    if filename not in allowed:
+        abort(404)
+
+    return send_from_directory(UPLOAD_DIR, filename)
+
 
 @app.route("/email-outbox")
 def email_outbox():
@@ -2570,6 +2910,7 @@ def job_detail(job_id):
 
     current_attempt_number = len(mobilization_history) + 1
     arrival_url = public_arrival_url(job) if job["arrival_token"] else None
+    client_report_url = public_client_report_url(job) if job["client_report_token"] else None
 
     return render_template(
         "job_detail.html",
@@ -2583,6 +2924,7 @@ def job_detail(job_id):
         mobilization_history=mobilization_history,
         current_attempt_number=current_attempt_number,
         arrival_url=arrival_url,
+        client_report_url=client_report_url,
         activity_events=activity_events,
     )
 
