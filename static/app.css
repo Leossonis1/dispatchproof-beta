@@ -26,12 +26,13 @@ a{text-decoration:none;color:inherit}
 .btn.primary{background:var(--blue);border-color:var(--blue);color:white}
 .btn.ghost{background:white;color:var(--text)}
 .btn.wide{width:100%;padding:14px}
-.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px}
+.stat-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:22px}
 .stat{background:white;border:1px solid var(--border);border-radius:12px;padding:18px}
 .stat strong{font-size:28px;display:block;margin-bottom:4px}
 .stat span{font-size:13px;color:var(--muted)}
 .stat.ready{border-top:4px solid var(--green)} .stat.review{border-top:4px solid #f59e0b}
 .stat.blocked{border-top:4px solid var(--red)} .stat.neutral{border-top:4px solid #667085}
+.stat.on-site{border-top:4px solid #2563eb}
 .panel,.form-card,.public-card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:22px;box-shadow:0 1px 2px rgba(16,24,40,.03)}
 .panel{margin-bottom:20px}
 .panel h2,.section-break h2,.public-section h2{font-size:18px;margin:0 0 6px}
@@ -47,6 +48,8 @@ tr:last-child td{border-bottom:0}
 .badge.review{background:var(--yellow-bg);color:var(--yellow)}
 .badge.blocked{background:var(--red-bg);color:var(--red)}
 .badge.no-response{background:var(--gray-bg);color:#5c6678}
+.badge.on-site{background:#eaf2ff;color:#175cd3}
+.badge.completed{background:#eef2f6;color:#344054}
 .empty{text-align:center;padding:52px 20px}
 .empty-icon,.big-check{width:54px;height:54px;border-radius:50%;display:grid;place-items:center;background:var(--green-bg);color:var(--green);font-size:28px;font-weight:900;margin:0 auto 12px}
 .empty h3{margin:0 0 6px}
@@ -714,4 +717,27 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(15,98,254,.12);bo
 @media(max-width:700px){
   .installer-link-head{display:grid;gap:10px}
   .secure-link-badge{justify-self:start}
+}
+
+
+/* DispatchProof V1.9 job lifecycle */
+.dispatch-on-site{
+  background:#f2f7ff;
+  border-color:#b8cef5;
+}
+.dispatch-on-site .dispatch-icon{
+  background:#e8f0ff;
+  color:#175cd3;
+}
+.dispatch-completed{
+  background:#f7f8fa;
+  border-color:#d5dae3;
+}
+.dispatch-completed .dispatch-icon{
+  background:#eaf8ef;
+  color:var(--green);
+}
+.completed-empty-icon{
+  background:#eef2f6!important;
+  color:#475467!important;
 }

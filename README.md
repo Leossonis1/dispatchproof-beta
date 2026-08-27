@@ -163,3 +163,42 @@ V1.8.1:
 - falls back to the legacy browser copy method
 - shows "Copied!" after success
 - falls back to a manual copy prompt only if both browser copy methods fail
+
+
+## V1.9 — Job Lifecycle
+
+DispatchProof now carries a job beyond pre-dispatch readiness.
+
+### Active lifecycle
+
+- **NO RESPONSE** — waiting for the site contact
+- **REVIEW** — readiness needs office review
+- **READY** — safe to dispatch
+- **BLOCKED** — site is not ready / failed mobilization
+- **ON SITE** — installer confirmed a successful Site Ready arrival
+
+A successful arrival now changes the job from **READY** to **ON SITE** instead
+of leaving it incorrectly marked Ready to Dispatch.
+
+### Completion
+
+An ON SITE job gets a **Mark Job Complete** action.
+
+Completing the job:
+
+- changes status to **COMPLETED**
+- records the completion timestamp
+- removes the job from Upcoming Installations
+- moves it into **Completed Jobs**
+- preserves readiness answers/photos
+- preserves arrival answers/photos
+- preserves mobilization and confirmation history
+- revokes the shared installer-arrival link
+- closes the public readiness form for that completed job
+
+Completed jobs are view-only evidence records. They are not deleted.
+
+### Compatibility
+
+Older successful V1.8 arrivals that were stored as READY are migrated to
+ON SITE automatically when V1.9 initializes the database.

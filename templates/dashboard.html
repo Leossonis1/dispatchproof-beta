@@ -36,6 +36,9 @@
   <a class="stat neutral {% if status_filter == 'NO RESPONSE' %}selected-stat{% endif %}" href="{{ url_for('dashboard', status='NO RESPONSE') }}">
     <strong>{{ counts['NO RESPONSE'] }}</strong><span>No Response</span>
   </a>
+  <a class="stat on-site {% if status_filter == 'ON SITE' %}selected-stat{% endif %}" href="{{ url_for('dashboard', status='ON SITE') }}">
+    <strong>{{ counts['ON SITE'] }}</strong><span>On Site</span>
+  </a>
 </div>
 
 <div class="panel">

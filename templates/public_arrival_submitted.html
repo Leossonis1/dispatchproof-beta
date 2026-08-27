@@ -20,7 +20,7 @@
         {% if arrival_status == 'NOT READY' %}
           The failed mobilization evidence has been saved and the arrival record is now locked.
         {% else %}
-          The arrival confirmation has been saved and the record is now locked.
+          The arrival confirmation has been saved. The crew is now recorded as on site and the arrival record is locked.
         {% endif %}
       </p>
       <div class="public-arrival-summary">
@@ -29,7 +29,7 @@
         <span>Recorded {{ job['arrived_at']|pretty_datetime }}</span>
       </div>
       <span class="badge {{ 'blocked' if arrival_status == 'NOT READY' else 'ready' }}">
-        {{ 'BLOCKED' if arrival_status == 'NOT READY' else 'READY' }}
+        {{ 'BLOCKED' if arrival_status == 'NOT READY' else 'ON SITE' }}
       </span>
     </section>
     <p class="public-foot">No account required · Secured by DispatchProof</p>

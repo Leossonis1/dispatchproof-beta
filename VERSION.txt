@@ -1,2 +1,2 @@
-DispatchProof Version 1.8.1 - Installer Copy Link Fix
-Repairs installer-link JavaScript placement and adds a clipboard fallback.
+DispatchProof Version 1.9 - Job Lifecycle
+Adds On Site and Completed states plus permanent Completed Jobs history.

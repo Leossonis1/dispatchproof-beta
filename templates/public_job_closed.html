@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Job Completed · DispatchProof</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body class="public-body">
+  <main class="public-shell compact">
+    <div class="public-brand">DispatchProof <span>· secure job link</span></div>
+    <section class="public-card center">
+      <div class="big-check">✓</div>
+      <div class="eyebrow">Job Completed</div>
+      <h1>This readiness link is closed</h1>
+      <p>The installation has been marked complete. No additional readiness response is needed for this job.</p>
+      <div class="public-arrival-summary">
+        <strong>{{ job['job_name'] }}</strong>
+        <span>{{ job['project_site'] or '' }}</span>
+        <span>Completed {{ job['completed_at']|pretty_datetime }}</span>
+      </div>
+    </section>
+    <p class="public-foot">Secured by DispatchProof</p>
+  </main>
+</body>
+</html>

@@ -10,7 +10,16 @@
   <span class="badge {{ job['status']|lower|replace(' ', '-') }}">{{ job['status'] }}</span>
 </div>
 
-{% if job['arrival_status'] == 'NOT READY' %}
+{% if job['status'] == 'COMPLETED' %}
+<div class="dispatch-gate dispatch-completed">
+  <div class="dispatch-icon">✓</div>
+  <div>
+    <strong>Job Completed</strong>
+    <span>Completed {{ job['completed_at']|pretty_datetime }}. This job is removed from Upcoming Installations and all evidence remains preserved.</span>
+  </div>
+  <a class="btn ghost" href="{{ url_for('completed_jobs') }}">Completed Jobs</a>
+</div>
+{% elif job['arrival_status'] == 'NOT READY' %}
 <div class="dispatch-gate dispatch-failed">
   <div class="dispatch-icon">!</div>
   <div>
@@ -20,13 +29,15 @@
   <span class="btn locked-btn">✓ Arrival Locked</span>
 </div>
 {% elif job['arrival_status'] == 'READY' %}
-<div class="dispatch-gate dispatch-ready">
+<div class="dispatch-gate dispatch-on-site">
   <div class="dispatch-icon">✓</div>
   <div>
-    <strong>Site Ready on Arrival</strong>
-    <span>The installer confirmed acceptable conditions and the arrival record is locked.</span>
+    <strong>Crew On Site — Installation in Progress</strong>
+    <span>The installer confirmed acceptable conditions. The arrival record is locked and the job is no longer awaiting dispatch.</span>
   </div>
-  <span class="btn locked-btn">✓ Arrival Locked</span>
+  <form method="post" action="{{ url_for('complete_job', job_id=job['id']) }}" onsubmit="return confirm('Mark this job complete? It will move to Completed Jobs and all readiness/arrival evidence will remain preserved.');">
+    <button class="btn primary" type="submit">Mark Job Complete</button>
+  </form>
 </div>
 {% elif job['status'] == 'READY' %}
 <div class="dispatch-gate dispatch-ready">
@@ -100,7 +111,7 @@
       <div><dt>Response</dt><dd>{{ job['response_at']|pretty_datetime if job['response_at'] else 'Not received' }}</dd></div>
       <div><dt>Confirmed By</dt><dd>{% if job['confirmed_by'] %}{{ job['confirmed_by'] }} · {{ job['confirmed_title'] }}{% else %}—{% endif %}</dd></div>
     </dl>
-    {% if job['response_at'] %}
+    {% if job['response_at'] and job['status'] != 'COMPLETED' %}
     <div class="button-row">
       <form method="post" action="{{ url_for('reset_job', job_id=job['id']) }}" onsubmit="return confirm('{% if job['arrival_status'] %}Archive this entire mobilization attempt and start the next one? All readiness and arrival evidence will be preserved.{% else %}Archive this confirmation and request a new one? The current evidence will be preserved in Confirmation History.{% endif %}');">
         <button class="btn ghost" type="submit">{% if job['arrival_status'] %}Start Next Mobilization{% else %}Request New Confirmation{% endif %}</button>
