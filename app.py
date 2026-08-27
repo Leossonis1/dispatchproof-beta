@@ -783,27 +783,94 @@ def backup_filename():
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     return f"dispatchproof_backup_{stamp}.zip"
 
+def sqlite_sidecar_paths(db_path):
+    return [
+        Path(str(db_path) + "-wal"),
+        Path(str(db_path) + "-shm"),
+        Path(str(db_path) + "-journal"),
+    ]
+
+def clear_sqlite_sidecars(db_path):
+    for sidecar in sqlite_sidecar_paths(db_path):
+        try:
+            if sidecar.exists():
+                sidecar.unlink()
+        except OSError:
+            pass
+
+def database_record_counts(db_path):
+    counts = {
+        "jobs": 0,
+        "readiness_confirmations": 0,
+        "mobilization_attempts": 0,
+        "email_events": 0,
+    }
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        quick = conn.execute("PRAGMA quick_check").fetchone()[0]
+        if quick != "ok":
+            raise sqlite3.DatabaseError(f"SQLite quick_check returned: {quick}")
+
+        for table, key in (
+            ("jobs", "jobs"),
+            ("readiness_confirmations", "readiness_confirmations"),
+            ("mobilization_attempts", "mobilization_attempts"),
+            ("email_events", "email_events"),
+        ):
+            try:
+                counts[key] = conn.execute(
+                    f"SELECT COUNT(*) AS c FROM {table}"
+                ).fetchone()["c"]
+            except sqlite3.DatabaseError:
+                counts[key] = 0
+    finally:
+        conn.close()
+
+    return counts
+
 def create_backup_archive():
     """Create a portable backup containing SQLite data and uploaded evidence."""
     temp_dir = Path(tempfile.mkdtemp(prefix="dispatchproof_backup_"))
     archive_path = temp_dir / backup_filename()
 
-    # Ask SQLite to checkpoint WAL before copying.
+    # Fully checkpoint the live WAL into the main DB file before copying.
     if DB_PATH.exists():
         try:
             with get_db() as db:
-                db.execute("PRAGMA wal_checkpoint(FULL)")
+                db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
                 db.commit()
         except Exception:
             pass
 
+    backup_counts = {
+        "jobs": 0,
+        "readiness_confirmations": 0,
+        "mobilization_attempts": 0,
+        "email_events": 0,
+        "uploaded_files": 0,
+    }
+
+    if DB_PATH.exists():
+        try:
+            backup_counts.update(database_record_counts(DB_PATH))
+        except Exception:
+            pass
+
+    if UPLOAD_DIR.exists():
+        backup_counts["uploaded_files"] = sum(
+            1 for p in UPLOAD_DIR.rglob("*") if p.is_file()
+        )
+
     metadata = {
         "product": PRODUCT_NAME,
-        "backup_format": 1,
+        "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "1.7.2",
+        "app_version": "1.7.2.1",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
+        "counts": backup_counts,
     }
 
     with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as z:
@@ -824,6 +891,7 @@ def validate_backup_zip(zip_path):
     try:
         with zipfile.ZipFile(zip_path, "r") as z:
             names = set(z.namelist())
+
             if "backup_manifest.json" not in names:
                 return False, "Backup manifest is missing."
 
@@ -834,7 +902,6 @@ def validate_backup_zip(zip_path):
             if "dispatchproof.db" not in names:
                 return False, "Backup database is missing."
 
-            # Basic zip-slip protection.
             for name in names:
                 path = Path(name)
                 if path.is_absolute() or ".." in path.parts:
@@ -847,40 +914,58 @@ def validate_backup_zip(zip_path):
         return False, f"Backup could not be validated: {exc}"
 
 def restore_backup_archive(zip_path):
-    """Atomically stage and restore database/uploads from a validated backup."""
+    """Stage, validate, restore, and verify a DispatchProof backup."""
     valid, error = validate_backup_zip(zip_path)
     if not valid:
-        return False, error
+        return False, error, None
 
     stage_dir = Path(tempfile.mkdtemp(prefix="dispatchproof_restore_"))
     try:
         with zipfile.ZipFile(zip_path, "r") as z:
             z.extractall(stage_dir)
+            try:
+                manifest = json.loads(
+                    z.read("backup_manifest.json").decode("utf-8")
+                )
+            except Exception:
+                manifest = {}
 
         staged_db = stage_dir / "dispatchproof.db"
         staged_uploads = stage_dir / "uploads"
 
-        # Open the staged DB to catch obviously corrupt SQLite files.
         try:
-            test = sqlite3.connect(staged_db)
-            test.execute("PRAGMA quick_check").fetchone()
-            test.close()
+            staged_counts = database_record_counts(staged_db)
         except Exception as exc:
-            return False, f"Backup database is not readable: {exc}"
+            return False, f"Backup database is not readable: {exc}", None
 
-        # Preserve current data until staged content has validated.
         safety_dir = Path(tempfile.mkdtemp(prefix="dispatchproof_pre_restore_"))
         old_db = safety_dir / "dispatchproof.db"
         old_uploads = safety_dir / "uploads"
 
         try:
+            # Preserve current state first.
             if DB_PATH.exists():
+                try:
+                    with get_db() as db:
+                        db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                        db.commit()
+                except Exception:
+                    pass
+
                 shutil.copy2(DB_PATH, old_db)
+
             if UPLOAD_DIR.exists():
                 shutil.copytree(UPLOAD_DIR, old_uploads)
 
             DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+            # Critical fix: remove stale SQLite journals before swapping DB files.
+            clear_sqlite_sidecars(DB_PATH)
+            if DB_PATH.exists():
+                DB_PATH.unlink()
+
             shutil.copy2(staged_db, DB_PATH)
+            clear_sqlite_sidecars(DB_PATH)
 
             if UPLOAD_DIR.exists():
                 shutil.rmtree(UPLOAD_DIR)
@@ -893,31 +978,65 @@ def restore_backup_archive(zip_path):
                         dest.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copy2(p, dest)
 
-            # Apply any schema migrations required by the current version.
+            # Migrate restored DB forward if needed.
             init_db()
 
+            try:
+                with get_db() as db:
+                    db.execute("PRAGMA wal_checkpoint(FULL)")
+                    db.commit()
+            except Exception:
+                pass
+
+            live_counts = database_record_counts(DB_PATH)
+
+            expected_jobs = staged_counts.get("jobs", 0)
+            actual_jobs = live_counts.get("jobs", 0)
+            if actual_jobs != expected_jobs:
+                raise RuntimeError(
+                    f"Restore verification failed: backup had {expected_jobs} job(s), "
+                    f"but live database has {actual_jobs}."
+                )
+
             shutil.rmtree(safety_dir, ignore_errors=True)
-            return True, None
+            return True, None, {
+                "backup_counts": staged_counts,
+                "live_counts": live_counts,
+                "manifest_counts": manifest.get("counts") or {},
+            }
 
         except Exception as exc:
-            # Best-effort rollback.
+            # Roll back to prior live data.
             try:
+                clear_sqlite_sidecars(DB_PATH)
+                if DB_PATH.exists():
+                    DB_PATH.unlink()
+
                 if old_db.exists():
                     shutil.copy2(old_db, DB_PATH)
+
+                clear_sqlite_sidecars(DB_PATH)
+
                 if UPLOAD_DIR.exists():
                     shutil.rmtree(UPLOAD_DIR)
                 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
                 if old_uploads.exists():
                     for p in old_uploads.rglob("*"):
                         if p.is_file():
                             dest = UPLOAD_DIR / p.relative_to(old_uploads)
                             dest.parent.mkdir(parents=True, exist_ok=True)
                             shutil.copy2(p, dest)
+
+                init_db()
             except Exception:
                 pass
-            return False, f"Restore failed and current data was preserved when possible: {exc}"
+
+            return False, f"Restore failed; current data was preserved when possible: {exc}", None
+
         finally:
             shutil.rmtree(safety_dir, ignore_errors=True)
+
     finally:
         shutil.rmtree(stage_dir, ignore_errors=True)
 
@@ -929,7 +1048,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "1.7.2",
+        "app_version": "1.7.2.1",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -1008,7 +1127,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "1.7.2",
+        "version": "1.7.2.1",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -1093,7 +1212,7 @@ def restore_backup():
     uploaded.save(temp_zip)
 
     try:
-        ok, error = restore_backup_archive(temp_zip)
+        ok, error, restore_info = restore_backup_archive(temp_zip)
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -1101,7 +1220,11 @@ def restore_backup():
         flash(error or "Backup restore failed.")
         return redirect(url_for("backup_restore"))
 
-    flash("Backup restored successfully. Jobs, history, Email Outbox data, and uploaded evidence were restored.")
+    restored_jobs = (restore_info or {}).get("live_counts", {}).get("jobs", 0)
+    flash(
+        f"Backup restored and verified: {restored_jobs} job(s) restored, "
+        "along with history, Email Outbox data, and uploaded evidence."
+    )
     return redirect(url_for("dashboard"))
 
 @app.route("/")
