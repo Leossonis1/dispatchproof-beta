@@ -42,3 +42,25 @@ Restore validates and stages the backup before replacing current beta data.
 This backup approach is meant for the current free beta. It is not a replacement
 for durable hosted storage. Later we should move to PostgreSQL/object storage or
 a persistent disk.
+
+
+## V1.7.1 — Field Photo Capture
+
+Phone users now get two clear photo actions:
+
+- **Take Photo** — requests the device camera, preferring the rear/environment camera
+- **Choose Existing Photos** — selects one or more images already on the device
+
+Selected images are accumulated into the same form submission and display:
+
+- live thumbnail previews
+- individual Remove buttons
+- photo-count status
+- "requirement met" state when the minimum is satisfied
+
+Site readiness requires at least 2 photos.
+
+Installer Arrival keeps photos optional when Site Ready is selected, but dynamically
+changes to a 2-photo minimum when Site Not Ready / failed mobilization is selected.
+
+No native mobile app is required; this uses standard browser camera/file capabilities.

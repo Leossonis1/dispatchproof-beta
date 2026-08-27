@@ -477,3 +477,146 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(15,98,254,.12);bo
 @media(max-width:760px){
   .backup-steps{grid-template-columns:1fr}
 }
+
+
+/* DispatchProof V1.7.1 field photo capture */
+.field-photo-capture{
+  border:1px dashed #c5d1e3;
+  border-radius:12px;
+  background:#f8fafc;
+  padding:14px;
+  margin-top:12px;
+}
+.field-photo-actions{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+.field-photo-action{
+  position:relative;
+  min-height:70px;
+  border:1px solid #cad5e5;
+  border-radius:10px;
+  background:#fff;
+  padding:12px 14px;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  cursor:pointer;
+  transition:border-color .15s ease, box-shadow .15s ease, transform .05s ease;
+}
+.field-photo-action:hover{
+  border-color:#0f62fe;
+  box-shadow:0 0 0 3px rgba(15,98,254,.08);
+}
+.field-photo-action:active{transform:translateY(1px)}
+.field-photo-action input{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  opacity:0;
+  cursor:pointer;
+}
+.field-photo-action>span:nth-child(2){
+  display:grid;
+  gap:3px;
+  min-width:0;
+}
+.field-photo-action strong{
+  font-size:13px;
+  color:#101828;
+}
+.field-photo-action small{
+  font-size:11px;
+  color:#667085;
+  font-weight:500;
+}
+.field-photo-action-icon{
+  flex:0 0 auto;
+  width:36px;
+  height:36px;
+  border-radius:10px;
+  background:#eaf2ff;
+  color:#0f62fe;
+  display:grid;
+  place-items:center;
+  font-size:13px;
+  font-weight:900;
+}
+.camera-action .field-photo-action-icon{
+  border:3px solid #0f62fe;
+  background:#fff;
+  box-sizing:border-box;
+}
+.gallery-icon{font-size:16px}
+.field-photo-status{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-top:12px;
+  padding:9px 11px;
+  border-radius:8px;
+  background:#eef2f7;
+  color:#667085;
+  font-size:12px;
+  font-weight:700;
+}
+.photo-requirement-met .field-photo-status{
+  background:#eaf8ef;
+  color:#08783e;
+}
+.field-photo-preview{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(135px,1fr));
+  gap:10px;
+  margin-top:12px;
+}
+.field-photo-preview:empty{display:none}
+.field-photo-card{
+  position:relative;
+  overflow:hidden;
+  border:1px solid #d7dfeb;
+  border-radius:10px;
+  background:#fff;
+  aspect-ratio:4/3;
+}
+.field-photo-card img{
+  display:block;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+.field-photo-remove{
+  position:absolute;
+  right:7px;
+  bottom:7px;
+  border:1px solid rgba(255,255,255,.75);
+  border-radius:7px;
+  background:rgba(16,24,40,.82);
+  color:#fff;
+  padding:6px 8px;
+  font:inherit;
+  font-size:10px;
+  font-weight:800;
+  cursor:pointer;
+}
+.field-photo-remove:hover{background:#101828}
+.noscript-photo-label{
+  display:grid;
+  gap:8px;
+  margin-top:12px;
+  font-size:12px;
+  font-weight:700;
+}
+.photo-capture-fallback .field-photo-status::after{
+  content:"Use the buttons above to select photos.";
+  font-weight:500;
+}
+
+@media(max-width:640px){
+  .field-photo-actions{grid-template-columns:1fr}
+  .field-photo-action{min-height:64px}
+  .field-photo-preview{grid-template-columns:repeat(2,1fr)}
+}

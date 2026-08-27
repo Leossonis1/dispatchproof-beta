@@ -801,7 +801,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 1,
         "created_at": now_iso(),
-        "app_version": "1.7",
+        "app_version": "1.7.1",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
     }
@@ -1006,7 +1006,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "1.7",
+        "version": "1.7.1",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),

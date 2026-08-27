@@ -75,8 +75,42 @@
   <div class="section-break">
     <h2>Arrival Photos</h2>
     <p id="arrivalPhotoHelp">Photograph the actual site condition before work begins or the crew leaves.</p>
-    <input class="file-input" id="arrivalPhotos" type="file" name="arrival_photos" accept="image/*" multiple>
-    <div class="photo-preview-grid" id="arrivalPhotoPreview"></div>
+
+    <div class="field-photo-capture" id="arrivalPhotoCapture" data-photo-capture data-min="0">
+      <div class="field-photo-actions">
+        <label class="field-photo-action camera-action">
+          <span class="field-photo-action-icon">●</span>
+          <span>
+            <strong>Take Photo</strong>
+            <small>Open the phone camera</small>
+          </span>
+          <input class="photo-camera-input" type="file" accept="image/*" capture="environment">
+        </label>
+
+        <label class="field-photo-action">
+          <span class="field-photo-action-icon gallery-icon">▣</span>
+          <span>
+            <strong>Choose Existing Photos</strong>
+            <small>Select from this device</small>
+          </span>
+          <input class="photo-gallery-input" type="file" accept="image/*" multiple>
+        </label>
+      </div>
+
+      <input class="photo-submit-input" id="arrivalPhotos" type="file" name="arrival_photos" accept="image/*" multiple hidden>
+
+      <div class="field-photo-status">
+        <span class="field-photo-counter">No photos added yet</span>
+      </div>
+
+      <div class="field-photo-preview" aria-live="polite"></div>
+
+      <noscript>
+        <label class="noscript-photo-label">Choose arrival photos
+          <input class="file-input" type="file" name="arrival_photos" accept="image/*" multiple>
+        </label>
+      </noscript>
+    </div>
   </div>
 
   <div class="form-actions">
@@ -85,14 +119,14 @@
   </div>
 </form>
 
+<script src="{{ url_for('static', filename='photo_capture.js') }}"></script>
 <script>
 const radios = document.querySelectorAll('input[name="arrival_status"]');
 const notReady = document.getElementById('notReadyFields');
 const readyChoice = document.getElementById('readyChoice');
 const failedChoice = document.getElementById('failedChoice');
 const photoHelp = document.getElementById('arrivalPhotoHelp');
-const arrivalPhotos = document.getElementById('arrivalPhotos');
-const arrivalPreview = document.getElementById('arrivalPhotoPreview');
+const arrivalPhotoRoot = document.getElementById('arrivalPhotoCapture');
 
 function refreshArrivalFields() {
   const selected = document.querySelector('input[name="arrival_status"]:checked');
@@ -103,29 +137,18 @@ function refreshArrivalFields() {
     notReady.classList.add('show');
     failedChoice.classList.add('selected-failed');
     photoHelp.innerHTML = '<strong>Minimum 2 photos required for a failed mobilization.</strong> Photograph the actual site condition before the crew leaves.';
+    if (arrivalPhotoRoot.photoCapture) arrivalPhotoRoot.photoCapture.setMinimum(2);
   } else {
     notReady.classList.remove('show');
     if (selected && selected.value === 'READY') {
       readyChoice.classList.add('selected-ready');
     }
     photoHelp.textContent = 'Photograph the actual site condition before work begins. Photos are optional when the site is ready.';
+    if (arrivalPhotoRoot.photoCapture) arrivalPhotoRoot.photoCapture.setMinimum(0);
   }
 }
 
-function previewFiles(input, container) {
-  container.innerHTML = '';
-  Array.from(input.files).forEach(file => {
-    if (!file.type.startsWith('image/')) return;
-    const img = document.createElement('img');
-    img.alt = file.name;
-    img.src = URL.createObjectURL(file);
-    img.onload = () => URL.revokeObjectURL(img.src);
-    container.appendChild(img);
-  });
-}
-
 radios.forEach(r => r.addEventListener('change', refreshArrivalFields));
-arrivalPhotos.addEventListener('change', () => previewFiles(arrivalPhotos, arrivalPreview));
 
 document.getElementById('arrivalForm').addEventListener('submit', (e) => {
   const selected = document.querySelector('input[name="arrival_status"]:checked');
@@ -136,9 +159,10 @@ document.getElementById('arrivalForm').addEventListener('submit', (e) => {
       alert('Select at least one reason the site was not ready.');
       return;
     }
-    if (arrivalPhotos.files.length < 2) {
+    const capture = arrivalPhotoRoot.photoCapture;
+    if (!capture || capture.count() < 2) {
       e.preventDefault();
-      alert('Please upload at least 2 arrival photos for a failed mobilization.');
+      alert('Please add at least 2 arrival photos for a failed mobilization.');
     }
   }
 });

@@ -1,2 +1,2 @@
-DispatchProof Version 1.7 - Backup & Branding
-Portable beta backup/restore plus DispatchProof branding polish.
+DispatchProof Version 1.7.1 - Field Photo Capture
+Direct phone camera capture, gallery selection, thumbnails, removal, and photo-count validation.

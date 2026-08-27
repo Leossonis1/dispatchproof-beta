@@ -5,6 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Site Readiness Confirmation · DispatchProof</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
 <body class="public-body">
@@ -46,10 +47,44 @@
         </div>
 
         <div class="public-section">
-          <h2>2. Upload site photos</h2>
+          <h2>2. Site photos</h2>
           <p><strong>Minimum 2 photos required.</strong> Show the installation area and delivery/access route.</p>
-          <input class="file-input" id="readinessPhotos" type="file" name="photos" accept="image/*" multiple required>
-          <div class="photo-preview-grid" id="readinessPhotoPreview"></div>
+
+          <div class="field-photo-capture" id="readinessPhotoCapture" data-photo-capture data-min="2">
+            <div class="field-photo-actions">
+              <label class="field-photo-action camera-action">
+                <span class="field-photo-action-icon">●</span>
+                <span>
+                  <strong>Take Photo</strong>
+                  <small>Open the phone camera</small>
+                </span>
+                <input class="photo-camera-input" type="file" accept="image/*" capture="environment">
+              </label>
+
+              <label class="field-photo-action">
+                <span class="field-photo-action-icon gallery-icon">▣</span>
+                <span>
+                  <strong>Choose Existing Photos</strong>
+                  <small>Select from this device</small>
+                </span>
+                <input class="photo-gallery-input" type="file" accept="image/*" multiple>
+              </label>
+            </div>
+
+            <input class="photo-submit-input" id="readinessPhotos" type="file" name="photos" accept="image/*" multiple hidden>
+
+            <div class="field-photo-status">
+              <span class="field-photo-counter">0 of 2 required photos added</span>
+            </div>
+
+            <div class="field-photo-preview" aria-live="polite"></div>
+
+            <noscript>
+              <label class="noscript-photo-label">Choose at least 2 photos
+                <input class="file-input" type="file" name="photos" accept="image/*" multiple required>
+              </label>
+            </noscript>
+          </div>
         </div>
 
         <div class="public-section">
@@ -71,27 +106,13 @@
     <p class="public-foot">No account required · Secured by DispatchProof</p>
   </main>
 
+<script src="{{ url_for('static', filename='photo_capture.js') }}"></script>
 <script>
-function previewFiles(input, container) {
-  container.innerHTML = '';
-  Array.from(input.files).forEach(file => {
-    if (!file.type.startsWith('image/')) return;
-    const img = document.createElement('img');
-    img.alt = file.name;
-    img.src = URL.createObjectURL(file);
-    img.onload = () => URL.revokeObjectURL(img.src);
-    container.appendChild(img);
-  });
-}
-
-const readinessPhotos = document.getElementById('readinessPhotos');
-const readinessPreview = document.getElementById('readinessPhotoPreview');
-readinessPhotos.addEventListener('change', () => previewFiles(readinessPhotos, readinessPreview));
-
 document.getElementById('readinessForm').addEventListener('submit', (e) => {
-  if (readinessPhotos.files.length < 2) {
+  const capture = document.getElementById('readinessPhotoCapture').photoCapture;
+  if (!capture || capture.count() < 2) {
     e.preventDefault();
-    alert('Please upload at least 2 site photos.');
+    alert('Please add at least 2 site photos.');
   }
 });
 </script>
