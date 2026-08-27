@@ -228,3 +228,17 @@ preserves both the company settings and company logo.
 
 The logo is exposed publicly through a dedicated `/branding/logo` endpoint only.
 The general evidence/upload folder remains protected by the existing admin login.
+
+
+## V2.0.1 — Sidebar Brand Polish
+
+Long company names in the left sidebar now wrap naturally instead of being
+truncated with an ellipsis.
+
+The company identity remains compact by:
+
+- using a slightly smaller brand-name type size
+- aligning the logo/checkmark with the first line
+- allowing multi-line company names
+- keeping the DispatchProof attribution smaller beneath the company name
+- preserving the full company name in the hover title

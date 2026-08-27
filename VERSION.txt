@@ -1,2 +1,2 @@
-DispatchProof Version 2.0 - Company Branding
-Adds protected company settings, logo, contact details, and configurable customer-facing branding.
+DispatchProof Version 2.0.1 - Sidebar Brand Polish
+Long company names now wrap cleanly in the sidebar instead of truncating with ellipses.

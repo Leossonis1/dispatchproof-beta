@@ -10,7 +10,7 @@ body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSy
 a{text-decoration:none;color:inherit}
 .app-shell{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
 .sidebar{background:var(--navy);color:white;padding:24px 16px;display:flex;flex-direction:column}
-.brand{font-size:22px;font-weight:800;display:flex;gap:10px;align-items:center;padding:0 8px 28px}
+.brand{font-size:22px;font-weight:800;display:flex;gap:10px;align-items:flex-start;padding:0 8px 28px}
 .brand-mark{width:34px;height:34px;border-radius:9px;background:var(--blue);display:grid;place-items:center}
 .sidebar nav{display:grid;gap:6px}
 .sidebar nav a{padding:12px 14px;border-radius:8px;color:#d7e2f5}
@@ -754,8 +754,8 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(15,98,254,.12);bo
   color:var(--brand-accent, #0f62fe);
 }
 .sidebar-company-logo{
-  width:32px;
-  height:32px;
+  width:34px;
+  height:34px;
   flex:0 0 auto;
   object-fit:contain;
   border-radius:8px;
@@ -765,18 +765,22 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(15,98,254,.12);bo
 }
 .brand-name-stack{
   display:grid;
-  line-height:1.05;
+  line-height:1.08;
   min-width:0;
+  flex:1 1 auto;
+  padding-top:2px;
 }
 .brand-name-stack strong{
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
+  white-space:normal;
+  overflow-wrap:anywhere;
+  word-break:normal;
+  font-size:19px;
+  line-height:1.08;
 }
 .brand-name-stack small{
-  margin-top:4px;
+  margin-top:5px;
   color:#a9c2e7;
-  font-size:9px;
+  font-size:8px;
   letter-spacing:.08em;
   text-transform:uppercase;
 }
@@ -892,4 +896,12 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(15,98,254,.12);bo
 @media(max-width:760px){
   .settings-grid{grid-template-columns:1fr}
   .settings-save-panel{align-items:stretch;flex-direction:column}
+}
+
+
+/* DispatchProof V2.0.1 sidebar brand polish */
+@media(max-width:900px){
+  .brand-name-stack strong{
+    font-size:18px;
+  }
 }
