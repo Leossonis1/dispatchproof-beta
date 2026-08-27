@@ -1,2 +1,2 @@
-DispatchProof Version 1.9 - Job Lifecycle
-Adds On Site and Completed states plus permanent Completed Jobs history.
+DispatchProof Version 2.0 - Company Branding
+Adds protected company settings, logo, contact details, and configurable customer-facing branding.

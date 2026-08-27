@@ -7,10 +7,15 @@
   <title>Site Readiness Confirmation · DispatchProof</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <style>:root{--brand-accent: {{ company_accent_color }};}</style>
 </head>
 <body class="public-body">
   <main class="public-shell">
-    <div class="public-brand">{{ company_name }} <span>· powered by DispatchProof</span></div>
+    <div class="public-brand public-company-brand">
+      {% if company_logo_url %}<img src="{{ company_logo_url }}" alt="{{ company_name }} logo">{% endif %}
+      <strong>{{ company_name }}</strong>
+      <span>· powered by DispatchProof</span>
+    </div>
 
     {% with messages = get_flashed_messages() %}
       {% if messages %}
@@ -103,7 +108,7 @@
         <button class="btn primary wide" type="submit">Submit Confirmation</button>
       </form>
     </section>
-    <p class="public-foot">No account required · Secured by DispatchProof</p>
+    <p class="public-foot">No account required · Powered by DispatchProof</p>
   </main>
 
 <script src="{{ url_for('static', filename='photo_capture.js') }}"></script>

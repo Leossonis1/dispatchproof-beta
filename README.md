@@ -202,3 +202,29 @@ Completed jobs are view-only evidence records. They are not deleted.
 
 Older successful V1.8 arrivals that were stored as READY are migrated to
 ON SITE automatically when V1.9 initializes the database.
+
+
+## V2.0 — Company Settings & Branding
+
+DispatchProof now has a protected **Company Settings** page where an admin can set:
+
+- company name
+- tagline / department label
+- contact email
+- contact phone
+- website
+- accent color
+- company logo
+
+The company identity is shown in the internal sidebar/login and on the public
+readiness/installer workflow. DispatchProof remains visible as the product
+attribution ("Powered by DispatchProof").
+
+The failed-mobilization report uses the configured company name/logo as well.
+
+The settings record lives in the same SQLite database as jobs, and the logo lives
+in DispatchProof's managed uploads folder. Existing Backup & Restore therefore
+preserves both the company settings and company logo.
+
+The logo is exposed publicly through a dedicated `/branding/logo` endpoint only.
+The general evidence/upload folder remains protected by the existing admin login.

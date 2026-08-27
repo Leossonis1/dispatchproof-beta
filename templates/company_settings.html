@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Company Settings · DispatchProof{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">Settings</div>
+    <h1>Company Settings</h1>
+    <p>Choose the company identity shown to office staff, site contacts, installers, and in DispatchProof reports and email previews.</p>
+  </div>
+</div>
+
+<form method="post" enctype="multipart/form-data">
+  <div class="settings-grid">
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Company Identity</h2>
+          <p>Your operating company is the primary brand. DispatchProof remains the product attribution.</p>
+        </div>
+      </div>
+
+      <div class="form-stack">
+        <label>Company Name
+          <input required name="company_name" value="{{ settings.company_name or '' }}" placeholder="Acme Installations">
+        </label>
+
+        <label>Tagline / Department Label
+          <input name="company_tagline" value="{{ settings.company_tagline or '' }}" placeholder="Installation Operations">
+        </label>
+
+        <label>Contact Email
+          <input type="email" name="contact_email" value="{{ settings.contact_email or '' }}" placeholder="install@company.com">
+        </label>
+
+        <label>Contact Phone
+          <input name="contact_phone" value="{{ settings.contact_phone or '' }}" placeholder="555-555-5555">
+        </label>
+
+        <label>Website
+          <input name="website" value="{{ settings.website or '' }}" placeholder="https://company.com">
+        </label>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Logo & Accent</h2>
+          <p>A square or horizontal PNG/JPG works best. WEBP is also supported.</p>
+        </div>
+      </div>
+
+      <div class="brand-preview-card" style="--preview-accent: {{ settings.accent_color or '#0f62fe' }}">
+        {% if settings.logo_filename %}
+          <img class="brand-preview-logo" src="{{ url_for('company_logo') }}" alt="{{ settings.company_name }} logo">
+        {% else %}
+          <div class="brand-preview-placeholder">✓</div>
+        {% endif %}
+        <div>
+          <strong>{{ settings.company_name or 'Your Company' }}</strong>
+          <span>{{ settings.company_tagline or 'Installation Operations' }}</span>
+          <small>Powered by DispatchProof</small>
+        </div>
+      </div>
+
+      <div class="form-stack">
+        <label>Company Logo
+          <input type="file" name="company_logo" accept="image/png,image/jpeg,image/webp">
+        </label>
+
+        {% if settings.logo_filename %}
+        <label class="inline-check">
+          <input type="checkbox" name="remove_logo" value="1">
+          <span>Remove current logo</span>
+        </label>
+        {% endif %}
+
+        <label>Accent Color
+          <div class="color-row">
+            <input type="color" id="accentColorPicker" value="{{ settings.accent_color or '#0f62fe' }}">
+            <input name="accent_color" id="accentColorText" value="{{ settings.accent_color or '#0f62fe' }}" pattern="#[0-9A-Fa-f]{6}">
+          </div>
+          <small>Used for branded buttons and highlights.</small>
+        </label>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel settings-save-panel">
+    <div>
+      <strong>Save company branding</strong>
+      <p>Changes apply immediately after saving.</p>
+    </div>
+    <button class="btn primary" type="submit">Save Company Settings</button>
+  </section>
+</form>
+
+<script>
+const picker = document.getElementById('accentColorPicker');
+const text = document.getElementById('accentColorText');
+if (picker && text) {
+  picker.addEventListener('input', () => text.value = picker.value);
+  text.addEventListener('input', () => {
+    if (/^#[0-9a-fA-F]{6}$/.test(text.value)) picker.value = text.value;
+  });
+}
+</script>
+{% endblock %}

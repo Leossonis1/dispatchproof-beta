@@ -7,12 +7,17 @@
   <title>Admin Sign In · DispatchProof</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <style>:root{--brand-accent: {{ company_accent_color }};}</style>
 </head>
 <body class="login-body">
   <main class="login-shell">
     <div class="login-brand">
-      <div class="brand-mark">✓</div>
-      <strong>{{ product_name }}</strong>
+      {% if company_logo_url %}
+        <img class="login-company-logo" src="{{ company_logo_url }}" alt="{{ company_name }} logo">
+      {% else %}
+        <div class="brand-mark">✓</div>
+      {% endif %}
+      <strong>{{ company_name }}</strong>
     </div>
 
     <section class="login-card">
@@ -54,8 +59,9 @@
       {% endif %}
 
       <div class="login-brand-footer">
-        <strong>{{ product_name }}</strong>
-        <span>{{ product_subtag }}</span>
+        <strong>{{ company_name }}</strong>
+        <span>{{ company_tagline or product_tagline }}</span>
+        <small>Powered by DispatchProof</small>
       </div>
       <p class="login-foot">Public site-readiness links do not require this login.</p>
     </section>

@@ -6,10 +6,15 @@
   <title>Arrival Not Available · DispatchProof</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <style>:root{--brand-accent: {{ company_accent_color }};}</style>
 </head>
 <body class="public-body">
   <main class="public-shell compact">
-    <div class="public-brand">DispatchProof <span>· secure field link</span></div>
+    <div class="public-brand public-company-brand">
+      {% if company_logo_url %}<img src="{{ company_logo_url }}" alt="{{ company_name }} logo">{% endif %}
+      <strong>{{ company_name }}</strong>
+      <span>· powered by DispatchProof</span>
+    </div>
     <section class="public-card center">
       <div class="waiting-icon">…</div>
       <div class="eyebrow">Installer Arrival</div>
@@ -21,7 +26,7 @@
         <span>Scheduled {{ job['installation_date']|pretty_date }}</span>
       </div>
     </section>
-    <p class="public-foot">No account required · Secured by DispatchProof</p>
+    <p class="public-foot">No account required · Powered by DispatchProof</p>
   </main>
 </body>
 </html>

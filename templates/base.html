@@ -7,19 +7,28 @@
   <title>{% block title %}DispatchProof{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <style>:root{--brand-accent: {{ company_accent_color }};}</style>
 </head>
 <body>
 <div class="app-shell">
   <aside class="sidebar">
     <div class="brand">
-      <div class="brand-mark">✓</div>
-      <div>{{ product_name }}</div>
+      {% if company_logo_url %}
+        <img class="sidebar-company-logo" src="{{ company_logo_url }}" alt="{{ company_name }} logo">
+      {% else %}
+        <div class="brand-mark">✓</div>
+      {% endif %}
+      <div class="brand-name-stack">
+        <strong>{{ company_name }}</strong>
+        {% if company_name != product_name %}<small>DispatchProof</small>{% endif %}
+      </div>
     </div>
     <nav>
       <a class="{% if request.path == '/' %}active{% endif %}" href="{{ url_for('dashboard') }}">Dashboard</a>
       <a class="{% if request.path == '/jobs/new' %}active{% endif %}" href="{{ url_for('new_job') }}">New Job</a>
       <a class="{% if request.path == '/completed' %}active{% endif %}" href="{{ url_for('completed_jobs') }}">Completed Jobs</a>
       <a class="{% if request.path.startswith('/email-outbox') %}active{% endif %}" href="{{ url_for('email_outbox') }}">Email Outbox</a>
+      <a class="{% if request.path.startswith('/settings/company') %}active{% endif %}" href="{{ url_for('company_settings') }}">Company Settings</a>
       <a class="{% if request.path.startswith('/backup') %}active{% endif %}" href="{{ url_for('backup_restore') }}">Backup & Restore</a>
     </nav>
     <div class="sidebar-bottom">
@@ -33,8 +42,8 @@
       </div>
       {% endif %}
       <div class="sidebar-note">
-        {{ product_tagline }}<br>
-        <span>{{ product_subtag }}</span>
+        {{ company_tagline or product_tagline }}<br>
+        <span>Powered by DispatchProof</span>
         <br><small class="version-label">Version {{ app_version }}</small>
       </div>
     </div>
