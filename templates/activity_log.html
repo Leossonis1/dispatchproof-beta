@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Activity Log · DispatchProof{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">Audit Trail</div>
+    <h1>Activity Log</h1>
+    <p>See who changed DispatchProof, what happened, and when it happened.</p>
+  </div>
+</div>
+
+<div class="activity-notice">
+  <div class="activity-notice-icon">✓</div>
+  <div>
+    <strong>Audit tracking is on.</strong>
+    <span>Activity begins with V2.3. Earlier readiness and mobilization evidence remains preserved in each job's existing history.</span>
+  </div>
+</div>
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Recent Activity</h2>
+      <p>Showing the most recent {{ events|length }} event{{ '' if events|length == 1 else 's' }}.</p>
+    </div>
+  </div>
+
+  {% if events %}
+  <div class="activity-list">
+    {% for event in events %}
+    <article class="activity-row">
+      <div class="activity-marker"></div>
+      <div class="activity-main">
+        <div class="activity-row-head">
+          <strong>{{ event['action'] }}</strong>
+          <span>{{ event['created_at']|pretty_datetime }}</span>
+        </div>
+        <p>{{ event['description'] or 'Activity recorded.' }}</p>
+        <div class="activity-meta">
+          <span class="activity-actor">{{ event['actor_name'] }}</span>
+          <span class="activity-type">{{ event['actor_type'] }}</span>
+          {% if event['job_id'] and event['job_name'] %}
+            <a href="{{ url_for('job_detail', job_id=event['job_id']) }}">
+              {{ event['job_name'] }}{% if event['project_site'] %} · {{ event['project_site'] }}{% endif %}
+            </a>
+          {% else %}
+            <span>DispatchProof</span>
+          {% endif %}
+        </div>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+    <div class="empty compact-empty">
+      <div class="empty-icon">✓</div>
+      <h3>No activity yet</h3>
+      <p>New actions will appear here automatically.</p>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

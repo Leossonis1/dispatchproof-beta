@@ -294,6 +294,38 @@
 </section>
 {% endif %}
 
+
+{% if activity_events %}
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="eyebrow">Audit Trail</div>
+      <h2>Job Activity</h2>
+      <p>Who acted on this job and when. Readiness and mobilization evidence remains preserved separately above.</p>
+    </div>
+  </div>
+
+  <div class="activity-list job-activity-list">
+    {% for event in activity_events %}
+    <article class="activity-row">
+      <div class="activity-marker"></div>
+      <div class="activity-main">
+        <div class="activity-row-head">
+          <strong>{{ event['action'] }}</strong>
+          <span>{{ event['created_at']|pretty_datetime }}</span>
+        </div>
+        <p>{{ event['description'] or 'Activity recorded.' }}</p>
+        <div class="activity-meta">
+          <span class="activity-actor">{{ event['actor_name'] }}</span>
+          <span class="activity-type">{{ event['actor_type'] }}</span>
+        </div>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 <script>
 function legacyCopyText(text) {
   const area = document.createElement('textarea');

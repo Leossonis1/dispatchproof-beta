@@ -345,3 +345,63 @@ Protection rules remain in place:
 
 The existing administrator password-reset control remains available for account
 recovery, while users can now handle normal password changes themselves.
+
+
+## V2.3 — Activity Log
+
+DispatchProof now records an audit trail so multi-user actions have clear
+accountability.
+
+### Global Activity Log
+
+Owners and Administrators have a new **Activity Log** page showing the latest
+300 events with:
+
+- action
+- date/time
+- actor name
+- actor type / access level
+- job link when the event belongs to a job
+- human-readable description
+
+Operations users do not receive access to the global administrative log.
+
+### Per-job activity
+
+Every internal user can see **Job Activity** on a job detail page. This timeline
+shows who acted on that job and when, while the existing confirmation and
+mobilization histories continue to preserve the actual evidence.
+
+### Tracked V2.3 actions
+
+The audit trail records important changes including:
+
+- job created
+- readiness request generated
+- readiness reminder generated
+- site-contact readiness submitted
+- site ready on arrival
+- failed mobilization recorded
+- job completed
+- new confirmation / next mobilization started
+- user added or edited
+- user access enabled / disabled
+- user role changed
+- administrator password reset
+- self-service password change
+- company settings changed
+- backup downloaded
+- backup restored
+
+Passwords, secret values, and public tokens are never written to the activity
+description.
+
+### Upgrade history
+
+V2.3 begins tracking at the time it is installed. It does not invent activity
+records for older actions. Existing pre-V2.3 readiness confirmations,
+mobilization attempts, reports, email events, photos, and completion evidence
+remain preserved exactly as before.
+
+Activity records live in SQLite and are automatically included in normal
+DispatchProof backups.

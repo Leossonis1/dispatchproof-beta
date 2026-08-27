@@ -1162,3 +1162,122 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(15,98,254,.12);bo
     grid-template-columns:1fr;
   }
 }
+
+
+/* DispatchProof V2.3 Activity Log */
+.activity-notice{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  border:1px solid #cce6d6;
+  background:#f3fbf6;
+  border-radius:11px;
+  padding:14px 16px;
+  margin-bottom:18px;
+}
+.activity-notice-icon{
+  display:grid;
+  place-items:center;
+  flex:0 0 34px;
+  height:34px;
+  border-radius:50%;
+  background:#e5f7ec;
+  color:#027a48;
+  font-size:18px;
+  font-weight:900;
+}
+.activity-notice>div:last-child{
+  display:grid;
+  gap:2px;
+}
+.activity-notice span{
+  color:#667085;
+  font-size:12px;
+}
+.activity-list{
+  position:relative;
+  display:grid;
+}
+.activity-row{
+  position:relative;
+  display:grid;
+  grid-template-columns:18px 1fr;
+  gap:10px;
+  padding:13px 0;
+}
+.activity-row:not(:last-child){
+  border-bottom:1px solid #edf0f5;
+}
+.activity-marker{
+  width:9px;
+  height:9px;
+  margin-top:6px;
+  border-radius:50%;
+  background:var(--brand-accent, #0f62fe);
+  box-shadow:0 0 0 4px #eef4ff;
+}
+.activity-main{
+  min-width:0;
+}
+.activity-row-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:14px;
+}
+.activity-row-head strong{
+  color:#101828;
+  font-size:13px;
+}
+.activity-row-head>span{
+  flex:0 0 auto;
+  color:#667085;
+  font-size:10px;
+}
+.activity-main p{
+  margin:4px 0 8px;
+  color:#475467;
+  font-size:12px;
+  line-height:1.45;
+}
+.activity-meta{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  flex-wrap:wrap;
+  color:#667085;
+  font-size:10px;
+}
+.activity-actor{
+  color:#344054;
+  font-weight:800;
+}
+.activity-type{
+  display:inline-flex;
+  align-items:center;
+  border-radius:999px;
+  padding:3px 6px;
+  background:#f2f4f7;
+  color:#475467;
+  font-size:8px;
+  font-weight:900;
+  letter-spacing:.04em;
+}
+.activity-meta a{
+  color:#175cd3;
+  font-weight:700;
+  text-decoration:none;
+}
+.activity-meta a:hover{
+  text-decoration:underline;
+}
+.job-activity-list .activity-row:first-child{
+  padding-top:4px;
+}
+
+@media(max-width:620px){
+  .activity-row-head{
+    flex-direction:column;
+    gap:3px;
+  }
+}

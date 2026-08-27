@@ -32,8 +32,9 @@
       <div><dt>Readiness Responses</dt><dd>{{ counts.readiness_responses }}</dd></div>
       <div><dt>Mobilization Attempts</dt><dd>{{ counts.mobilization_attempts }}</dd></div>
       <div><dt>Outbox Messages</dt><dd>{{ counts.outbox_messages }}</dd></div>
+      <div><dt>Activity Events</dt><dd>{{ counts.activity_events }}</dd></div>
       <div><dt>Uploaded Files</dt><dd>{{ upload_count }}</dd></div>
-      <div><dt>Backup Includes</dt><dd>Jobs · History · Outbox · Evidence</dd></div>
+      <div><dt>Backup Includes</dt><dd>Jobs · History · Users · Activity · Outbox · Evidence</dd></div>
     </dl>
 
     <a class="btn primary wide" href="{{ url_for('download_backup') }}">Download Backup ZIP</a>

@@ -1,2 +1,2 @@
-DispatchProof Version 2.2 - User Account Polish
-Adds self-service password changes and full administrator editing for additional users.
+DispatchProof Version 2.3 - Activity Log
+Adds a multi-user audit trail with global administrator activity and per-job timelines.
