@@ -1639,7 +1639,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.9",
+        "app_version": "2.10",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -1867,7 +1867,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.9",
+        "app_version": "2.10",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2010,7 +2010,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.9",
+        "version": "2.10",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -3253,11 +3253,19 @@ def new_job():
 
         reminder_enabled = 1 if request.form.get("reminder_enabled") == "on" else 0
         reminder_hours_before = int(request.form.get("reminder_hours_before") or DEFAULT_REMINDER_HOURS_BEFORE)
+        duplicate_source_id = normalize_optional_id(request.form.get("duplicate_source_id"))
 
         token = secrets.token_urlsafe(18)
         arrival_token = secrets.token_urlsafe(24)
         client_report_token = secrets.token_urlsafe(24)
         with get_db() as db:
+            duplicate_source = None
+            if duplicate_source_id:
+                duplicate_source = db.execute(
+                    "SELECT id, job_name FROM jobs WHERE id = ?",
+                    (duplicate_source_id,),
+                ).fetchone()
+
             client_id, project_id, assignment_error = resolve_job_assignment(
                 db, request.form.get("client_id"), request.form.get("project_id")
             )
@@ -3266,13 +3274,22 @@ def new_job():
                 clients, projects = get_clients_and_projects(db)
                 return render_template(
                     "new_job.html",
-                    default_checklist=DEFAULT_CHECKLIST,
-                    default_reminder_enabled=DEFAULT_REMINDER_ENABLED,
-                    default_reminder_hours=DEFAULT_REMINDER_HOURS_BEFORE,
+                    default_checklist=checklist,
+                    default_reminder_enabled=bool(reminder_enabled),
+                    default_reminder_hours=reminder_hours_before,
                     clients=clients,
                     projects=projects,
                     selected_client_id=normalize_optional_id(request.form.get("client_id")),
                     selected_project_id=normalize_optional_id(request.form.get("project_id")),
+                    duplicate_source=duplicate_source,
+                    form_values={
+                        "job_name": request.form.get("job_name", ""),
+                        "project_site": request.form.get("project_site", ""),
+                        "installation_date": request.form.get("installation_date", ""),
+                        "contact_name": request.form.get("contact_name", ""),
+                        "contact_email": request.form.get("contact_email", ""),
+                        "contact_phone": request.form.get("contact_phone", ""),
+                    },
                 )
 
             cur = db.execute("""
@@ -3308,12 +3325,66 @@ def new_job():
                 f"Created job {request.form['job_name'].strip()} for {request.form['installation_date']}.",
                 job_id=job_id,
             )
+            if duplicate_source:
+                record_activity(
+                    db,
+                    "Job Duplicated",
+                    (
+                        f"Created from {duplicate_source['job_name']} (job #{duplicate_source['id']}). "
+                        "Readiness responses, arrival records, evidence, reports, activity, and internal notes were not copied."
+                    ),
+                    job_id=job_id,
+                )
         return redirect(url_for("readiness_request", job_id=job_id))
+
+    duplicate_source = None
+    form_values = {
+        "job_name": "",
+        "project_site": "",
+        "installation_date": "",
+        "contact_name": "",
+        "contact_email": "",
+        "contact_phone": "",
+    }
+    default_checklist = DEFAULT_CHECKLIST
+    default_reminder_enabled = DEFAULT_REMINDER_ENABLED
+    default_reminder_hours = DEFAULT_REMINDER_HOURS_BEFORE
 
     with get_db() as db:
         clients, projects = get_clients_and_projects(db)
         selected_client_id = normalize_optional_id(request.args.get("client_id"))
         selected_project_id = normalize_optional_id(request.args.get("project_id"))
+        duplicate_from = normalize_optional_id(request.args.get("duplicate_from"))
+
+        if duplicate_from:
+            duplicate_source = db.execute(
+                "SELECT * FROM jobs WHERE id = ?",
+                (duplicate_from,),
+            ).fetchone()
+            if duplicate_source:
+                selected_client_id = duplicate_source["client_id"]
+                selected_project_id = duplicate_source["project_id"]
+                form_values = {
+                    "job_name": duplicate_source["job_name"] or "",
+                    "project_site": duplicate_source["project_site"] or "",
+                    "installation_date": "",
+                    "contact_name": duplicate_source["contact_name"] or "",
+                    "contact_email": duplicate_source["contact_email"] or "",
+                    "contact_phone": duplicate_source["contact_phone"] or "",
+                }
+                try:
+                    source_checklist = json.loads(duplicate_source["checklist_json"] or "[]")
+                    if isinstance(source_checklist, list) and source_checklist:
+                        default_checklist = source_checklist
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    default_checklist = DEFAULT_CHECKLIST
+
+                default_reminder_enabled = bool(duplicate_source["reminder_enabled"])
+                default_reminder_hours = int(
+                    duplicate_source["reminder_hours_before"] or DEFAULT_REMINDER_HOURS_BEFORE
+                )
+            else:
+                flash("The job you tried to duplicate could not be found.")
 
         if selected_project_id:
             selected_project = db.execute(
@@ -3327,13 +3398,15 @@ def new_job():
 
     return render_template(
         "new_job.html",
-        default_checklist=DEFAULT_CHECKLIST,
-        default_reminder_enabled=DEFAULT_REMINDER_ENABLED,
-        default_reminder_hours=DEFAULT_REMINDER_HOURS_BEFORE,
+        default_checklist=default_checklist,
+        default_reminder_enabled=default_reminder_enabled,
+        default_reminder_hours=default_reminder_hours,
         clients=clients,
         projects=projects,
         selected_client_id=selected_client_id,
         selected_project_id=selected_project_id,
+        duplicate_source=duplicate_source,
+        form_values=form_values,
     )
 
 @app.route("/jobs/<int:job_id>/request")
