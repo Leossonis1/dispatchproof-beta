@@ -900,6 +900,18 @@ def admin_authenticated():
     # Kept for older templates; this now means "signed in".
     return user_authenticated()
 
+
+def current_db_user():
+    user_id = session.get("dispatchproof_user_id")
+    if not user_id:
+        return None
+
+    with get_db() as db:
+        return db.execute(
+            "SELECT * FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+
 def safe_next_url(value):
     if not value:
         return url_for("dashboard")
@@ -997,7 +1009,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.1",
+        "app_version": "2.2",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -1225,7 +1237,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.1",
+        "app_version": "2.2",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -1255,6 +1267,7 @@ def ensure_db():
         "toggle_user_access",
         "reset_user_password",
         "change_user_role",
+        "edit_user",
     }
     if request.endpoint in admin_only_endpoints and user_authenticated() and not current_user_is_admin():
         flash("Administrator access is required for that page.")
@@ -1354,7 +1367,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.1",
+        "version": "2.2",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -1371,6 +1384,59 @@ def company_logo():
         abort(404)
     return send_from_directory(UPLOAD_DIR, filename)
 
+
+
+
+@app.route("/account", methods=["GET", "POST"])
+def my_account():
+    owner_account = bool(session.get("dispatchproof_owner"))
+    user = current_db_user()
+
+    if request.method == "POST":
+        if owner_account:
+            flash("The permanent Owner password is managed in Render Environment, not inside DispatchProof.")
+            return redirect(url_for("my_account"))
+
+        if not user:
+            session.clear()
+            flash("Your account session could not be verified. Please sign in again.")
+            return redirect(url_for("login"))
+
+        current_password = request.form.get("current_password", "")
+        new_password = request.form.get("new_password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        if not check_password_hash(user["password_hash"], current_password):
+            flash("Current password is incorrect.")
+            return redirect(url_for("my_account"))
+
+        if len(new_password) < 8:
+            flash("New password must be at least 8 characters.")
+            return redirect(url_for("my_account"))
+
+        if new_password != confirm_password:
+            flash("New password and confirmation do not match.")
+            return redirect(url_for("my_account"))
+
+        if check_password_hash(user["password_hash"], new_password):
+            flash("Choose a new password that is different from your current password.")
+            return redirect(url_for("my_account"))
+
+        with get_db() as db:
+            db.execute(
+                "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
+                (generate_password_hash(new_password), now_iso(), user["id"]),
+            )
+            db.commit()
+
+        flash("Password changed successfully.")
+        return redirect(url_for("my_account"))
+
+    return render_template(
+        "my_account.html",
+        owner_account=owner_account,
+        user=user,
+    )
 
 
 @app.route("/settings/users")
@@ -1515,6 +1581,91 @@ def change_user_role(user_id):
 
     flash(f"{user['username']} role updated.")
     return redirect(url_for("users_access"))
+
+
+
+@app.route("/settings/users/<int:user_id>/edit", methods=["GET", "POST"])
+def edit_user(user_id):
+    with get_db() as db:
+        user = db.execute(
+            "SELECT * FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+
+    if not user:
+        abort(404)
+
+    if request.method == "POST":
+        full_name = request.form.get("full_name", "").strip()
+        username = request.form.get("username", "").strip()
+        role = request.form.get("role", "OPERATIONS").strip().upper()
+        is_active = 1 if request.form.get("is_active") == "1" else 0
+
+        if not full_name or not username:
+            flash("Full Name and Username are required.")
+            return redirect(url_for("edit_user", user_id=user_id))
+
+        if len(username) < 3:
+            flash("Username must be at least 3 characters.")
+            return redirect(url_for("edit_user", user_id=user_id))
+
+        if username.lower() == ADMIN_USERNAME.lower():
+            flash("That username belongs to the permanent Owner account.")
+            return redirect(url_for("edit_user", user_id=user_id))
+
+        if role not in {"ADMIN", "OPERATIONS"}:
+            flash("Invalid role.")
+            return redirect(url_for("edit_user", user_id=user_id))
+
+        is_self = session.get("dispatchproof_user_id") == user_id
+
+        if is_self and role != "ADMIN":
+            flash("You cannot remove administrator access from the account you are currently using.")
+            return redirect(url_for("edit_user", user_id=user_id))
+
+        if is_self and not is_active:
+            flash("You cannot disable the account you are currently signed in with.")
+            return redirect(url_for("edit_user", user_id=user_id))
+
+        try:
+            with get_db() as db:
+                db.execute("""
+                    UPDATE users
+                    SET full_name = ?,
+                        username = ?,
+                        role = ?,
+                        is_active = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                """, (
+                    full_name,
+                    username,
+                    role,
+                    is_active,
+                    now_iso(),
+                    user_id,
+                ))
+                db.commit()
+        except sqlite3.IntegrityError:
+            flash("That username is already in use.")
+            return redirect(url_for("edit_user", user_id=user_id))
+
+        # If an administrator edited their own display name/username, keep the
+        # current session consistent without forcing a sign-out.
+        if is_self:
+            session["dispatchproof_username"] = username
+            session["dispatchproof_admin_username"] = username
+            session["dispatchproof_display_name"] = full_name
+            session["dispatchproof_role"] = role
+
+        flash(f"User {username} updated.")
+        return redirect(url_for("users_access"))
+
+    return render_template(
+        "edit_user.html",
+        user=user,
+        is_self=session.get("dispatchproof_user_id") == user_id,
+    )
 
 
 @app.route("/settings/company", methods=["GET", "POST"])
