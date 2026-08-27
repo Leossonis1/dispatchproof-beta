@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{ entity['name'] }} · Combined Installation Report</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <style>:root { --client-accent: {{ company_accent_color or '#0f62fe' }}; }</style>
+</head>
+<body class="public-report-body portfolio-public-body">
+<main class="public-report-shell">
+  <header class="public-report-header">
+    <div class="public-report-brand">
+      {% if company_logo_url %}
+        <img src="{{ company_logo_url }}" alt="{{ company_name }} logo">
+      {% endif %}
+      <div>
+        <strong>{{ company_name }}</strong>
+        <span>{{ company_tagline }}</span>
+        <small>Powered by DispatchProof</small>
+      </div>
+    </div>
+    <div class="public-report-actions no-print">
+      <button class="btn ghost" type="button" onclick="window.print()">Print / Save PDF</button>
+    </div>
+  </header>
+
+  <section class="public-report-title">
+    <div>
+      <div class="eyebrow">{{ 'Client' if scope_type == 'CLIENT' else 'Project' }} Installation Report</div>
+      <h1>{{ entity['name'] }}</h1>
+      <p>
+        {% if scope_type == 'PROJECT' %}{{ client['name'] }}{% else %}All assigned installations{% endif %}
+      </p>
+    </div>
+    <span class="portfolio-total-pill">{{ report.counts.total }} JOB{{ '' if report.counts.total == 1 else 'S' }}</span>
+  </section>
+
+  <div class="portfolio-stat-grid">
+    <div><span>Active</span><strong>{{ report.counts.active }}</strong></div>
+    <div><span>Ready</span><strong>{{ report.counts.ready }}</strong></div>
+    <div><span>On Site</span><strong>{{ report.counts.on_site }}</strong></div>
+    <div><span>Blocked / Review</span><strong>{{ report.counts.blocked }}</strong></div>
+    <div><span>No Response</span><strong>{{ report.counts.no_response }}</strong></div>
+    <div><span>Completed</span><strong>{{ report.counts.completed }}</strong></div>
+  </div>
+
+  {% if report.jobs %}
+    {% for item in report.jobs %}
+      {% set job = item['job'] %}
+      {% set data = item['data'] %}
+      <section class="public-report-card portfolio-job-card">
+        <div class="portfolio-job-head">
+          <div>
+            <div class="eyebrow">Installation {{ loop.index }} of {{ report.jobs|length }}</div>
+            <h2>{{ job['job_name'] }}</h2>
+            <p>
+              {{ job['project_site'] or 'No site' }}
+              {% if job['assigned_project_name'] %} · {{ job['assigned_project_name'] }}{% endif %}
+            </p>
+          </div>
+          <span class="badge {{ job['status']|lower|replace(' ', '-') }}">{{ job['status'] }}</span>
+        </div>
+
+        <div class="portfolio-job-facts">
+          <div><span>Install Date</span><strong>{{ job['installation_date']|pretty_date }}</strong></div>
+          <div><span>Site Contact</span><strong>{{ job['contact_name'] }}</strong></div>
+          <div><span>Readiness</span><strong>{{ job['response_at']|pretty_datetime if job['response_at'] else 'Not received' }}</strong></div>
+          <div><span>Arrival</span><strong>{{ job['arrived_at']|pretty_datetime if job['arrived_at'] else 'Not recorded' }}</strong></div>
+        </div>
+
+        <div class="portfolio-two-col">
+          <div class="portfolio-subcard">
+            <div class="eyebrow">Readiness</div>
+            {% if job['response_at'] %}
+              <strong>{{ 'Ready to Dispatch' if job['status'] in ['READY','ON SITE','COMPLETED'] else job['status'] }}</strong>
+              <p>Confirmed by {{ job['confirmed_by'] or 'Site Contact' }}{% if job['confirmed_title'] %} · {{ job['confirmed_title'] }}{% endif %}</p>
+            {% else %}
+              <strong>No Response</strong>
+              <p>The current readiness request has not been completed.</p>
+            {% endif %}
+          </div>
+
+          <div class="portfolio-subcard">
+            <div class="eyebrow">Field Arrival</div>
+            {% if job['arrival_status'] == 'READY' %}
+              <strong>Site Ready on Arrival</strong>
+              <p>{{ job['arrival_reported_by'] or 'Installer' }}{% if job['arrived_at'] %} · {{ job['arrived_at']|pretty_datetime }}{% endif %}</p>
+            {% elif job['arrival_status'] == 'NOT READY' %}
+              <strong>Failed Mobilization</strong>
+              <p>{{ job['crew_size']|pretty_number }} crew affected · {{ job['hours_lost']|pretty_number }} hour(s) lost</p>
+              {% if data.arrival_issues %}
+                <div class="issue-chips">{% for issue in data.arrival_issues %}<span>{{ issue }}</span>{% endfor %}</div>
+              {% endif %}
+            {% else %}
+              <strong>Not Recorded</strong>
+              <p>No installer arrival has been recorded.</p>
+            {% endif %}
+          </div>
+        </div>
+
+        {% if data.photos or data.arrival_photos %}
+        <div class="portfolio-evidence-section">
+          <div class="eyebrow">Evidence</div>
+          <div class="report-photo-grid portfolio-photo-grid">
+            {% for photo in data.photos[:4] %}
+              {% if scope_type == 'CLIENT' %}
+                {% set photo_url = url_for('client_portfolio_asset', token=report_token, job_id=job['id'], filename=photo) %}
+              {% else %}
+                {% set photo_url = url_for('project_portfolio_asset', token=report_token, job_id=job['id'], filename=photo) %}
+              {% endif %}
+              <a target="_blank" rel="noopener" href="{{ photo_url }}"><img src="{{ photo_url }}" alt="Pre-dispatch evidence"></a>
+            {% endfor %}
+            {% for photo in data.arrival_photos[:4] %}
+              {% if scope_type == 'CLIENT' %}
+                {% set photo_url = url_for('client_portfolio_asset', token=report_token, job_id=job['id'], filename=photo) %}
+              {% else %}
+                {% set photo_url = url_for('project_portfolio_asset', token=report_token, job_id=job['id'], filename=photo) %}
+              {% endif %}
+              <a target="_blank" rel="noopener" href="{{ photo_url }}"><img src="{{ photo_url }}" alt="Arrival evidence"></a>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        {% if data.mobilization_history %}
+        <div class="portfolio-history">
+          <div class="eyebrow">Prior Mobilization Attempts</div>
+          {% for attempt in data.mobilization_history %}
+          <div class="portfolio-history-row">
+            <strong>Attempt #{{ attempt.attempt_number }}</strong>
+            <span>
+              {% if attempt.arrival_status == 'NOT READY' %}
+                Failed Mobilization · {{ attempt.crew_size|pretty_number }} crew · {{ attempt.hours_lost|pretty_number }} hour(s) lost
+              {% elif attempt.arrival_status == 'READY' %}
+                Site Ready on Arrival
+              {% else %}
+                Readiness {{ attempt.readiness_status or 'recorded' }}
+              {% endif %}
+            </span>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="portfolio-audit">
+          <div class="eyebrow">Job Audit Trail</div>
+          {% if data.activity_events %}
+          <div class="activity-list client-activity-list">
+            {% for event in data.activity_events %}
+            <article class="activity-row">
+              <div class="activity-marker"></div>
+              <div class="activity-main">
+                <div class="activity-row-head">
+                  <strong>{{ event['action'] }}</strong>
+                  <span>{{ event['created_at']|pretty_datetime }}</span>
+                </div>
+                <p>{{ event['description'] or 'Activity recorded.' }}</p>
+                <div class="activity-meta">
+                  <span class="activity-actor">{{ event['actor_name'] }}</span>
+                  <span class="activity-type">
+                    {% if event['actor_type'] in ['OWNER','ADMIN','OPERATIONS'] %}OFFICE{% else %}{{ event['actor_type'] }}{% endif %}
+                  </span>
+                </div>
+              </div>
+            </article>
+            {% endfor %}
+          </div>
+          {% else %}
+            <div class="empty-mini">No audit activity recorded for this job.</div>
+          {% endif %}
+        </div>
+      </section>
+    {% endfor %}
+  {% else %}
+    <section class="public-report-card">
+      <div class="empty-mini">No installation jobs are assigned to this report yet.</div>
+    </section>
+  {% endif %}
+
+  <footer class="public-report-footer">
+    <strong>{{ company_name }}</strong>
+    {% if company_contact_email %}<span>{{ company_contact_email }}</span>{% endif %}
+    {% if company_contact_phone %}<span>{{ company_contact_phone }}</span>{% endif %}
+    <small>Secure combined report · Viewed {{ generated_at|pretty_datetime }} · Powered by DispatchProof</small>
+  </footer>
+</main>
+</body>
+</html>

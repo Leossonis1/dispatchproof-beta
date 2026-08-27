@@ -493,3 +493,70 @@ DispatchProof now supports **Client → Project → Installation Job** organizat
 - Activity Log records client/project creation, edits, and job assignment changes.
 - Backups include client/project tables and counts.
 - The relationship is designed for a future combined multi-job client/project report.
+
+
+## V2.6 — Combined Client & Project Reports
+
+V2.6 turns the V2.5 Client → Project → Job structure into a client-facing
+multi-install reporting workflow.
+
+### Combined Client Report
+
+Every Client page now has **Combined Client Report**. The secure report covers
+every job assigned to the client, including jobs that are currently active and
+jobs that have been completed.
+
+### Combined Project Report
+
+Every Project page now has **Combined Project Report**. It uses the same secure
+report workflow but only includes installations assigned to that project.
+
+### Report contents
+
+Each combined report includes:
+
+- total / active / completed job counts
+- Ready, On Site, Blocked/Review, and No Response counts
+- job name, site, install date, and site contact
+- current readiness confirmation
+- installer arrival result
+- failed mobilization crew/hours/issues when applicable
+- pre-dispatch and arrival evidence photos
+- prior mobilization attempts
+- each installation's complete V2.3+ Job Activity audit trail
+
+The public combined report is branded and has **Print / Save PDF**.
+
+### Secure sharing
+
+Client and Project records receive their own independent high-entropy report
+tokens. These tokens are separate from job readiness, installer-arrival, and
+single-job client-report tokens.
+
+The office can:
+
+- copy the secure combined-report link
+- preview it without a DispatchProof login
+- rotate the link to revoke prior access immediately
+
+Evidence photos are served through scope-specific protected routes that verify
+the requested job belongs to the client/project and that the file belongs to
+that job.
+
+### Email / Outbox
+
+Combined reports use the same email workflow as single-job reports. In Free
+Beta Outbox Mode, the message is generated and logged but not delivered
+externally.
+
+Email Outbox now displays the Client or Project report name instead of
+mislabeling a combined report as its internal anchor job.
+
+### Upgrade behavior
+
+Existing V2.5 Client and Project records are migrated in place. V2.6 adds and
+backfills secure report tokens without changing existing client/project/job
+relationships.
+
+Backups automatically preserve the new report tokens and combined-report email
+metadata because they are stored in the existing SQLite database.

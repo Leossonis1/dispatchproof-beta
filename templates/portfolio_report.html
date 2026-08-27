@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Combined {{ 'Client' if scope_type == 'CLIENT' else 'Project' }} Report · DispatchProof{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    {% if scope_type == 'CLIENT' %}
+      <a class="text-link" href="{{ url_for('client_detail', client_id=entity['id']) }}">← Back to {{ entity['name'] }}</a>
+    {% else %}
+      <a class="text-link" href="{{ url_for('project_detail', project_id=entity['id']) }}">← Back to {{ entity['name'] }}</a>
+    {% endif %}
+    <div class="eyebrow">Client Communication</div>
+    <h1>Combined {{ 'Client' if scope_type == 'CLIENT' else 'Project' }} Report</h1>
+    <p>
+      {{ entity['name'] }}
+      {% if scope_type == 'PROJECT' %} · {{ client['name'] }}{% endif %}
+      · {{ jobs|length }} installation{{ '' if jobs|length == 1 else 's' }}
+    </p>
+  </div>
+</div>
+
+{% if not email_delivery_enabled %}
+<div class="config-banner">
+  <strong>Free Beta · Outbox Mode</strong>
+  <span>The report email will be generated and logged for testing, but nothing is sent externally.</span>
+</div>
+{% endif %}
+
+<div class="client-report-layout">
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <h2>Email Combined Report</h2>
+        <p>Send one secure live report covering every installation in this {{ 'client' if scope_type == 'CLIENT' else 'project' }}.</p>
+      </div>
+    </div>
+
+    {% if jobs %}
+    <form method="post" class="form-stack">
+      <label>Recipient Name
+        <input name="recipient_name" value="{{ default_name }}" placeholder="Client PM or Superintendent">
+      </label>
+      <label>Recipient Email
+        <input required type="email" name="recipient_email" value="{{ default_email }}" placeholder="client@company.com">
+      </label>
+      <button class="btn primary wide" type="submit">
+        {{ 'Send Combined Report' if email_delivery_enabled else 'Generate Combined Report Email' }}
+      </button>
+    </form>
+    {% else %}
+    <div class="empty compact-empty">
+      <h3>No installations yet</h3>
+      <p>Add at least one job before generating a combined report email.</p>
+    </div>
+    {% endif %}
+
+    <div class="client-report-includes">
+      <strong>Combined report includes</strong>
+      <span>Every active and completed installation</span>
+      <span>Current status and install dates</span>
+      <span>Readiness confirmations</span>
+      <span>Pre-dispatch and arrival evidence</span>
+      <span>Failed mobilization details</span>
+      <span>Each job's audit trail</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <h2>Secure Combined Report Link</h2>
+        <p>This no-login link only exposes the installations assigned to this {{ 'client' if scope_type == 'CLIENT' else 'project' }} report.</p>
+      </div>
+    </div>
+
+    <div class="copy-box" id="portfolioReportLink">{{ report_url }}</div>
+    <div class="button-row">
+      <button class="btn primary" type="button" id="copyPortfolioButton" onclick="copyPortfolioReportLink()">Copy Report Link</button>
+      <a class="btn ghost" target="_blank" rel="noopener" href="{{ report_url }}">Open Combined Report</a>
+    </div>
+
+    <div class="security-note-card">
+      <strong>Need to revoke a shared link?</strong>
+      <p>Rotate it to invalidate the previous combined report URL immediately.</p>
+      {% if scope_type == 'CLIENT' %}
+      <form method="post" action="{{ url_for('rotate_client_combined_report', client_id=entity['id']) }}" onsubmit="return confirm('Rotate the combined client report link? The current link will stop working immediately.');">
+      {% else %}
+      <form method="post" action="{{ url_for('rotate_project_combined_report', project_id=entity['id']) }}" onsubmit="return confirm('Rotate the combined project report link? The current link will stop working immediately.');">
+      {% endif %}
+        <button class="btn ghost" type="submit">Rotate Secure Link</button>
+      </form>
+    </div>
+
+    <div class="portfolio-mini-list">
+      <strong>Included Installations</strong>
+      {% for job in jobs %}
+      <div>
+        <span>{{ job['job_name'] }}</span>
+        <span class="badge {{ job['status']|lower|replace(' ', '-') }}">{{ job['status'] }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+
+<script>
+async function copyPortfolioReportLink() {
+  const link = document.getElementById('portfolioReportLink');
+  const button = document.getElementById('copyPortfolioButton');
+  if (!link || !button) return;
+  const url = link.textContent.trim();
+  try {
+    await navigator.clipboard.writeText(url);
+    button.textContent = 'Copied!';
+    setTimeout(() => button.textContent = 'Copy Report Link', 1600);
+  } catch (e) {
+    window.prompt('Copy this report link:', url);
+  }
+}
+</script>
+{% endblock %}

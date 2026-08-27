@@ -8,7 +8,10 @@
     <h1>{{ client['name'] }}</h1>
     <p>Projects and installations for this client.</p>
   </div>
-  <a class="btn primary" href="{{ url_for('new_project', client_id=client['id']) }}">+ New Project</a>
+  <div class="page-actions">
+    <a class="btn ghost" href="{{ url_for('client_combined_report', client_id=client['id']) }}">Combined Client Report</a>
+    <a class="btn primary" href="{{ url_for('new_project', client_id=client['id']) }}">+ New Project</a>
+  </div>
 </div>
 
 <div class="client-detail-layout">
@@ -71,8 +74,8 @@
   {% endif %}
 </section>
 
-<div class="future-report-note">
-  <strong>Combined client reporting foundation is ready.</strong>
-  <span>These relationships will let DispatchProof generate one report across multiple installations in a future release.</span>
+<div class="future-report-note live-report-note">
+  <strong>Combined reporting is live.</strong>
+  <span>Use Combined Client Report to share all current and completed installations, evidence, and audit trails in one secure report.</span>
 </div>
 {% endblock %}

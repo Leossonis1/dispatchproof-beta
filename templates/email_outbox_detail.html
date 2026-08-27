@@ -7,7 +7,7 @@
     <a class="text-link" href="{{ url_for('email_outbox') }}">← Back to Email Outbox</a>
     <div class="eyebrow">Email Activity</div>
     <h1>{{ event['subject'] }}</h1>
-    <p>{{ event['job_name'] }} · {{ event['recipient_email'] }}</p>
+    <p>{{ event['display_name'] }} · {{ event['recipient_email'] }}</p>
   </div>
   <span class="email-status {{ event['status']|lower }}">{{ event['status'] }}</span>
 </div>

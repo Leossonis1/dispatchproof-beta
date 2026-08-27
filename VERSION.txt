@@ -1,2 +1,2 @@
-DispatchProof Version 2.5 - Clients & Projects
-Adds client and project organization so related installations can be managed together.
+DispatchProof Version 2.6 - Combined Client & Project Reports
+Adds secure multi-install client/project reports with email, evidence, audit trails, and link rotation.

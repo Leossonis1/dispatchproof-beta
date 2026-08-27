@@ -6,7 +6,7 @@
   <div>
     <div class="eyebrow">Communication</div>
     <h1>Email Outbox</h1>
-    <p>See every readiness request, reminder, and client report DispatchProof generated.</p>
+    <p>See every readiness request, reminder, single-job report, and combined client/project report DispatchProof generated.</p>
   </div>
   <span class="smtp-pill {{ 'connected' if email_delivery_enabled else 'test-mode' }}">
     {{ 'LIVE EMAIL' if email_delivery_enabled else 'OUTBOX MODE' }}
@@ -25,12 +25,12 @@
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Job</th><th>Type</th><th>Recipient</th><th>Status</th><th>Created</th><th></th></tr>
+        <tr><th>Job / Report</th><th>Type</th><th>Recipient</th><th>Status</th><th>Created</th><th></th></tr>
       </thead>
       <tbody>
       {% for event in events %}
       <tr>
-        <td><strong>{{ event['job_name'] }}</strong></td>
+        <td><strong>{{ event['display_name'] }}</strong></td>
         <td>{{ event['event_type']|replace('_', ' ')|title }}</td>
         <td>{{ event['recipient_email'] }}</td>
         <td><span class="email-status {{ event['status']|lower }}">{{ event['status'] }}</span></td>
