@@ -71,7 +71,15 @@
           <span>{{ job['contact_name'] }}</span>
         </div>
       </div>
-      <a class="btn action-blue small-btn" href="{{ url_for('job_detail', job_id=job['id']) }}">Open Job</a>
+      <div class="attention-actions">
+        {% if job['status'] == 'NO RESPONSE' %}
+        <form method="post" action="{{ url_for('send_reminder', job_id=job['id']) }}">
+          <input type="hidden" name="return_to" value="dashboard">
+          <button class="btn action-blue small-btn" type="submit">Generate Reminder</button>
+        </form>
+        {% endif %}
+        <a class="attention-open-link" href="{{ url_for('job_detail', job_id=job['id']) }}">Open Job →</a>
+      </div>
     </article>
     {% endfor %}
   </div>

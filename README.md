@@ -1197,3 +1197,35 @@ No database migration is required. V2.19 backups remain compatible.
 ### Help Center
 
 Help & Tutorials now includes **Use Needs Attention**.
+
+
+## V2.21 — Priority Quick Actions
+
+V2.21 makes the Dashboard **Needs Attention** queue actionable without requiring an extra trip into Job Detail.
+
+### Generate Reminder from Needs Attention
+
+When a priority item is in **NO RESPONSE**, the row now shows:
+
+- **Generate Reminder** — runs the existing readiness reminder workflow
+- **Open Job →** — opens the full installation record
+
+The reminder action uses the same secure readiness link, email/outbox logic, reminder count, and audit logging already used elsewhere in DispatchProof.
+
+### Safe Dashboard return
+
+Reminder actions launched from the Dashboard return to the Dashboard after completion.
+
+The return behavior only accepts the known internal `dashboard` destination; arbitrary redirect URLs are not accepted.
+
+### Free-beta behavior
+
+In Outbox Mode, **Generate Reminder** creates/logs the reminder in Email Outbox but does not send externally.
+
+### No database migration
+
+V2.21 does not change the database schema. V2.20 backups remain compatible.
+
+### Help Center
+
+The **Use Needs Attention** tutorial now explains the new quick reminder action.

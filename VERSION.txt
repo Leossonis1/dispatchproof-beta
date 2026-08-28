@@ -1,2 +1,2 @@
-DispatchProof Version 2.20 - Needs Attention
-Adds a Dashboard priority queue for overdue, today, blocked/review, and near-term no-response installs.
+DispatchProof Version 2.21 - Priority Quick Actions
+Adds one-click readiness reminder generation for No Response jobs directly from Needs Attention.

@@ -3045,3 +3045,39 @@ main{
     width:100%;
   }
 }
+
+
+/* DispatchProof V2.21 — Priority Quick Actions */
+.attention-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:9px;
+  flex-wrap:wrap;
+}
+.attention-actions form{
+  margin:0;
+}
+.attention-open-link{
+  color:#155eef;
+  font-size:9px;
+  font-weight:900;
+  white-space:nowrap;
+  text-decoration:none;
+}
+.attention-open-link:hover{
+  text-decoration:underline;
+}
+@media(max-width:700px){
+  .attention-actions{
+    grid-column:2;
+    width:100%;
+    justify-content:flex-start;
+  }
+  .attention-actions form{
+    flex:1 1 auto;
+  }
+  .attention-actions .btn{
+    width:100%;
+  }
+}
