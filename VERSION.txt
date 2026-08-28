@@ -1,2 +1,2 @@
-DispatchProof Version 2.22 - Reminder History & Repeat Guard
-Shows reminder history in Needs Attention and Readiness Request, and confirms repeat reminder generation.
+DispatchProof Version 2.23 - Job Communication History
+Adds job-level readiness request, reminder, and client-report communication history with direct preview links.

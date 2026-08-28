@@ -180,6 +180,54 @@
   </div>
 </section>
 
+<section class="panel communication-history-panel" id="communication-history">
+  <div class="panel-head">
+    <div>
+      <div class="eyebrow">Office Communication</div>
+      <h2>Communication History</h2>
+      <p>Generated readiness requests, reminders, and single-job client reports for this installation.</p>
+    </div>
+    {% if communication_event_count %}
+    <span class="communication-count">
+      {{ communication_event_count }} item{{ '' if communication_event_count == 1 else 's' }}
+    </span>
+    {% endif %}
+  </div>
+
+  {% if communication_events %}
+  <div class="communication-history-list">
+    {% for event in communication_events %}
+    <article class="communication-history-row">
+      <div class="communication-history-main">
+        <div class="communication-history-title">
+          <strong>{{ event['event_type']|replace('_', ' ')|title }}</strong>
+          <span class="email-status {{ event['status']|lower }}">{{ event['status'] }}</span>
+        </div>
+        <div class="communication-history-meta">
+          <span>{{ event['recipient_email'] }}</span>
+          <span>{{ event['created_at']|pretty_datetime }}</span>
+        </div>
+        <div class="communication-history-subject">{{ event['subject'] }}</div>
+      </div>
+      <a class="text-link communication-preview-link"
+         href="{{ url_for('email_outbox_detail', event_id=event['id']) }}">
+        View Preview →
+      </a>
+    </article>
+    {% endfor %}
+  </div>
+
+  {% if communication_event_count > communication_events|length %}
+  <div class="communication-history-footer">
+    Showing the newest {{ communication_events|length }} of {{ communication_event_count }} generated communications.
+    <a class="text-link" href="{{ url_for('email_outbox') }}">Open Email Outbox →</a>
+  </div>
+  {% endif %}
+  {% else %}
+  <div class="empty-mini">No readiness requests, reminders, or client reports have been generated for this job yet.</div>
+  {% endif %}
+</section>
+
 <div class="split">
   <section class="panel">
     <h2>Readiness Summary</h2>

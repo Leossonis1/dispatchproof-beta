@@ -1246,3 +1246,18 @@ Request Details now includes **Reminder History**, showing the total count and l
 Reminder history is derived from the existing `email_events` log, so free-beta Outbox Mode reminders are represented accurately too.
 
 No database migration is required. V2.21 backups remain compatible.
+
+
+## V2.23 — Job Communication History
+
+V2.23 adds a job-level **Communication History** panel so office users can review generated communication without leaving the installation record.
+
+The panel includes job-specific Readiness Requests, Reminders, and single-job Client Reports. Each row shows the communication type, OUTBOX / SENT / FAILED status, recipient email, Eastern timestamp, subject, and a **View Preview →** link to the existing Email Outbox detail.
+
+Combined Client Reports and Combined Project Reports are intentionally excluded because those communications cover multiple installations and remain available in the global Email Outbox.
+
+The panel follows existing Job Detail permissions, so Owner, Administrator, and Operations users can review it.
+
+No database migration is required. V2.22 backups remain compatible.
+
+Help & Tutorials now includes **Review Job Communication History**.
