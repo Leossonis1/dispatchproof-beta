@@ -677,6 +677,52 @@ def schedule_bucket_label(bucket):
         "unscheduled": "No Date",
     }.get(bucket, "Later")
 
+def job_attention_reason(job, schedule_bucket):
+    """Return the highest-priority office action for an active job."""
+    status = (job["status"] or "").upper()
+
+    if schedule_bucket == "overdue":
+        return {
+            "priority": 1,
+            "level": "critical",
+            "label": "Overdue install",
+            "message": "The installation date has passed and the job is still active.",
+        }
+
+    if schedule_bucket == "today":
+        return {
+            "priority": 2,
+            "level": "urgent",
+            "label": "Install today",
+            "message": "This installation is scheduled for today.",
+        }
+
+    if status == "BLOCKED":
+        return {
+            "priority": 3,
+            "level": "critical",
+            "label": "Blocked",
+            "message": "The site is not ready and needs office follow-up.",
+        }
+
+    if status == "REVIEW":
+        return {
+            "priority": 4,
+            "level": "review",
+            "label": "Needs review",
+            "message": "A readiness response is waiting for office review.",
+        }
+
+    if status == "NO RESPONSE" and schedule_bucket == "next7":
+        return {
+            "priority": 5,
+            "level": "warning",
+            "label": "No response · Next 7 Days",
+            "message": "The install is approaching and readiness has not been confirmed.",
+        }
+
+    return None
+
 def pretty_number(value):
     if value is None or value == "":
         return "—"
@@ -1840,7 +1886,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.19",
+        "app_version": "2.20",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2070,7 +2116,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.19",
+        "app_version": "2.20",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2215,7 +2261,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.19",
+        "version": "2.20",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -3435,6 +3481,27 @@ def dashboard():
         if bucket in schedule_counts:
             schedule_counts[bucket] += 1
 
+    attention_jobs = []
+    for job in all_jobs:
+        attention = job_attention_reason(job, schedule_buckets.get(job["id"]))
+        if not attention:
+            continue
+        attention_jobs.append({
+            "job": job,
+            "priority": attention["priority"],
+            "level": attention["level"],
+            "label": attention["label"],
+            "message": attention["message"],
+        })
+
+    attention_jobs.sort(key=lambda item: (
+        item["priority"],
+        item["job"]["installation_date"] or "9999-12-31",
+        item["job"]["id"],
+    ))
+    attention_total = len(attention_jobs)
+    attention_jobs = attention_jobs[:5]
+
     search_lower = search_query.lower()
     jobs = []
     for job in all_jobs:
@@ -3486,6 +3553,8 @@ def dashboard():
         filters_active=filters_active,
         total_active_jobs=len(all_jobs),
         due_reminder_count=due_reminder_count,
+        attention_jobs=attention_jobs,
+        attention_total=attention_total,
         backup_status=backup_status,
         last_backup_at=last_backup_at,
     )
