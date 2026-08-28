@@ -1964,7 +1964,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.30",
+        "app_version": "2.31",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2194,7 +2194,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.30",
+        "app_version": "2.31",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2337,11 +2337,16 @@ def logout():
     flash("Signed out.")
     return redirect(url_for("login"))
 
+@app.errorhandler(404)
+def not_found(error):
+    return render_template("404.html"), 404
+
+
 @app.route("/health")
 def health():
     return {
         "status": "ok",
-        "version": "2.30",
+        "version": "2.31",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -6022,6 +6027,9 @@ def edit_job(job_id):
 def job_detail(job_id):
     with get_db() as db:
         job = db.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+        if not job:
+            abort(404)
+
         history = db.execute("""
             SELECT * FROM readiness_confirmations
             WHERE job_id = ?
@@ -6085,9 +6093,6 @@ def job_detail(job_id):
                 ORDER BY id DESC
                 LIMIT 100
             """, (job["client_id"],)).fetchall()
-
-    if not job:
-        abort(404)
 
     checklist = json.loads(job["checklist_json"])
     answers = json.loads(job["response_json"]) if job["response_json"] else {}
