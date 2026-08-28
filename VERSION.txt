@@ -1,2 +1,2 @@
-DispatchProof Version 2.17 - Action Button UI Polish
-Makes important clickable actions consistently solid blue while preserving neutral and destructive button treatments.
+DispatchProof Version 2.18 - Job Documents
+Adds secure internal-only job document uploads, downloads, audit tracking, and backup coverage.

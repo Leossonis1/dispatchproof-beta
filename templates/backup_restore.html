@@ -39,7 +39,7 @@
   <section class="panel">
     <div class="backup-icon">↓</div>
     <h2>Download Backup</h2>
-    <p>Create one ZIP containing the DispatchProof database plus all uploaded site and arrival photos.</p>
+    <p>Create one ZIP containing the DispatchProof database plus uploaded evidence and internal job documents.</p>
 
     <dl class="details backup-details">
       <div><dt>Database</dt><dd>{{ 'Available' if db_exists else 'Not created yet' }}</dd></div>
@@ -51,10 +51,11 @@
       <div><dt>Outbox Messages</dt><dd>{{ counts.outbox_messages }}</dd></div>
       <div><dt>Activity Events</dt><dd>{{ counts.activity_events }}</dd></div>
       <div><dt>Internal Job Notes</dt><dd>{{ counts.job_notes }}</dd></div>
+      <div><dt>Job Documents</dt><dd>{{ counts.job_documents }}</dd></div>
       <div><dt>Clients</dt><dd>{{ counts.clients }}</dd></div>
       <div><dt>Projects</dt><dd>{{ counts.projects }}</dd></div>
       <div><dt>Uploaded Files</dt><dd>{{ upload_count }}</dd></div>
-      <div><dt>Backup Includes</dt><dd>Jobs · History · Notes · Users · Activity · Outbox · Evidence</dd></div>
+      <div><dt>Backup Includes</dt><dd>Jobs · History · Notes · Documents · Users · Activity · Outbox · Evidence</dd></div>
     </dl>
 
     <a class="btn primary wide" href="{{ url_for('download_backup') }}">Download Backup ZIP</a>

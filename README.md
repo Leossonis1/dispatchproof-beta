@@ -1110,3 +1110,20 @@ Dangerous or revocation-style actions keep their existing red treatment.
 ### No workflow or database changes
 
 V2.17 is a visual polish release only. No database migration is required and V2.16 backups remain compatible.
+
+
+## V2.18 — Job Documents
+
+V2.18 adds internal job-file storage directly on each installation.
+
+Signed-in users can attach PDF, Word, Excel, CSV, TXT, image, DWG, or DXF files up to 20 MB each.
+
+Job Documents are internal only and are never included in client reports, combined reports, readiness links, installer links, or other public/no-login pages.
+
+Owner, Administrator, and Operations users can upload and download documents. Only Owner / Administrator can delete them.
+
+Uploads and deletions write **Job Document Uploaded** / **Job Document Deleted** events to Job Activity.
+
+The existing backup ZIP automatically includes both the document database records and the physical uploaded files. Backup & Restore now shows a Job Documents count.
+
+Help & Tutorials includes **Attach Job Documents**.
