@@ -1961,7 +1961,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.26",
+        "app_version": "2.26.1",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2191,7 +2191,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.26",
+        "app_version": "2.26.1",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2338,7 +2338,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.26",
+        "version": "2.26.1",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -3536,7 +3536,10 @@ def document_center():
     with get_db() as db:
         clients, projects = get_clients_and_projects(db)
 
-        rows = db.execute("""
+        # Keep these as three simple queries instead of one compound UNION.
+        # This is more tolerant of restored/upgraded beta databases and avoids
+        # SQLite compound-query edge cases while preserving the same result set.
+        client_rows = db.execute("""
             SELECT
                 'CLIENT' AS document_scope,
                 cd.id AS document_id,
@@ -3553,9 +3556,9 @@ def document_center():
                 NULL AS project_site
             FROM client_documents cd
             JOIN clients c ON c.id = cd.client_id
+        """).fetchall()
 
-            UNION ALL
-
+        project_rows = db.execute("""
             SELECT
                 'PROJECT' AS document_scope,
                 pd.id AS document_id,
@@ -3573,9 +3576,9 @@ def document_center():
             FROM project_documents pd
             JOIN projects p ON p.id = pd.project_id
             JOIN clients c ON c.id = p.client_id
+        """).fetchall()
 
-            UNION ALL
-
+        job_rows = db.execute("""
             SELECT
                 'JOB' AS document_scope,
                 jd.id AS document_id,
@@ -3594,9 +3597,16 @@ def document_center():
             JOIN jobs j ON j.id = jd.job_id
             LEFT JOIN clients c ON c.id = j.client_id
             LEFT JOIN projects p ON p.id = j.project_id
-
-            ORDER BY created_at DESC, document_id DESC
         """).fetchall()
+
+        rows = list(client_rows) + list(project_rows) + list(job_rows)
+        rows.sort(
+            key=lambda row: (
+                row["created_at"] or "",
+                int(row["document_id"] or 0),
+            ),
+            reverse=True,
+        )
 
     documents = []
     q_lower = search_query.lower()
