@@ -450,6 +450,295 @@ def ensure_columns(db):
 
     db.commit()
 
+
+def parse_crew_names(value):
+    """Normalize comma/semicolon/newline separated crew names without duplicates."""
+    names = []
+    seen = set()
+    for raw in re.split(r"[,;\n]+", str(value or "")):
+        name = raw.strip()
+        key = name.lower()
+        if name and key not in seen:
+            names.append(name)
+            seen.add(key)
+    return names
+
+
+def get_or_create_crew_member(db, name):
+    name = str(name or "").strip()
+    if not name:
+        return None
+
+    member = db.execute(
+        "SELECT * FROM crew_members WHERE LOWER(name) = LOWER(?)",
+        (name,),
+    ).fetchone()
+    if member:
+        return member["id"]
+
+    cur = db.execute("""
+        INSERT INTO crew_members (
+            name, email, phone, role_trade, notes,
+            is_active, created_at, updated_at
+        ) VALUES (?, '', '', '', '', 1, ?, ?)
+    """, (name, now_iso(), now_iso()))
+    return cur.lastrowid
+
+
+def migrate_legacy_crew_directory(db):
+    """
+    V2.33 migration:
+    convert existing text crew assignments into reusable crew members
+    and structured job/member links without changing the legacy display text.
+    """
+    jobs = db.execute("""
+        SELECT id, crew_lead, assigned_crew
+        FROM jobs
+        WHERE TRIM(COALESCE(crew_lead, '')) <> ''
+           OR TRIM(COALESCE(assigned_crew, '')) <> ''
+        ORDER BY id
+    """).fetchall()
+
+    for job in jobs:
+        lead_name = (job["crew_lead"] or "").strip()
+        ordered_names = parse_crew_names(job["assigned_crew"])
+        if lead_name and lead_name.lower() not in {x.lower() for x in ordered_names}:
+            ordered_names.insert(0, lead_name)
+
+        lead_id = get_or_create_crew_member(db, lead_name) if lead_name else None
+
+        for sort_order, name in enumerate(ordered_names):
+            member_id = get_or_create_crew_member(db, name)
+            if not member_id:
+                continue
+            db.execute("""
+                INSERT OR IGNORE INTO job_crew_assignments (
+                    job_id, crew_member_id, is_lead, sort_order, created_at
+                ) VALUES (?, ?, ?, ?, ?)
+            """, (
+                job["id"],
+                member_id,
+                1 if lead_id and member_id == lead_id else 0,
+                sort_order,
+                now_iso(),
+            ))
+
+        if lead_id:
+            db.execute("""
+                UPDATE job_crew_assignments
+                SET is_lead = CASE WHEN crew_member_id = ? THEN 1 ELSE 0 END
+                WHERE job_id = ?
+            """, (lead_id, job["id"]))
+
+
+def get_crew_members_for_picker(db, job_id=None):
+    """Active members plus any inactive members already assigned to this job."""
+    if job_id:
+        return db.execute("""
+            SELECT cm.*,
+                   CASE WHEN jca.crew_member_id IS NULL THEN 0 ELSE 1 END AS assigned_to_job
+            FROM crew_members cm
+            LEFT JOIN job_crew_assignments jca
+              ON jca.crew_member_id = cm.id
+             AND jca.job_id = ?
+            WHERE cm.is_active = 1
+               OR jca.crew_member_id IS NOT NULL
+            ORDER BY
+                CASE WHEN cm.is_active = 1 THEN 0 ELSE 1 END,
+                LOWER(cm.name),
+                cm.id
+        """, (job_id,)).fetchall()
+
+    return db.execute("""
+        SELECT cm.*, 0 AS assigned_to_job
+        FROM crew_members cm
+        WHERE cm.is_active = 1
+        ORDER BY LOWER(cm.name), cm.id
+    """).fetchall()
+
+
+def job_crew_picker_state(db, job):
+    """Return structured selections plus any remaining custom/free-text crew names."""
+    if not job:
+        return {
+            "selected_crew_ids": [],
+            "selected_lead_id": None,
+            "custom_crew_lead": "",
+            "custom_crew_names": "",
+        }
+
+    assignments = db.execute("""
+        SELECT jca.crew_member_id, jca.is_lead, jca.sort_order, cm.name
+        FROM job_crew_assignments jca
+        JOIN crew_members cm ON cm.id = jca.crew_member_id
+        WHERE jca.job_id = ?
+        ORDER BY jca.sort_order, LOWER(cm.name), cm.id
+    """, (job["id"],)).fetchall()
+
+    selected_ids = [row["crew_member_id"] for row in assignments]
+    lead_row = next((row for row in assignments if row["is_lead"]), None)
+    structured_names = {row["name"].lower() for row in assignments}
+
+    custom_names = [
+        name
+        for name in parse_crew_names(job["assigned_crew"])
+        if name.lower() not in structured_names
+    ]
+
+    custom_lead = ""
+    legacy_lead = (job["crew_lead"] or "").strip()
+    if legacy_lead and not lead_row:
+        custom_lead = legacy_lead
+
+    return {
+        "selected_crew_ids": selected_ids,
+        "selected_lead_id": lead_row["crew_member_id"] if lead_row else None,
+        "custom_crew_lead": custom_lead,
+        "custom_crew_names": ", ".join(custom_names),
+    }
+
+
+def resolve_job_crew_form(db, form):
+    """
+    Resolve the directory picker + optional custom names into both:
+      - structured job_crew_assignments rows
+      - legacy crew_lead / assigned_crew text used elsewhere in the app
+    """
+    raw_ids = form.getlist("crew_member_ids")
+    selected_ids = []
+    seen_ids = set()
+    for raw in raw_ids:
+        member_id = normalize_optional_id(raw)
+        if member_id and member_id not in seen_ids:
+            selected_ids.append(member_id)
+            seen_ids.add(member_id)
+
+    lead_id = normalize_optional_id(form.get("crew_lead_member_id"))
+    custom_lead = (form.get("custom_crew_lead") or "").strip()
+    custom_names = parse_crew_names(form.get("custom_crew_names"))
+
+    if lead_id and lead_id not in seen_ids:
+        selected_ids.insert(0, lead_id)
+        seen_ids.add(lead_id)
+
+    members = []
+    if selected_ids:
+        placeholders = ",".join("?" for _ in selected_ids)
+        rows = db.execute(
+            f"SELECT id, name, is_active FROM crew_members WHERE id IN ({placeholders})",
+            tuple(selected_ids),
+        ).fetchall()
+        by_id = {row["id"]: row for row in rows}
+        selected_ids = [member_id for member_id in selected_ids if member_id in by_id]
+        members = [by_id[member_id] for member_id in selected_ids]
+
+    lead_name = ""
+    if lead_id:
+        lead_member = next((row for row in members if row["id"] == lead_id), None)
+        if lead_member:
+            lead_name = lead_member["name"]
+        else:
+            lead_id = None
+
+    if not lead_name:
+        lead_name = custom_lead
+        lead_id = None
+
+    assigned_names = []
+    assigned_seen = set()
+
+    def add_name(name):
+        name = str(name or "").strip()
+        key = name.lower()
+        if name and key not in assigned_seen:
+            assigned_names.append(name)
+            assigned_seen.add(key)
+
+    for member in members:
+        add_name(member["name"])
+    if lead_name:
+        add_name(lead_name)
+    for name in custom_names:
+        add_name(name)
+
+    return {
+        "crew_lead": lead_name,
+        "assigned_crew": ", ".join(assigned_names),
+        "selected_crew_ids": selected_ids,
+        "selected_lead_id": lead_id,
+        "custom_crew_lead": custom_lead if not lead_id else "",
+        "custom_crew_names": ", ".join(custom_names),
+    }
+
+
+def save_job_crew_assignments(db, job_id, selected_crew_ids, lead_id):
+    db.execute("DELETE FROM job_crew_assignments WHERE job_id = ?", (job_id,))
+    for sort_order, member_id in enumerate(selected_crew_ids):
+        db.execute("""
+            INSERT INTO job_crew_assignments (
+                job_id, crew_member_id, is_lead, sort_order, created_at
+            ) VALUES (?, ?, ?, ?, ?)
+        """, (
+            job_id,
+            member_id,
+            1 if lead_id and member_id == lead_id else 0,
+            sort_order,
+            now_iso(),
+        ))
+
+
+def sync_jobs_after_crew_member_rename(db, crew_member_id, old_name):
+    """Keep legacy searchable/display crew text in sync after a directory rename."""
+    jobs = db.execute("""
+        SELECT DISTINCT j.*
+        FROM jobs j
+        JOIN job_crew_assignments jca ON jca.job_id = j.id
+        WHERE jca.crew_member_id = ?
+    """, (crew_member_id,)).fetchall()
+
+    for job in jobs:
+        assignments = db.execute("""
+            SELECT jca.crew_member_id, jca.is_lead, jca.sort_order, cm.name
+            FROM job_crew_assignments jca
+            JOIN crew_members cm ON cm.id = jca.crew_member_id
+            WHERE jca.job_id = ?
+            ORDER BY jca.sort_order, LOWER(cm.name), cm.id
+        """, (job["id"],)).fetchall()
+
+        old_structured_names = set()
+        for row in assignments:
+            if row["crew_member_id"] == crew_member_id:
+                old_structured_names.add((old_name or "").lower())
+            else:
+                old_structured_names.add((row["name"] or "").lower())
+
+        custom_names = [
+            name for name in parse_crew_names(job["assigned_crew"])
+            if name.lower() not in old_structured_names
+        ]
+
+        names = []
+        seen = set()
+        for row in assignments:
+            name = row["name"].strip()
+            if name.lower() not in seen:
+                names.append(name)
+                seen.add(name.lower())
+        for name in custom_names:
+            if name.lower() not in seen:
+                names.append(name)
+                seen.add(name.lower())
+
+        lead_row = next((row for row in assignments if row["is_lead"]), None)
+        crew_lead = lead_row["name"] if lead_row else (job["crew_lead"] or "")
+
+        db.execute("""
+            UPDATE jobs
+            SET crew_lead = ?, assigned_crew = ?
+            WHERE id = ?
+        """, (crew_lead, ", ".join(names), job["id"]))
+
+
 def init_db():
     with get_db() as db:
         db.executescript("""
@@ -553,6 +842,30 @@ def init_db():
             reminder_hours_before INTEGER DEFAULT 48,
             reminder_count INTEGER DEFAULT 0
         );
+
+        CREATE TABLE IF NOT EXISTS crew_members (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL COLLATE NOCASE,
+            email TEXT,
+            phone TEXT,
+            role_trade TEXT,
+            notes TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS job_crew_assignments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id INTEGER NOT NULL,
+            crew_member_id INTEGER NOT NULL,
+            is_lead INTEGER NOT NULL DEFAULT 0,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            UNIQUE(job_id, crew_member_id),
+            FOREIGN KEY(job_id) REFERENCES jobs(id),
+            FOREIGN KEY(crew_member_id) REFERENCES crew_members(id)
+        );
         """)
         ensure_columns(db)
 
@@ -577,6 +890,19 @@ def init_db():
             ON jobs(project_id, installation_date)
         """)
         db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_crew_members_active_name
+            ON crew_members(is_active, name)
+        """)
+        db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_job_crew_assignments_job
+            ON job_crew_assignments(job_id, sort_order, crew_member_id)
+        """)
+        db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_job_crew_assignments_member
+            ON job_crew_assignments(crew_member_id, job_id)
+        """)
+
+        db.execute("""
             CREATE INDEX IF NOT EXISTS idx_job_notes_job_id
             ON job_notes(job_id, created_at DESC, id DESC)
         """)
@@ -594,6 +920,28 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_client_documents_client_id
             ON client_documents(client_id, created_at DESC, id DESC)
         """)
+
+        crew_migration = db.execute(
+            "SELECT 1 FROM app_migrations WHERE migration_key = ?",
+            ("v2.33_crew_directory",),
+        ).fetchone()
+        if not crew_migration:
+            migrate_legacy_crew_directory(db)
+            db.execute("""
+                INSERT INTO app_migrations (migration_key, applied_at, details)
+                VALUES (?, ?, ?)
+            """, (
+                "v2.33_crew_directory",
+                now_iso(),
+                "Created Crew Directory and migrated existing named crew assignments.",
+            ))
+            record_activity(
+                db,
+                "Crew Directory Enabled",
+                "Created the reusable crew directory and migrated existing named crew assignments.",
+                actor_type="SYSTEM",
+                actor_name="DispatchProof",
+            )
 
         activity_migration = db.execute(
             "SELECT 1 FROM app_migrations WHERE migration_key = ?",
@@ -1893,6 +2241,8 @@ def database_record_counts(db_path):
         "job_documents": 0,
         "project_documents": 0,
         "client_documents": 0,
+        "crew_members": 0,
+        "job_crew_assignments": 0,
     }
 
     conn = sqlite3.connect(db_path)
@@ -1914,6 +2264,8 @@ def database_record_counts(db_path):
             ("client_documents", "client_documents"),
             ("clients", "clients"),
             ("projects", "projects"),
+            ("crew_members", "crew_members"),
+            ("job_crew_assignments", "job_crew_assignments"),
         ):
             try:
                 counts[key] = conn.execute(
@@ -1950,6 +2302,8 @@ def create_backup_archive():
         "job_documents": 0,
         "project_documents": 0,
         "client_documents": 0,
+        "crew_members": 0,
+        "job_crew_assignments": 0,
         "uploaded_files": 0,
     }
 
@@ -1979,7 +2333,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.32",
+        "app_version": "2.33",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2209,7 +2563,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.32",
+        "app_version": "2.33",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2361,7 +2715,7 @@ def not_found(error):
 def health():
     return {
         "status": "ok",
-        "version": "2.32",
+        "version": "2.33",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -2436,6 +2790,251 @@ def my_account():
         owner_account=owner_account,
         user=user,
     )
+
+
+@app.route("/crew")
+def crew_directory():
+    search_query = (request.args.get("q") or "").strip()
+    status_filter = (request.args.get("status") or "active").strip().lower()
+    if status_filter not in {"active", "inactive", "all"}:
+        status_filter = "active"
+
+    today = local_today().isoformat()
+    next7 = (local_today() + timedelta(days=7)).isoformat()
+
+    where = []
+    params = []
+    if status_filter == "active":
+        where.append("cm.is_active = 1")
+    elif status_filter == "inactive":
+        where.append("cm.is_active = 0")
+
+    if search_query:
+        where.append("""
+            LOWER(
+                COALESCE(cm.name, '') || ' ' ||
+                COALESCE(cm.email, '') || ' ' ||
+                COALESCE(cm.phone, '') || ' ' ||
+                COALESCE(cm.role_trade, '') || ' ' ||
+                COALESCE(cm.notes, '')
+            ) LIKE ?
+        """)
+        params.append(f"%{search_query.lower()}%")
+
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+
+    with get_db() as db:
+        members = db.execute(f"""
+            SELECT
+                cm.*,
+                COUNT(DISTINCT CASE
+                    WHEN j.status <> 'COMPLETED' THEN j.id
+                END) AS active_job_count,
+                COUNT(DISTINCT CASE
+                    WHEN j.status <> 'COMPLETED'
+                     AND j.installation_date >= ?
+                     AND j.installation_date <= ?
+                    THEN j.id
+                END) AS next7_job_count
+            FROM crew_members cm
+            LEFT JOIN job_crew_assignments jca
+              ON jca.crew_member_id = cm.id
+            LEFT JOIN jobs j
+              ON j.id = jca.job_id
+            {where_sql}
+            GROUP BY cm.id
+            ORDER BY
+                CASE WHEN cm.is_active = 1 THEN 0 ELSE 1 END,
+                LOWER(cm.name),
+                cm.id
+        """, (today, next7, *params)).fetchall()
+
+        counts = {
+            "active": db.execute(
+                "SELECT COUNT(*) AS c FROM crew_members WHERE is_active = 1"
+            ).fetchone()["c"],
+            "inactive": db.execute(
+                "SELECT COUNT(*) AS c FROM crew_members WHERE is_active = 0"
+            ).fetchone()["c"],
+            "assigned_active_jobs": db.execute("""
+                SELECT COUNT(DISTINCT j.id) AS c
+                FROM jobs j
+                JOIN job_crew_assignments jca ON jca.job_id = j.id
+                WHERE j.status <> 'COMPLETED'
+            """).fetchone()["c"],
+        }
+
+    return render_template(
+        "crew_directory.html",
+        members=members,
+        counts=counts,
+        search_query=search_query,
+        status_filter=status_filter,
+    )
+
+
+@app.post("/crew/add")
+def add_crew_member():
+    name = (request.form.get("name") or "").strip()
+    email = (request.form.get("email") or "").strip()
+    phone = (request.form.get("phone") or "").strip()
+    role_trade = (request.form.get("role_trade") or "").strip()
+    notes = (request.form.get("notes") or "").strip()
+
+    if not name:
+        flash("Crew Member Name is required.")
+        return redirect(url_for("crew_directory") + "#add-crew")
+
+    try:
+        with get_db() as db:
+            cur = db.execute("""
+                INSERT INTO crew_members (
+                    name, email, phone, role_trade, notes,
+                    is_active, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+            """, (
+                name, email, phone, role_trade, notes, now_iso(), now_iso()
+            ))
+            record_activity(
+                db,
+                "Crew Member Added",
+                f"Added {name} to Crew Directory"
+                + (f" ({role_trade})." if role_trade else "."),
+            )
+            db.commit()
+            member_id = cur.lastrowid
+    except sqlite3.IntegrityError:
+        flash("A crew member with that name already exists.")
+        return redirect(url_for("crew_directory") + "#add-crew")
+
+    flash(f"{name} added to Crew Directory.")
+    return redirect(url_for("edit_crew_member", crew_member_id=member_id))
+
+
+@app.route("/crew/<int:crew_member_id>/edit", methods=["GET", "POST"])
+def edit_crew_member(crew_member_id):
+    with get_db() as db:
+        member = db.execute(
+            "SELECT * FROM crew_members WHERE id = ?",
+            (crew_member_id,),
+        ).fetchone()
+        if not member:
+            abort(404)
+
+        if request.method == "POST":
+            name = (request.form.get("name") or "").strip()
+            email = (request.form.get("email") or "").strip()
+            phone = (request.form.get("phone") or "").strip()
+            role_trade = (request.form.get("role_trade") or "").strip()
+            notes = (request.form.get("notes") or "").strip()
+
+            if not name:
+                flash("Crew Member Name is required.")
+                return redirect(url_for("edit_crew_member", crew_member_id=crew_member_id))
+
+            changes = []
+
+            def crew_note_change(label, old, new):
+                old_text = str(old or "")
+                new_text = str(new or "")
+                if old_text != new_text:
+                    changes.append(f"{label}: {old_text or '—'} → {new_text or '—'}")
+
+            crew_note_change("Name", member["name"], name)
+            crew_note_change("Role / Trade", member["role_trade"], role_trade)
+            crew_note_change("Email", member["email"], email)
+            crew_note_change("Phone", member["phone"], phone)
+            crew_note_change("Notes", member["notes"], notes)
+
+            try:
+                db.execute("""
+                    UPDATE crew_members
+                    SET name = ?, email = ?, phone = ?,
+                        role_trade = ?, notes = ?, updated_at = ?
+                    WHERE id = ?
+                """, (
+                    name, email, phone, role_trade, notes,
+                    now_iso(), crew_member_id,
+                ))
+
+                if (member["name"] or "").strip().lower() != name.lower():
+                    sync_jobs_after_crew_member_rename(
+                        db, crew_member_id, member["name"]
+                    )
+
+                if changes:
+                    record_activity(
+                        db,
+                        "Crew Member Updated",
+                        f"Updated {name}: " + " · ".join(changes),
+                    )
+                db.commit()
+            except sqlite3.IntegrityError:
+                flash("A crew member with that name already exists.")
+                return redirect(url_for("edit_crew_member", crew_member_id=crew_member_id))
+
+            flash("Crew member updated." if changes else "No crew member changes were made.")
+            return redirect(url_for("edit_crew_member", crew_member_id=crew_member_id))
+
+        assignments = db.execute("""
+            SELECT
+                j.id,
+                j.job_name,
+                j.project_site,
+                j.installation_date,
+                j.status,
+                jca.is_lead,
+                c.name AS client_name,
+                p.name AS project_name
+            FROM job_crew_assignments jca
+            JOIN jobs j ON j.id = jca.job_id
+            LEFT JOIN clients c ON c.id = j.client_id
+            LEFT JOIN projects p ON p.id = j.project_id
+            WHERE jca.crew_member_id = ?
+            ORDER BY
+                CASE WHEN j.status = 'COMPLETED' THEN 1 ELSE 0 END,
+                j.installation_date DESC,
+                j.id DESC
+            LIMIT 50
+        """, (crew_member_id,)).fetchall()
+
+    return render_template(
+        "edit_crew_member.html",
+        member=member,
+        assignments=assignments,
+    )
+
+
+@app.post("/crew/<int:crew_member_id>/toggle")
+def toggle_crew_member(crew_member_id):
+    with get_db() as db:
+        member = db.execute(
+            "SELECT * FROM crew_members WHERE id = ?",
+            (crew_member_id,),
+        ).fetchone()
+        if not member:
+            abort(404)
+
+        new_active = 0 if member["is_active"] else 1
+        db.execute("""
+            UPDATE crew_members
+            SET is_active = ?, updated_at = ?
+            WHERE id = ?
+        """, (new_active, now_iso(), crew_member_id))
+
+        record_activity(
+            db,
+            "Crew Member Reactivated" if new_active else "Crew Member Deactivated",
+            f"{'Reactivated' if new_active else 'Deactivated'} {member['name']} in Crew Directory.",
+        )
+        db.commit()
+
+    flash(
+        f"{member['name']} {'reactivated' if new_active else 'deactivated'}. "
+        "Existing job assignments were preserved."
+    )
+    return redirect(url_for("crew_directory", status="all"))
+
 
 
 @app.route("/settings/users")
@@ -2802,6 +3401,8 @@ def backup_restore():
         "client_documents": 0,
         "clients": 0,
         "projects": 0,
+        "crew_members": 0,
+        "job_crew_assignments": 0,
     }
 
     if db_exists:
@@ -2868,6 +3469,12 @@ def backup_restore():
             ).fetchone()["c"]
             counts["projects"] = db.execute(
                 "SELECT COUNT(*) AS c FROM projects"
+            ).fetchone()["c"]
+            counts["crew_members"] = db.execute(
+                "SELECT COUNT(*) AS c FROM crew_members"
+            ).fetchone()["c"]
+            counts["job_crew_assignments"] = db.execute(
+                "SELECT COUNT(*) AS c FROM job_crew_assignments"
             ).fetchone()["c"]
 
     settings = get_app_settings()
@@ -4630,8 +5237,6 @@ def new_job():
         reminder_enabled = 1 if request.form.get("reminder_enabled") == "on" else 0
         reminder_hours_before = int(request.form.get("reminder_hours_before") or DEFAULT_REMINDER_HOURS_BEFORE)
         duplicate_source_id = normalize_optional_id(request.form.get("duplicate_source_id"))
-        crew_lead = request.form.get("crew_lead", "").strip()
-        assigned_crew = request.form.get("assigned_crew", "").strip()
         planned_crew_size_raw = request.form.get("planned_crew_size", "").strip()
         planned_crew_size = None
         if planned_crew_size_raw:
@@ -4650,6 +5255,8 @@ def new_job():
         if planned_crew_size == -1:
             with get_db() as db:
                 clients, projects = get_clients_and_projects(db)
+                crew_members = get_crew_members_for_picker(db)
+                crew_state = resolve_job_crew_form(db, request.form)
             return render_template(
                 "new_job.html",
                 default_checklist=checklist,
@@ -4657,6 +5264,11 @@ def new_job():
                 default_reminder_hours=reminder_hours_before,
                 clients=clients,
                 projects=projects,
+                crew_members=crew_members,
+                selected_crew_ids=crew_state["selected_crew_ids"],
+                selected_lead_id=crew_state["selected_lead_id"],
+                custom_crew_lead=crew_state["custom_crew_lead"],
+                custom_crew_names=crew_state["custom_crew_names"],
                 selected_client_id=normalize_optional_id(request.form.get("client_id")),
                 selected_project_id=normalize_optional_id(request.form.get("project_id")),
                 duplicate_source=None,
@@ -4667,13 +5279,16 @@ def new_job():
                     "contact_name": request.form.get("contact_name", ""),
                     "contact_email": request.form.get("contact_email", ""),
                     "contact_phone": request.form.get("contact_phone", ""),
-                    "crew_lead": crew_lead,
                     "planned_crew_size": planned_crew_size_raw,
-                    "assigned_crew": assigned_crew,
                 },
             )
 
         with get_db() as db:
+            crew_members = get_crew_members_for_picker(db)
+            crew_state = resolve_job_crew_form(db, request.form)
+            crew_lead = crew_state["crew_lead"]
+            assigned_crew = crew_state["assigned_crew"]
+
             duplicate_source = None
             if duplicate_source_id:
                 duplicate_source = db.execute(
@@ -4694,6 +5309,11 @@ def new_job():
                     default_reminder_hours=reminder_hours_before,
                     clients=clients,
                     projects=projects,
+                    crew_members=crew_members,
+                    selected_crew_ids=crew_state["selected_crew_ids"],
+                    selected_lead_id=crew_state["selected_lead_id"],
+                    custom_crew_lead=crew_state["custom_crew_lead"],
+                    custom_crew_names=crew_state["custom_crew_names"],
                     selected_client_id=normalize_optional_id(request.form.get("client_id")),
                     selected_project_id=normalize_optional_id(request.form.get("project_id")),
                     duplicate_source=duplicate_source,
@@ -4704,9 +5324,7 @@ def new_job():
                         "contact_name": request.form.get("contact_name", ""),
                         "contact_email": request.form.get("contact_email", ""),
                         "contact_phone": request.form.get("contact_phone", ""),
-                        "crew_lead": crew_lead,
                         "planned_crew_size": planned_crew_size_raw,
-                        "assigned_crew": assigned_crew,
                     },
                 )
 
@@ -4741,6 +5359,12 @@ def new_job():
                 reminder_hours_before,
             ))
             job_id = cur.lastrowid
+            save_job_crew_assignments(
+                db,
+                job_id,
+                crew_state["selected_crew_ids"],
+                crew_state["selected_lead_id"],
+            )
             record_activity(
                 db,
                 "Job Created",
@@ -4767,9 +5391,7 @@ def new_job():
         "contact_name": "",
         "contact_email": "",
         "contact_phone": "",
-        "crew_lead": "",
         "planned_crew_size": "",
-        "assigned_crew": "",
     }
     default_checklist = DEFAULT_CHECKLIST
     default_reminder_enabled = DEFAULT_REMINDER_ENABLED
@@ -4777,6 +5399,11 @@ def new_job():
 
     with get_db() as db:
         clients, projects = get_clients_and_projects(db)
+        crew_members = get_crew_members_for_picker(db)
+        selected_crew_ids = []
+        selected_lead_id = None
+        custom_crew_lead = ""
+        custom_crew_names = ""
         selected_client_id = normalize_optional_id(request.args.get("client_id"))
         selected_project_id = normalize_optional_id(request.args.get("project_id"))
         duplicate_from = normalize_optional_id(request.args.get("duplicate_from"))
@@ -4796,9 +5423,7 @@ def new_job():
                     "contact_name": duplicate_source["contact_name"] or "",
                     "contact_email": duplicate_source["contact_email"] or "",
                     "contact_phone": duplicate_source["contact_phone"] or "",
-                    "crew_lead": "",
                     "planned_crew_size": "",
-                    "assigned_crew": "",
                 }
                 try:
                     source_checklist = json.loads(duplicate_source["checklist_json"] or "[]")
@@ -4831,6 +5456,11 @@ def new_job():
         default_reminder_hours=default_reminder_hours,
         clients=clients,
         projects=projects,
+        crew_members=crew_members,
+        selected_crew_ids=selected_crew_ids,
+        selected_lead_id=selected_lead_id,
+        custom_crew_lead=custom_crew_lead,
+        custom_crew_names=custom_crew_names,
         selected_client_id=selected_client_id,
         selected_project_id=selected_project_id,
         duplicate_source=duplicate_source,
@@ -5900,8 +6530,9 @@ def edit_job(job_id):
             contact_name = request.form.get("contact_name", "").strip()
             contact_email = request.form.get("contact_email", "").strip()
             contact_phone = request.form.get("contact_phone", "").strip()
-            crew_lead = request.form.get("crew_lead", "").strip()
-            assigned_crew = request.form.get("assigned_crew", "").strip()
+            crew_state = resolve_job_crew_form(db, request.form)
+            crew_lead = crew_state["crew_lead"]
+            assigned_crew = crew_state["assigned_crew"]
             planned_crew_size_raw = request.form.get("planned_crew_size", "").strip()
             planned_crew_size = None
             if planned_crew_size_raw:
@@ -5936,12 +6567,15 @@ def edit_job(job_id):
                         "contact_name": contact_name,
                         "contact_email": contact_email,
                         "contact_phone": contact_phone,
-                        "crew_lead": crew_lead,
                         "planned_crew_size": planned_crew_size_raw,
-                        "assigned_crew": assigned_crew,
                         "reminder_enabled": reminder_enabled,
                         "reminder_hours_before": reminder_hours_before,
                     },
+                    crew_members=get_crew_members_for_picker(db, job_id),
+                    selected_crew_ids=crew_state["selected_crew_ids"],
+                    selected_lead_id=crew_state["selected_lead_id"],
+                    custom_crew_lead=crew_state["custom_crew_lead"],
+                    custom_crew_names=crew_state["custom_crew_names"],
                 )
 
             if planned_crew_size == -1:
@@ -5956,12 +6590,15 @@ def edit_job(job_id):
                         "contact_name": contact_name,
                         "contact_email": contact_email,
                         "contact_phone": contact_phone,
-                        "crew_lead": crew_lead,
                         "planned_crew_size": planned_crew_size_raw,
-                        "assigned_crew": assigned_crew,
                         "reminder_enabled": reminder_enabled,
                         "reminder_hours_before": reminder_hours_before,
                     },
+                    crew_members=get_crew_members_for_picker(db, job_id),
+                    selected_crew_ids=crew_state["selected_crew_ids"],
+                    selected_lead_id=crew_state["selected_lead_id"],
+                    custom_crew_lead=crew_state["custom_crew_lead"],
+                    custom_crew_names=crew_state["custom_crew_names"],
                 )
 
             changes = []
@@ -6026,6 +6663,13 @@ def edit_job(job_id):
                     job_id,
                 ))
 
+                save_job_crew_assignments(
+                    db,
+                    job_id,
+                    crew_state["selected_crew_ids"],
+                    crew_state["selected_lead_id"],
+                )
+
                 record_activity(
                     db,
                     "Job Details Updated",
@@ -6035,9 +6679,48 @@ def edit_job(job_id):
                 db.commit()
                 flash("Job details updated.")
             else:
-                flash("No job detail changes were made.")
+                existing_ids = [
+                    row["crew_member_id"]
+                    for row in db.execute("""
+                        SELECT crew_member_id
+                        FROM job_crew_assignments
+                        WHERE job_id = ?
+                        ORDER BY sort_order, id
+                    """, (job_id,)).fetchall()
+                ]
+                existing_lead = db.execute("""
+                    SELECT crew_member_id
+                    FROM job_crew_assignments
+                    WHERE job_id = ? AND is_lead = 1
+                    LIMIT 1
+                """, (job_id,)).fetchone()
+                existing_lead_id = existing_lead["crew_member_id"] if existing_lead else None
+
+                if (
+                    existing_ids != crew_state["selected_crew_ids"]
+                    or existing_lead_id != crew_state["selected_lead_id"]
+                ):
+                    save_job_crew_assignments(
+                        db,
+                        job_id,
+                        crew_state["selected_crew_ids"],
+                        crew_state["selected_lead_id"],
+                    )
+                    record_activity(
+                        db,
+                        "Crew Assignment Updated",
+                        "Updated the structured Crew Directory assignment for this job.",
+                        job_id=job_id,
+                    )
+                    db.commit()
+                    flash("Crew assignment updated.")
+                else:
+                    flash("No job detail changes were made.")
 
             return redirect(url_for("job_detail", job_id=job_id))
+
+        crew_picker_state = job_crew_picker_state(db, job)
+        crew_members = get_crew_members_for_picker(db, job_id)
 
         form_values = {
             "job_name": job["job_name"] or "",
@@ -6046,9 +6729,7 @@ def edit_job(job_id):
             "contact_name": job["contact_name"] or "",
             "contact_email": job["contact_email"] or "",
             "contact_phone": job["contact_phone"] or "",
-            "crew_lead": job["crew_lead"] or "",
             "planned_crew_size": job["planned_crew_size"] or "",
-            "assigned_crew": job["assigned_crew"] or "",
             "reminder_enabled": int(job["reminder_enabled"] or 0),
             "reminder_hours_before": int(
                 job["reminder_hours_before"] or DEFAULT_REMINDER_HOURS_BEFORE
@@ -6059,6 +6740,11 @@ def edit_job(job_id):
         "edit_job.html",
         job=job,
         form_values=form_values,
+        crew_members=crew_members,
+        selected_crew_ids=crew_picker_state["selected_crew_ids"],
+        selected_lead_id=crew_picker_state["selected_lead_id"],
+        custom_crew_lead=crew_picker_state["custom_crew_lead"],
+        custom_crew_names=crew_picker_state["custom_crew_names"],
     )
 
 
