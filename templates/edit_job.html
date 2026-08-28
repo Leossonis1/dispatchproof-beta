@@ -61,20 +61,7 @@
     <h2>Crew Assignment</h2>
     <p class="section-copy">Optional internal planning details. These stay out of public/client reports.</p>
 
-    <div class="form-grid two">
-      <label>Crew Lead
-        <input name="crew_lead" value="{{ form_values.crew_lead|e }}" placeholder="Mike Davis">
-      </label>
-
-      <label>Planned Crew Size
-        <input type="number" min="1" step="1" name="planned_crew_size"
-               value="{{ form_values.planned_crew_size|e }}" placeholder="3">
-      </label>
-
-      <label class="crew-names-field">Crew / Installers
-        <textarea name="assigned_crew" rows="3" placeholder="Mike Davis, Chris Smith, Jordan Lee">{{ form_values.assigned_crew|e }}</textarea>
-      </label>
-    </div>
+    {% include "_crew_picker.html" %}
   </section>
 
   <section>

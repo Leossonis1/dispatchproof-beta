@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Crew · DispatchProof{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">Internal Dispatch</div>
+    <h1>Crew Directory</h1>
+    <p>Save crew once, then reuse the same names and contact details across installation jobs.</p>
+  </div>
+</div>
+
+<section class="crew-directory-summary">
+  <a class="crew-directory-stat {% if status_filter == 'active' %}selected{% endif %}"
+     href="{{ url_for('crew_directory', status='active') }}">
+    <span>Active Crew</span><strong>{{ counts.active }}</strong>
+  </a>
+  <a class="crew-directory-stat {% if status_filter == 'inactive' %}selected{% endif %}"
+     href="{{ url_for('crew_directory', status='inactive') }}">
+    <span>Inactive</span><strong>{{ counts.inactive }}</strong>
+  </a>
+  <div class="crew-directory-stat">
+    <span>Active Jobs with Crew</span><strong>{{ counts.assigned_active_jobs }}</strong>
+  </div>
+</section>
+
+<section class="panel crew-add-panel" id="add-crew">
+  <div class="section-heading-row">
+    <div>
+      <div class="eyebrow">Add Crew</div>
+      <h2>New Crew Member</h2>
+      <p>Create a reusable internal record. Nothing here appears in client-facing reports.</p>
+    </div>
+    <span class="internal-badge">Internal Only</span>
+  </div>
+
+  <form method="post" action="{{ url_for('add_crew_member') }}" class="crew-add-form">
+    <div class="form-grid two">
+      <label>Name
+        <input name="name" required placeholder="Mike Davis">
+      </label>
+      <label>Role / Trade <span class="muted">(optional)</span>
+        <input name="role_trade" placeholder="Lead Installer, Carpenter, Electrician...">
+      </label>
+      <label>Email <span class="muted">(optional)</span>
+        <input type="email" name="email" placeholder="name@example.com">
+      </label>
+      <label>Phone <span class="muted">(optional)</span>
+        <input name="phone" placeholder="555-555-0123">
+      </label>
+      <label class="crew-notes-field">Notes <span class="muted">(optional)</span>
+        <textarea name="notes" rows="2" placeholder="Internal scheduling notes, certifications, preferred region..."></textarea>
+      </label>
+    </div>
+    <div class="form-actions crew-add-actions">
+      <button class="btn primary" type="submit">Add Crew Member</button>
+    </div>
+  </form>
+</section>
+
+<section class="panel crew-search-panel">
+  <div class="eyebrow">Find Crew Fast</div>
+  <h2>Search & Filter</h2>
+  <form method="get" action="{{ url_for('crew_directory') }}" class="crew-filter-form">
+    <label>Search
+      <input name="q" value="{{ search_query|e }}" placeholder="Name, role, trade, email, phone...">
+    </label>
+    <label>Status
+      <select name="status">
+        <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Active</option>
+        <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>Inactive</option>
+        <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All Crew</option>
+      </select>
+    </label>
+    <button class="btn primary" type="submit">Apply Filters</button>
+    {% if search_query or status_filter != 'active' %}
+    <a class="btn ghost" href="{{ url_for('crew_directory') }}">Clear All</a>
+    {% endif %}
+  </form>
+</section>
+
+<section class="panel">
+  <div class="section-heading-row">
+    <div>
+      <div class="eyebrow">Directory</div>
+      <h2>Crew Members</h2>
+      <p>{{ members|length }} record{{ '' if members|length == 1 else 's' }} shown.</p>
+    </div>
+  </div>
+
+  {% if members %}
+  <div class="crew-directory-list">
+    {% for member in members %}
+    <article class="crew-directory-row {% if not member['is_active'] %}crew-directory-row-inactive{% endif %}">
+      <div class="crew-directory-person">
+        <div class="crew-avatar">{{ member['name'][:1]|upper }}</div>
+        <div>
+          <div class="crew-name-line">
+            <strong>{{ member['name'] }}</strong>
+            <span class="status-pill {% if member['is_active'] %}crew-active{% else %}crew-inactive{% endif %}">
+              {{ 'ACTIVE' if member['is_active'] else 'INACTIVE' }}
+            </span>
+          </div>
+          <span>{{ member['role_trade'] or 'Crew member' }}</span>
+          {% if member['email'] or member['phone'] %}
+          <small>
+            {% if member['email'] %}{{ member['email'] }}{% endif %}
+            {% if member['email'] and member['phone'] %} · {% endif %}
+            {% if member['phone'] %}{{ member['phone'] }}{% endif %}
+          </small>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="crew-directory-work">
+        <span><strong>{{ member['active_job_count'] }}</strong> active job{{ '' if member['active_job_count'] == 1 else 's' }}</span>
+        <span><strong>{{ member['next7_job_count'] }}</strong> next 7 days</span>
+      </div>
+
+      <div class="crew-directory-actions">
+        <a class="btn action-blue" href="{{ url_for('edit_crew_member', crew_member_id=member['id']) }}">View / Edit</a>
+        <form method="post" action="{{ url_for('toggle_crew_member', crew_member_id=member['id']) }}"
+              onsubmit="return confirm('{{ 'Deactivate' if member['is_active'] else 'Reactivate' }} {{ member['name']|e }}? Existing job assignments will be preserved.');">
+          <button class="btn {% if member['is_active'] %}ghost{% else %}primary{% endif %}" type="submit">
+            {{ 'Deactivate' if member['is_active'] else 'Reactivate' }}
+          </button>
+        </form>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">No crew members match the current search and status filter.</div>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,2 +1,2 @@
-DispatchProof Version 2.32 - Crew Coverage
-Adds assigned/unassigned crew coverage filtering and near-term crew-gap attention alerts.
+DispatchProof Version 2.33 - Crew Directory
+Adds reusable crew records and directory-based job crew assignment.

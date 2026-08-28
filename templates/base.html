@@ -26,6 +26,7 @@
     <nav>
       <a class="{% if request.path == '/' %}active{% endif %}" href="{{ url_for('dashboard') }}">Dashboard</a>
       <a class="{% if request.path == '/schedule' %}active{% endif %}" href="{{ url_for('schedule_board') }}">Schedule</a>
+      <a class="{% if request.path.startswith('/crew') %}active{% endif %}" href="{{ url_for('crew_directory') }}">Crew</a>
       <a class="{% if request.path == '/jobs/new' %}active{% endif %}" href="{{ url_for('new_job') }}">New Job</a>
       <a class="{% if request.path == '/completed' %}active{% endif %}" href="{{ url_for('completed_jobs') }}">Completed Jobs</a>
       <a class="{% if request.path.startswith('/email-outbox') %}active{% endif %}" href="{{ url_for('email_outbox') }}">Email Outbox</a>

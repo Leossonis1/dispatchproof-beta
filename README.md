@@ -1680,3 +1680,78 @@ The existing Schedule CSV export preserves the Crew Coverage filter, and Print /
 Help & Tutorials now includes **Check Crew Coverage**.
 
 No database migration is required.
+
+
+## V2.33 — Crew Directory
+
+V2.33 replaces repeated manual crew-name entry with reusable internal crew records.
+
+### Crew Directory
+
+A new **Crew** page is available to Owner, Administrator, and Operations users.
+
+Each crew record can store:
+
+- Name
+- Role / Trade
+- Email
+- Phone
+- Internal notes
+- Active / Inactive status
+
+The directory also shows active-job and next-seven-days assignment counts.
+
+### Automatic V2.32 migration
+
+When a V2.32 database is opened in V2.33, existing named crew assignments are automatically converted into reusable Crew Directory records and linked to their current jobs.
+
+Existing display/search/export fields remain intact.
+
+### Job assignment picker
+
+**New Job** and **Edit Job Details** now use Crew Directory pickers:
+
+- Crew Lead dropdown
+- Crew / Installer checkboxes
+- Planned Crew Size
+- Optional Custom Crew Lead
+- Optional Additional / Custom Crew
+
+Selecting a Crew Lead automatically includes that person in the planned crew.
+
+### Custom crew
+
+Temporary installers or subcontractors can still be entered without creating a reusable directory record.
+
+Custom names remain attached to that job only.
+
+### Deactivation
+
+Crew members can be deactivated without deleting history.
+
+Inactive people stop appearing on new-job pickers, but any existing job assignment remains visible and editable.
+
+### Rename sync
+
+Renaming a directory member automatically updates the linked job's searchable/display crew text.
+
+### Audit Log
+
+V2.33 records:
+
+- Crew Directory Enabled
+- Crew Member Added
+- Crew Member Updated
+- Crew Member Deactivated
+- Crew Member Reactivated
+- structured Crew Assignment Updated when needed
+
+### Backup & Restore
+
+Crew Members and Crew Assignments are stored in the DispatchProof database and are included in the normal backup ZIP.
+
+The Backup & Restore page now shows Crew Member and Crew Assignment counts.
+
+### Help Center
+
+Help & Tutorials now includes **Build and Use Crew Directory**.

@@ -1,0 +1,88 @@
+<div class="crew-directory-picker">
+  <div class="crew-picker-heading">
+    <div>
+      <strong>Pick from Crew Directory</strong>
+      <span>Choose reusable crew records instead of retyping names.</span>
+    </div>
+    <a href="{{ url_for('crew_directory') }}" target="_blank" rel="noopener">Open Crew Directory →</a>
+  </div>
+
+  {% if crew_members %}
+  <div class="form-grid two crew-picker-top">
+    <label>Crew Lead <span class="muted">(optional)</span>
+      <select name="crew_lead_member_id" id="crew_lead_member_id">
+        <option value="">No directory lead selected</option>
+        {% for member in crew_members %}
+        <option value="{{ member['id'] }}"
+                {% if selected_lead_id == member['id'] %}selected{% endif %}>
+          {{ member['name'] }}{% if member['role_trade'] %} · {{ member['role_trade'] }}{% endif %}{% if not member['is_active'] %} · Inactive{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>Planned Crew Size <span class="muted">(optional)</span>
+      <input type="number" min="1" step="1" name="planned_crew_size"
+             value="{{ form_values.planned_crew_size|e }}" placeholder="3">
+    </label>
+  </div>
+
+  <div class="crew-picker-label">Crew / Installers <span class="muted">(select all who are planned)</span></div>
+  <div class="crew-picker-grid">
+    {% for member in crew_members %}
+    <label class="crew-picker-option {% if not member['is_active'] %}crew-picker-inactive{% endif %}">
+      <input type="checkbox"
+             name="crew_member_ids"
+             value="{{ member['id'] }}"
+             data-crew-member-id="{{ member['id'] }}"
+             {% if member['id'] in selected_crew_ids %}checked{% endif %}>
+      <span>
+        <strong>{{ member['name'] }}</strong>
+        <small>
+          {{ member['role_trade'] or 'Crew member' }}
+          {% if not member['is_active'] %} · Inactive — retained because this job uses them{% endif %}
+        </small>
+      </span>
+    </label>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state crew-picker-empty">
+    No active crew members yet.
+    <a href="{{ url_for('crew_directory') }}" target="_blank" rel="noopener">Add your first crew member →</a>
+  </div>
+  <label>Planned Crew Size <span class="muted">(optional)</span>
+    <input type="number" min="1" step="1" name="planned_crew_size"
+           value="{{ form_values.planned_crew_size|e }}" placeholder="3">
+  </label>
+  {% endif %}
+
+  <details class="crew-custom-details" {% if custom_crew_lead or custom_crew_names %}open{% endif %}>
+    <summary>Need someone who is not in Crew Directory?</summary>
+    <div class="form-grid two">
+      <label>Custom Crew Lead <span class="muted">(optional)</span>
+        <input name="custom_crew_lead"
+               value="{{ custom_crew_lead|e }}"
+               placeholder="Temporary foreman or subcontractor">
+      </label>
+
+      <label class="crew-names-field">Additional / Custom Crew <span class="muted">(optional)</span>
+        <textarea name="custom_crew_names" rows="3"
+                  placeholder="Temporary installer, subcontractor">{{ custom_crew_names|e }}</textarea>
+      </label>
+    </div>
+    <small class="field-help">Custom names stay on this job only. Add them to Crew Directory if you want to reuse them later.</small>
+  </details>
+</div>
+
+<script>
+(function(){
+  const lead = document.getElementById('crew_lead_member_id');
+  if (!lead) return;
+  lead.addEventListener('change', function(){
+    if (!lead.value) return;
+    const box = document.querySelector('input[data-crew-member-id="' + lead.value + '"]');
+    if (box) box.checked = true;
+  });
+})();
+</script>
