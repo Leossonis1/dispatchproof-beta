@@ -15,7 +15,8 @@ import zipfile
 import re
 import html as html_lib
 from email.message import EmailMessage
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -35,6 +36,17 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "dispatchproof.db"
 UPLOAD_DIR = DATA_DIR / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+# Display timestamps in the company's local timezone while preserving the
+# existing UTC-like stored ISO values used by Render.
+DISPLAY_TIMEZONE_NAME = os.getenv(
+    "DISPATCHPROOF_TIMEZONE", "America/New_York"
+).strip() or "America/New_York"
+try:
+    DISPLAY_TIMEZONE = ZoneInfo(DISPLAY_TIMEZONE_NAME)
+except Exception:
+    DISPLAY_TIMEZONE_NAME = "America/New_York"
+    DISPLAY_TIMEZONE = ZoneInfo(DISPLAY_TIMEZONE_NAME)
 
 PUBLIC_BASE_URL = os.getenv("DISPATCHPROOF_PUBLIC_BASE_URL", "").strip().rstrip("/")
 RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
@@ -639,8 +651,20 @@ def format_datetime(value):
         return "—"
     try:
         dt = datetime.fromisoformat(value)
-        hour = dt.strftime("%I").lstrip("0") or "0"
-        return f"{dt.strftime('%b')} {dt.day}, {dt.year} at {hour}:{dt.strftime('%M %p')}"
+
+        # Existing DispatchProof timestamps created on Render are stored as
+        # naive ISO values representing UTC. Treat naive values as UTC, then
+        # convert only for display. Aware timestamps are converted directly.
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+
+        local_dt = dt.astimezone(DISPLAY_TIMEZONE)
+        hour = local_dt.strftime("%I").lstrip("0") or "0"
+        zone_label = local_dt.tzname() or "ET"
+        return (
+            f"{local_dt.strftime('%b')} {local_dt.day}, {local_dt.year} "
+            f"at {hour}:{local_dt.strftime('%M %p')} {zone_label}"
+        )
     except Exception:
         return value
 
@@ -1725,7 +1749,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.14",
+        "app_version": "2.14.1",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -1955,7 +1979,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.14",
+        "app_version": "2.14.1",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2099,7 +2123,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.14",
+        "version": "2.14.1",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
