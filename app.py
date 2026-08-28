@@ -243,6 +243,33 @@ def ensure_columns(db):
     """)
 
 
+    # V2.14: remember the most recent successful backup creation.
+    app_settings_columns = {
+        row["name"]
+        for row in db.execute("PRAGMA table_info(app_settings)").fetchall()
+    }
+    if "last_backup_at" not in app_settings_columns:
+        db.execute("ALTER TABLE app_settings ADD COLUMN last_backup_at TEXT")
+
+    # Older databases may already have Backup Downloaded activity. Use the
+    # newest one as a safe initial reminder date until the next V2.14 backup.
+    settings_row = db.execute(
+        "SELECT last_backup_at FROM app_settings WHERE id = 1"
+    ).fetchone()
+    if settings_row and not settings_row["last_backup_at"]:
+        previous_backup = db.execute("""
+            SELECT created_at
+            FROM activity_log
+            WHERE action = 'Backup Downloaded'
+            ORDER BY id DESC
+            LIMIT 1
+        """).fetchone()
+        if previous_backup:
+            db.execute(
+                "UPDATE app_settings SET last_backup_at = ? WHERE id = 1",
+                (previous_backup["created_at"],),
+            )
+
     # V2.6: extend V2.5 client/project records and email history without
     # requiring a destructive database migration.
     for table_name, columns in {
@@ -419,6 +446,7 @@ def init_db():
             website TEXT,
             accent_color TEXT NOT NULL DEFAULT '#0f62fe',
             logo_filename TEXT,
+            last_backup_at TEXT,
             updated_at TEXT
         );
 
@@ -524,6 +552,64 @@ def init_db():
 
 def now_iso():
     return datetime.now().replace(microsecond=0).isoformat()
+
+def backup_reminder_state(last_backup_at):
+    """Return display state for the admin-only backup freshness reminder."""
+    if not last_backup_at:
+        return {
+            "level": "urgent",
+            "show_dashboard": True,
+            "days": None,
+            "label": "No backup recorded",
+            "message": "Create a backup now so the current beta data can be restored after a Render reset.",
+        }
+
+    try:
+        backup_dt = datetime.fromisoformat(last_backup_at)
+    except Exception:
+        return {
+            "level": "urgent",
+            "show_dashboard": True,
+            "days": None,
+            "label": "Backup date unavailable",
+            "message": "Create a fresh backup so DispatchProof can track backup freshness correctly.",
+        }
+
+    age = datetime.now() - backup_dt
+    days = max(0, age.days)
+
+    if days >= 7:
+        level = "urgent"
+        show_dashboard = True
+        label = "Backup overdue"
+        message = (
+            f"Your last backup was {days} day{'s' if days != 1 else ''} ago. "
+            "Back up before the next deploy, restart, or important test."
+        )
+    elif days >= 3:
+        level = "recommended"
+        show_dashboard = True
+        label = "Backup recommended"
+        message = (
+            f"Your last backup was {days} day{'s' if days != 1 else ''} ago. "
+            "A fresh checkpoint is recommended."
+        )
+    else:
+        level = "current"
+        show_dashboard = False
+        if days == 0:
+            message = "Your latest backup is less than a day old."
+        else:
+            message = f"Your latest backup is {days} day ago."
+        label = "Backup current"
+
+    return {
+        "level": level,
+        "show_dashboard": show_dashboard,
+        "days": days,
+        "label": label,
+        "message": message,
+    }
 
 def pretty_number(value):
     if value is None or value == "":
@@ -1639,7 +1725,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.13",
+        "app_version": "2.14",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -1775,6 +1861,7 @@ def restore_backup_archive(zip_path):
                 "backup_counts": staged_counts,
                 "live_counts": live_counts,
                 "manifest_counts": manifest.get("counts") or {},
+                "manifest_created_at": manifest.get("created_at"),
             }
 
         except Exception as exc:
@@ -1830,6 +1917,7 @@ def get_app_settings():
         "website": "",
         "accent_color": "#0f62fe",
         "logo_filename": None,
+        "last_backup_at": None,
     }
 
 def normalize_hex_color(value):
@@ -1867,7 +1955,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.13",
+        "app_version": "2.14",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2011,7 +2099,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.13",
+        "version": "2.14",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -2495,21 +2583,38 @@ def backup_restore():
                 "SELECT COUNT(*) AS c FROM projects"
             ).fetchone()["c"]
 
+    settings = get_app_settings()
+    backup_status = backup_reminder_state(settings.get("last_backup_at"))
+
     return render_template(
         "backup_restore.html",
         db_exists=db_exists,
         upload_count=upload_count,
         counts=counts,
         data_dir=str(DATA_DIR),
+        last_backup_at=settings.get("last_backup_at"),
+        backup_status=backup_status,
     )
 
 @app.get("/backup/download")
 def download_backup():
+    backup_at = now_iso()
+
+    # Record the checkpoint before creating the archive so the ZIP itself
+    # remembers when it was made after a future restore.
+    with get_db() as db:
+        db.execute(
+            "UPDATE app_settings SET last_backup_at = ? WHERE id = 1",
+            (backup_at,),
+        )
+        record_activity(
+            db,
+            "Backup Downloaded",
+            "Created a fresh DispatchProof data backup.",
+        )
+        db.commit()
+
     archive_path, temp_dir = create_backup_archive()
-    log_activity(
-        "Backup Downloaded",
-        f"Created data backup {archive_path.name}.",
-    )
     response = send_file(
         archive_path,
         as_attachment=True,
@@ -2550,10 +2655,20 @@ def restore_backup():
     # Re-run migrations against the restored database before writing the restore event.
     init_db()
     restored_jobs = (restore_info or {}).get("live_counts", {}).get("jobs", 0)
-    log_activity(
-        "Backup Restored",
-        f"Restored and verified backup containing {restored_jobs} job(s).",
-    )
+    restored_backup_at = (restore_info or {}).get("manifest_created_at")
+
+    with get_db() as db:
+        if restored_backup_at:
+            db.execute(
+                "UPDATE app_settings SET last_backup_at = ? WHERE id = 1",
+                (restored_backup_at,),
+            )
+        record_activity(
+            db,
+            "Backup Restored",
+            f"Restored and verified backup containing {restored_jobs} job(s).",
+        )
+        db.commit()
     flash(
         f"Backup restored and verified: {restored_jobs} job(s) restored, "
         "along with history, Email Outbox data, and uploaded evidence."
@@ -3211,6 +3326,13 @@ def dashboard():
     filters_active = bool(status_filter or search_query or client_filter or project_filter)
     due_reminder_count = sum(1 for j in all_jobs if reminder_due(j))
 
+    backup_status = None
+    last_backup_at = None
+    if current_user_is_admin():
+        settings = get_app_settings()
+        last_backup_at = settings.get("last_backup_at")
+        backup_status = backup_reminder_state(last_backup_at)
+
     return render_template(
         "dashboard.html",
         jobs=jobs,
@@ -3224,6 +3346,8 @@ def dashboard():
         filters_active=filters_active,
         total_active_jobs=len(all_jobs),
         due_reminder_count=due_reminder_count,
+        backup_status=backup_status,
+        last_backup_at=last_backup_at,
     )
 
 
