@@ -979,3 +979,32 @@ Example:
 `America/Chicago`
 
 No environment change is required for the current Eastern Time setup.
+
+
+## V2.15 — Schedule Alerts & Date Filters
+
+V2.15 makes installation dates operationally visible on the active Dashboard.
+
+### Schedule buckets
+
+Every active job is classified by Installation Date as **Overdue**, **Today**, **Next 7 Days**, or **Later**. Date classification uses the configured DispatchProof timezone (`America/New_York` by default).
+
+### Quick schedule chips
+
+The Dashboard shows live counts for the four schedule windows. Clicking a chip filters the active job list, and clicking the selected chip again clears that schedule filter.
+
+### Combined filters
+
+Schedule works together with Search, Client, Project, and Status. The same schedule choices are also available in the Search & Filter form.
+
+### Job list alerts
+
+Jobs that are Overdue, Today, or Next 7 Days show a small schedule label under the Installation Date. These alerts do not change job status or workflow.
+
+### No database migration
+
+V2.15 does not change the database schema. The latest V2.14.1 backup remains compatible.
+
+### Help Center
+
+Help & Tutorials now includes **Use Schedule Alerts**.

@@ -2577,3 +2577,58 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(15,98,254,.12);bo
     text-align:left;
   }
 }
+
+
+/* DispatchProof V2.15 — Schedule Alerts & Date Filters */
+.schedule-strip{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:10px;
+  margin-bottom:16px;
+}
+.schedule-chip{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  min-height:46px;
+  padding:10px 13px;
+  border:1px solid #d9e2ef;
+  border-radius:10px;
+  background:#fff;
+  color:#344054;
+  text-decoration:none;
+}
+.schedule-chip span{font-size:10px;font-weight:800;}
+.schedule-chip strong{font-size:17px;line-height:1;}
+.schedule-overdue{border-top:3px solid #d92d20;}
+.schedule-today{border-top:3px solid #f79009;}
+.schedule-next7{border-top:3px solid #2e90fa;}
+.schedule-later{border-top:3px solid #667085;}
+.schedule-chip.selected-schedule{
+  box-shadow:0 0 0 3px rgba(21,94,239,.14);
+  border-color:#84adff;
+}
+.schedule-row-tag{
+  display:inline-block;
+  margin-top:4px;
+  padding:2px 6px;
+  border-radius:999px;
+  font-size:8px;
+  font-weight:900;
+  line-height:1.2;
+  white-space:nowrap;
+}
+.schedule-row-overdue{background:#fee4e2;color:#b42318;}
+.schedule-row-today{background:#fef0c7;color:#93370d;}
+.schedule-row-next7{background:#eff8ff;color:#175cd3;}
+.dashboard-filter-form{
+  grid-template-columns:minmax(220px,1.45fr) minmax(140px,.78fr) minmax(155px,.9fr) minmax(130px,.72fr) minmax(135px,.72fr) auto;
+}
+@media(max-width:1120px){
+  .dashboard-filter-form{grid-template-columns:repeat(3,minmax(0,1fr));}
+}
+@media(max-width:760px){
+  .schedule-strip{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .dashboard-filter-form{grid-template-columns:1fr;}
+}

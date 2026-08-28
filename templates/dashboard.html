@@ -42,24 +42,43 @@
 
 <div class="stat-grid">
   <a class="stat ready {% if status_filter == 'READY' %}selected-stat{% endif %}"
-     href="{{ url_for('dashboard', status='' if status_filter == 'READY' else 'READY', q=search_query or None, client=client_filter or None, project=project_filter or None) }}">
+     href="{{ url_for('dashboard', status='' if status_filter == 'READY' else 'READY', q=search_query or None, client=client_filter or None, project=project_filter or None, schedule=schedule_filter or None) }}">
     <strong>{{ counts['READY'] }}</strong><span>Ready to Dispatch</span>
   </a>
   <a class="stat review {% if status_filter == 'REVIEW' %}selected-stat{% endif %}"
-     href="{{ url_for('dashboard', status='' if status_filter == 'REVIEW' else 'REVIEW', q=search_query or None, client=client_filter or None, project=project_filter or None) }}">
+     href="{{ url_for('dashboard', status='' if status_filter == 'REVIEW' else 'REVIEW', q=search_query or None, client=client_filter or None, project=project_filter or None, schedule=schedule_filter or None) }}">
     <strong>{{ counts['REVIEW'] }}</strong><span>Needs Review</span>
   </a>
   <a class="stat blocked {% if status_filter == 'BLOCKED' %}selected-stat{% endif %}"
-     href="{{ url_for('dashboard', status='' if status_filter == 'BLOCKED' else 'BLOCKED', q=search_query or None, client=client_filter or None, project=project_filter or None) }}">
+     href="{{ url_for('dashboard', status='' if status_filter == 'BLOCKED' else 'BLOCKED', q=search_query or None, client=client_filter or None, project=project_filter or None, schedule=schedule_filter or None) }}">
     <strong>{{ counts['BLOCKED'] }}</strong><span>Blocked</span>
   </a>
   <a class="stat neutral {% if status_filter == 'NO RESPONSE' %}selected-stat{% endif %}"
-     href="{{ url_for('dashboard', status='' if status_filter == 'NO RESPONSE' else 'NO RESPONSE', q=search_query or None, client=client_filter or None, project=project_filter or None) }}">
+     href="{{ url_for('dashboard', status='' if status_filter == 'NO RESPONSE' else 'NO RESPONSE', q=search_query or None, client=client_filter or None, project=project_filter or None, schedule=schedule_filter or None) }}">
     <strong>{{ counts['NO RESPONSE'] }}</strong><span>No Response</span>
   </a>
   <a class="stat on-site {% if status_filter == 'ON SITE' %}selected-stat{% endif %}"
-     href="{{ url_for('dashboard', status='' if status_filter == 'ON SITE' else 'ON SITE', q=search_query or None, client=client_filter or None, project=project_filter or None) }}">
+     href="{{ url_for('dashboard', status='' if status_filter == 'ON SITE' else 'ON SITE', q=search_query or None, client=client_filter or None, project=project_filter or None, schedule=schedule_filter or None) }}">
     <strong>{{ counts['ON SITE'] }}</strong><span>On Site</span>
+  </a>
+</div>
+
+<div class="schedule-strip">
+  <a class="schedule-chip schedule-overdue {% if schedule_filter == 'overdue' %}selected-schedule{% endif %}"
+     href="{{ url_for('dashboard', schedule='' if schedule_filter == 'overdue' else 'overdue', status=status_filter or None, q=search_query or None, client=client_filter or None, project=project_filter or None) }}">
+    <span>Overdue</span><strong>{{ schedule_counts.overdue }}</strong>
+  </a>
+  <a class="schedule-chip schedule-today {% if schedule_filter == 'today' %}selected-schedule{% endif %}"
+     href="{{ url_for('dashboard', schedule='' if schedule_filter == 'today' else 'today', status=status_filter or None, q=search_query or None, client=client_filter or None, project=project_filter or None) }}">
+    <span>Today</span><strong>{{ schedule_counts.today }}</strong>
+  </a>
+  <a class="schedule-chip schedule-next7 {% if schedule_filter == 'next7' %}selected-schedule{% endif %}"
+     href="{{ url_for('dashboard', schedule='' if schedule_filter == 'next7' else 'next7', status=status_filter or None, q=search_query or None, client=client_filter or None, project=project_filter or None) }}">
+    <span>Next 7 Days</span><strong>{{ schedule_counts.next7 }}</strong>
+  </a>
+  <a class="schedule-chip schedule-later {% if schedule_filter == 'later' %}selected-schedule{% endif %}"
+     href="{{ url_for('dashboard', schedule='' if schedule_filter == 'later' else 'later', status=status_filter or None, q=search_query or None, client=client_filter or None, project=project_filter or None) }}">
+    <span>Later</span><strong>{{ schedule_counts.later }}</strong>
   </a>
 </div>
 
@@ -103,6 +122,17 @@
           {{ project['name'] }}{% if project['project_number'] %} · {{ project['project_number'] }}{% endif %}
         </option>
         {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      <span>Schedule</span>
+      <select name="schedule">
+        <option value="">All Dates</option>
+        <option value="overdue" {% if schedule_filter == 'overdue' %}selected{% endif %}>Overdue</option>
+        <option value="today" {% if schedule_filter == 'today' %}selected{% endif %}>Today</option>
+        <option value="next7" {% if schedule_filter == 'next7' %}selected{% endif %}>Next 7 Days</option>
+        <option value="later" {% if schedule_filter == 'later' %}selected{% endif %}>Later</option>
       </select>
     </label>
 
@@ -157,7 +187,15 @@
           </td>
           <td>{{ job['project_site'] or '—' }}</td>
           <td>#{{ job['attempt_number'] }}</td>
-          <td>{{ job['installation_date']|pretty_date }}</td>
+          <td>
+            {{ job['installation_date']|pretty_date }}
+            {% set bucket = schedule_buckets.get(job['id']) %}
+            {% if bucket in ['overdue', 'today', 'next7'] %}
+            <div class="schedule-row-tag schedule-row-{{ bucket }}">
+              {% if bucket == 'overdue' %}Overdue{% elif bucket == 'today' %}Today{% else %}Next 7 Days{% endif %}
+            </div>
+            {% endif %}
+          </td>
           <td><span class="badge {{ job['status']|lower|replace(' ', '-') }}">{{ job['status'] }}</span></td>
           <td>{{ job['contact_name'] }}</td>
           <td><a class="text-link" href="{{ url_for('job_detail', job_id=job['id']) }}">View →</a></td>
