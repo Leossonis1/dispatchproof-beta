@@ -1409,3 +1409,12 @@ V2.26 uses the existing Client, Project, and Job document tables. V2.25 backups 
 ### Help Center
 
 Help & Tutorials now includes **Use Document Center**.
+
+
+## V2.26.1 — Document Center Hotfix
+
+V2.26.1 fixes an Internal Server Error encountered when opening the new Document Center on the live/restored beta database.
+
+The Document Center now loads Client Documents, Project Documents, and Job Documents with three independent SQLite queries, then combines and sorts them in Python.
+
+No schema or template changes are required, and V2.25/V2.26 backups remain compatible.

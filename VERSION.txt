@@ -1,2 +1,2 @@
-DispatchProof Version 2.26 - Document Center
-Adds one searchable internal index for Client, Project, and Job Documents.
+DispatchProof Version 2.26.1 - Document Center Hotfix
+Fixes the Document Center server error by loading each document scope independently.
