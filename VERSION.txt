@@ -1,2 +1,2 @@
-DispatchProof Version 2.15 - Schedule Alerts & Date Filters
-Adds Overdue, Today, Next 7 Days, and Later schedule alerts/filters to the active Dashboard.
+DispatchProof Version 2.15.1 - Dashboard Width Fix
+Fixes horizontal page overflow introduced by the V2.15 schedule/filter layout at common desktop and laptop widths.

@@ -1008,3 +1008,18 @@ V2.15 does not change the database schema. The latest V2.14.1 backup remains com
 ### Help Center
 
 Help & Tutorials now includes **Use Schedule Alerts**.
+
+
+## V2.15.1 — Dashboard Width Fix
+
+V2.15.1 fixes horizontal page overflow introduced by the expanded V2.15 Dashboard filters.
+
+### What changed
+
+- Dashboard filters wrap earlier instead of forcing one oversized row.
+- Schedule chips remain inside the available content width.
+- Grid and panel children are allowed to shrink correctly.
+- Long table content wraps or scrolls inside the table container rather than widening the entire page.
+- Mobile/tablet breakpoints remain responsive.
+
+No workflow, database, search, status, or schedule logic changed.

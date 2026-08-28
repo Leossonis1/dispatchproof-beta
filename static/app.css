@@ -2632,3 +2632,81 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(15,98,254,.12);bo
   .schedule-strip{grid-template-columns:repeat(2,minmax(0,1fr));}
   .dashboard-filter-form{grid-template-columns:1fr;}
 }
+
+
+/* DispatchProof V2.15.1 — Dashboard Width / Overflow Fix */
+
+/* Prevent grid children from forcing the main content wider than the viewport. */
+.main-content,
+.page-shell,
+.panel,
+.panel-head,
+.dashboard-filter-panel,
+.dashboard-filter-form,
+.schedule-strip,
+.stat-grid,
+.table-wrap,
+table{
+  min-width:0;
+}
+
+/* The V2.15 six-column filter row was too wide at common laptop widths.
+   Use a wrapping three-column layout sooner, then collapse cleanly. */
+.dashboard-filter-form{
+  grid-template-columns:minmax(220px,1.4fr) minmax(145px,.85fr) minmax(155px,.9fr);
+}
+.dashboard-filter-button{
+  width:max-content;
+  max-width:100%;
+}
+
+/* Keep schedule chips inside the available content width. */
+.schedule-strip{
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  width:100%;
+}
+.schedule-chip{
+  min-width:0;
+}
+.schedule-chip span{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+/* Let long table content wrap instead of creating page-level horizontal scroll. */
+.job-org-line,
+td,
+th{
+  overflow-wrap:anywhere;
+}
+.table-wrap{
+  width:100%;
+  overflow-x:auto;
+}
+
+/* Make sure page-level content never exceeds its containing column. */
+.content,
+.content-wrap,
+main{
+  max-width:100%;
+}
+
+@media(max-width:980px){
+  .dashboard-filter-form{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  .schedule-strip{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+
+@media(max-width:650px){
+  .dashboard-filter-form,
+  .schedule-strip{
+    grid-template-columns:1fr;
+  }
+  .dashboard-filter-button{
+    width:100%;
+  }
+}
