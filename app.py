@@ -170,6 +170,9 @@ def ensure_columns(db):
         "reminder_enabled": "INTEGER DEFAULT 1",
         "reminder_hours_before": "INTEGER DEFAULT 48",
         "reminder_count": "INTEGER DEFAULT 0",
+        "crew_lead": "TEXT",
+        "planned_crew_size": "INTEGER",
+        "assigned_crew": "TEXT",
     }
     for name, sql_type in needed.items():
         if name not in existing:
@@ -1961,7 +1964,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.29",
+        "app_version": "2.30",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2191,7 +2194,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.29",
+        "app_version": "2.30",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2338,7 +2341,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.29",
+        "version": "2.30",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -3988,6 +3991,8 @@ def build_schedule_view(args):
                 job["client_name"] or "",
                 job["assigned_project_name"] or "",
                 job["assigned_project_number"] or "",
+                job["crew_lead"] or "",
+                job["assigned_crew"] or "",
             ]).lower()
             if search_lower not in searchable:
                 continue
@@ -4065,6 +4070,9 @@ def schedule_export_csv():
         "Client",
         "Project",
         "Project Number",
+        "Crew Lead",
+        "Planned Crew Size",
+        "Crew / Installers",
         "Site Contact",
         "Contact Email",
         "Contact Phone",
@@ -4088,6 +4096,9 @@ def schedule_export_csv():
             job["client_name"] or "",
             job["assigned_project_name"] or "",
             job["assigned_project_number"] or "",
+            job["crew_lead"] or "",
+            job["planned_crew_size"] or "",
+            job["assigned_crew"] or "",
             job["contact_name"] or "",
             job["contact_email"] or "",
             job["contact_phone"] or "",
@@ -4575,10 +4586,49 @@ def new_job():
         reminder_enabled = 1 if request.form.get("reminder_enabled") == "on" else 0
         reminder_hours_before = int(request.form.get("reminder_hours_before") or DEFAULT_REMINDER_HOURS_BEFORE)
         duplicate_source_id = normalize_optional_id(request.form.get("duplicate_source_id"))
+        crew_lead = request.form.get("crew_lead", "").strip()
+        assigned_crew = request.form.get("assigned_crew", "").strip()
+        planned_crew_size_raw = request.form.get("planned_crew_size", "").strip()
+        planned_crew_size = None
+        if planned_crew_size_raw:
+            try:
+                planned_crew_size = int(planned_crew_size_raw)
+            except ValueError:
+                flash("Planned Crew Size must be a whole number.")
+                planned_crew_size = -1
+            if planned_crew_size == 0 or planned_crew_size < -1:
+                flash("Planned Crew Size must be at least 1 when entered.")
+                planned_crew_size = -1
 
         token = secrets.token_urlsafe(18)
         arrival_token = secrets.token_urlsafe(24)
         client_report_token = secrets.token_urlsafe(24)
+        if planned_crew_size == -1:
+            with get_db() as db:
+                clients, projects = get_clients_and_projects(db)
+            return render_template(
+                "new_job.html",
+                default_checklist=checklist,
+                default_reminder_enabled=bool(reminder_enabled),
+                default_reminder_hours=reminder_hours_before,
+                clients=clients,
+                projects=projects,
+                selected_client_id=normalize_optional_id(request.form.get("client_id")),
+                selected_project_id=normalize_optional_id(request.form.get("project_id")),
+                duplicate_source=None,
+                form_values={
+                    "job_name": request.form.get("job_name", ""),
+                    "project_site": request.form.get("project_site", ""),
+                    "installation_date": request.form.get("installation_date", ""),
+                    "contact_name": request.form.get("contact_name", ""),
+                    "contact_email": request.form.get("contact_email", ""),
+                    "contact_phone": request.form.get("contact_phone", ""),
+                    "crew_lead": crew_lead,
+                    "planned_crew_size": planned_crew_size_raw,
+                    "assigned_crew": assigned_crew,
+                },
+            )
+
         with get_db() as db:
             duplicate_source = None
             if duplicate_source_id:
@@ -4610,6 +4660,9 @@ def new_job():
                         "contact_name": request.form.get("contact_name", ""),
                         "contact_email": request.form.get("contact_email", ""),
                         "contact_phone": request.form.get("contact_phone", ""),
+                        "crew_lead": crew_lead,
+                        "planned_crew_size": planned_crew_size_raw,
+                        "assigned_crew": assigned_crew,
                     },
                 )
 
@@ -4619,9 +4672,10 @@ def new_job():
                     client_id, project_id,
                     job_name, project_site, installation_date,
                     contact_name, contact_email, contact_phone, checklist_json,
+                    crew_lead, planned_crew_size, assigned_crew,
                     status, created_at, reminder_enabled, reminder_hours_before,
                     reminder_count
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NO RESPONSE', ?, ?, ?, 0)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NO RESPONSE', ?, ?, ?, 0)
             """, (
                 token,
                 arrival_token,
@@ -4635,6 +4689,9 @@ def new_job():
                 request.form["contact_email"].strip(),
                 request.form.get("contact_phone", "").strip(),
                 json.dumps(checklist),
+                crew_lead,
+                planned_crew_size,
+                assigned_crew,
                 now_iso(),
                 reminder_enabled,
                 reminder_hours_before,
@@ -4666,6 +4723,9 @@ def new_job():
         "contact_name": "",
         "contact_email": "",
         "contact_phone": "",
+        "crew_lead": "",
+        "planned_crew_size": "",
+        "assigned_crew": "",
     }
     default_checklist = DEFAULT_CHECKLIST
     default_reminder_enabled = DEFAULT_REMINDER_ENABLED
@@ -4692,6 +4752,9 @@ def new_job():
                     "contact_name": duplicate_source["contact_name"] or "",
                     "contact_email": duplicate_source["contact_email"] or "",
                     "contact_phone": duplicate_source["contact_phone"] or "",
+                    "crew_lead": "",
+                    "planned_crew_size": "",
+                    "assigned_crew": "",
                 }
                 try:
                     source_checklist = json.loads(duplicate_source["checklist_json"] or "[]")
@@ -5793,6 +5856,18 @@ def edit_job(job_id):
             contact_name = request.form.get("contact_name", "").strip()
             contact_email = request.form.get("contact_email", "").strip()
             contact_phone = request.form.get("contact_phone", "").strip()
+            crew_lead = request.form.get("crew_lead", "").strip()
+            assigned_crew = request.form.get("assigned_crew", "").strip()
+            planned_crew_size_raw = request.form.get("planned_crew_size", "").strip()
+            planned_crew_size = None
+            if planned_crew_size_raw:
+                try:
+                    planned_crew_size = int(planned_crew_size_raw)
+                except ValueError:
+                    planned_crew_size = -1
+                if planned_crew_size < 1:
+                    planned_crew_size = -1
+
             reminder_enabled = 1 if request.form.get("reminder_enabled") == "on" else 0
 
             try:
@@ -5817,6 +5892,29 @@ def edit_job(job_id):
                         "contact_name": contact_name,
                         "contact_email": contact_email,
                         "contact_phone": contact_phone,
+                        "crew_lead": crew_lead,
+                        "planned_crew_size": planned_crew_size_raw,
+                        "assigned_crew": assigned_crew,
+                        "reminder_enabled": reminder_enabled,
+                        "reminder_hours_before": reminder_hours_before,
+                    },
+                )
+
+            if planned_crew_size == -1:
+                flash("Planned Crew Size must be a whole number of at least 1.")
+                return render_template(
+                    "edit_job.html",
+                    job=job,
+                    form_values={
+                        "job_name": job_name,
+                        "project_site": project_site,
+                        "installation_date": installation_date,
+                        "contact_name": contact_name,
+                        "contact_email": contact_email,
+                        "contact_phone": contact_phone,
+                        "crew_lead": crew_lead,
+                        "planned_crew_size": planned_crew_size_raw,
+                        "assigned_crew": assigned_crew,
                         "reminder_enabled": reminder_enabled,
                         "reminder_hours_before": reminder_hours_before,
                     },
@@ -5836,6 +5934,13 @@ def edit_job(job_id):
             note_change("Site Contact", job["contact_name"], contact_name)
             note_change("Contact Email", job["contact_email"], contact_email)
             note_change("Contact Phone", job["contact_phone"], contact_phone)
+            note_change("Crew Lead", job["crew_lead"], crew_lead)
+            note_change(
+                "Planned Crew Size",
+                job["planned_crew_size"],
+                planned_crew_size,
+            )
+            note_change("Crew / Installers", job["assigned_crew"], assigned_crew)
             note_change(
                 "Automatic Reminder",
                 "Enabled" if job["reminder_enabled"] else "Disabled",
@@ -5856,6 +5961,9 @@ def edit_job(job_id):
                         contact_name = ?,
                         contact_email = ?,
                         contact_phone = ?,
+                        crew_lead = ?,
+                        planned_crew_size = ?,
+                        assigned_crew = ?,
                         reminder_enabled = ?,
                         reminder_hours_before = ?
                     WHERE id = ?
@@ -5866,6 +5974,9 @@ def edit_job(job_id):
                     contact_name,
                     contact_email,
                     contact_phone,
+                    crew_lead,
+                    planned_crew_size,
+                    assigned_crew,
                     reminder_enabled,
                     reminder_hours_before,
                     job_id,
@@ -5891,6 +6002,9 @@ def edit_job(job_id):
             "contact_name": job["contact_name"] or "",
             "contact_email": job["contact_email"] or "",
             "contact_phone": job["contact_phone"] or "",
+            "crew_lead": job["crew_lead"] or "",
+            "planned_crew_size": job["planned_crew_size"] or "",
+            "assigned_crew": job["assigned_crew"] or "",
             "reminder_enabled": int(job["reminder_enabled"] or 0),
             "reminder_hours_before": int(
                 job["reminder_hours_before"] or DEFAULT_REMINDER_HOURS_BEFORE
