@@ -1886,7 +1886,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.20",
+        "app_version": "2.21",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2116,7 +2116,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.20",
+        "app_version": "2.21",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2261,7 +2261,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.20",
+        "version": "2.21",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -4088,6 +4088,8 @@ def send_reminder(job_id):
 
     if job["status"] != "NO RESPONSE":
         flash("A reminder is only needed while the readiness request has no response.")
+        if request.form.get("return_to") == "dashboard":
+            return redirect(url_for("dashboard"))
         return redirect(url_for("readiness_request", job_id=job_id))
 
     public_url = public_readiness_url(job)
@@ -4105,6 +4107,12 @@ def send_reminder(job_id):
         f"Reminder for {job['contact_name']} <{job['contact_email']}>: {status}.",
         job_id=job_id,
     )
+
+    # Quick actions may launch from Dashboard. Only accept a known internal
+    # destination instead of redirecting to an arbitrary URL.
+    if request.form.get("return_to") == "dashboard":
+        return redirect(url_for("dashboard"))
+
     return redirect(url_for("readiness_request", job_id=job_id))
 
 @app.post("/reminders/run")
