@@ -1,2 +1,2 @@
-DispatchProof Version 2.25 - Client Documents
-Adds internal client-level documents shared across every project and installation assigned to the client.
+DispatchProof Version 2.26 - Document Center
+Adds one searchable internal index for Client, Project, and Job Documents.

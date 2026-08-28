@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}Documents · DispatchProof{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <div class="eyebrow">INTERNAL FILES</div>
+    <h1>Document Center</h1>
+    <p>Find client, project, and job documents from one place.</p>
+  </div>
+</div>
+
+<section class="document-summary-grid">
+  <a class="document-summary-card {% if not scope_filter %}selected{% endif %}"
+     href="{{ url_for('document_center') }}">
+    <span>All Documents</span>
+    <strong>{{ total_document_count }}</strong>
+  </a>
+  <a class="document-summary-card {% if scope_filter == 'CLIENT' %}selected{% endif %}"
+     href="{{ url_for('document_center', scope='CLIENT') }}">
+    <span>Client</span>
+    <strong>{{ scope_counts.CLIENT }}</strong>
+  </a>
+  <a class="document-summary-card {% if scope_filter == 'PROJECT' %}selected{% endif %}"
+     href="{{ url_for('document_center', scope='PROJECT') }}">
+    <span>Project</span>
+    <strong>{{ scope_counts.PROJECT }}</strong>
+  </a>
+  <a class="document-summary-card {% if scope_filter == 'JOB' %}selected{% endif %}"
+     href="{{ url_for('document_center', scope='JOB') }}">
+    <span>Job</span>
+    <strong>{{ scope_counts.JOB }}</strong>
+  </a>
+</section>
+
+<section class="panel">
+  <div class="panel-head document-filter-head">
+    <div>
+      <div class="eyebrow">FIND FILES FAST</div>
+      <h2>Search & Filter</h2>
+      <p>Search filename, client, project, job, site, or uploader.</p>
+    </div>
+    {% if search_query or scope_filter or selected_client_id or selected_project_id %}
+    <a class="btn action-blue small-btn" href="{{ url_for('document_center') }}">Clear All</a>
+    {% endif %}
+  </div>
+
+  <form method="get" class="document-filter-form">
+    <label>
+      Search
+      <input type="search" name="q" value="{{ search_query }}" placeholder="Filename, client, project, job...">
+    </label>
+
+    <label>
+      Type
+      <select name="scope">
+        <option value="" {% if not scope_filter %}selected{% endif %}>All Document Types</option>
+        <option value="CLIENT" {% if scope_filter == 'CLIENT' %}selected{% endif %}>Client Documents</option>
+        <option value="PROJECT" {% if scope_filter == 'PROJECT' %}selected{% endif %}>Project Documents</option>
+        <option value="JOB" {% if scope_filter == 'JOB' %}selected{% endif %}>Job Documents</option>
+      </select>
+    </label>
+
+    <label>
+      Client
+      <select name="client_id">
+        <option value="">All Clients</option>
+        {% for client in clients %}
+        <option value="{{ client['id'] }}" {% if selected_client_id == client['id'] %}selected{% endif %}>
+          {{ client['name'] }}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      Project
+      <select name="project_id">
+        <option value="">All Projects</option>
+        {% for project in projects %}
+        <option value="{{ project['id'] }}" {% if selected_project_id == project['id'] %}selected{% endif %}>
+          {{ project['client_name'] }} · {{ project['name'] }}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <button class="btn action-blue" type="submit">Apply Filters</button>
+  </form>
+
+  <div class="document-result-count">
+    {{ documents|length }} of {{ total_document_count }} document{{ '' if total_document_count == 1 else 's' }} shown.
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Documents</h2>
+      <p>Files remain attached to their original client, project, or job.</p>
+    </div>
+    <span class="internal-only-badge">INTERNAL ONLY</span>
+  </div>
+
+  {% if documents %}
+  <div class="document-center-list">
+    {% for document in documents %}
+    <article class="document-center-row">
+      <div class="document-center-main">
+        <div class="document-center-title">
+          <span class="document-scope-badge scope-{{ document['document_scope']|lower }}">
+            {{ document['document_scope'] }}
+          </span>
+          <strong>{{ document['original_filename'] }}</strong>
+        </div>
+
+        <div class="document-center-path">
+          {% if document['client_name'] %}
+            <span>{{ document['client_name'] }}</span>
+          {% endif %}
+          {% if document['project_name'] %}
+            <span>{{ document['project_name'] }}</span>
+          {% endif %}
+          {% if document['job_name'] %}
+            <span>{{ document['job_name'] }}</span>
+          {% endif %}
+          {% if document['project_site'] %}
+            <span>{{ document['project_site'] }}</span>
+          {% endif %}
+        </div>
+
+        <div class="document-center-meta">
+          {{ document['file_size']|pretty_bytes }}
+          · uploaded by {{ document['actor_name'] }}
+          · {{ document['created_at']|pretty_datetime }}
+        </div>
+      </div>
+
+      <div class="document-center-actions">
+        {% if document['document_scope'] == 'CLIENT' %}
+          <a class="btn action-blue small-btn"
+             href="{{ url_for('download_client_document', client_id=document['client_id'], document_id=document['document_id']) }}">
+            Download
+          </a>
+          <a class="text-link" href="{{ url_for('client_detail', client_id=document['client_id']) }}#client-documents">
+            Open Client →
+          </a>
+        {% elif document['document_scope'] == 'PROJECT' %}
+          <a class="btn action-blue small-btn"
+             href="{{ url_for('download_project_document', project_id=document['project_id'], document_id=document['document_id']) }}">
+            Download
+          </a>
+          <a class="text-link" href="{{ url_for('project_detail', project_id=document['project_id']) }}#project-documents">
+            Open Project →
+          </a>
+        {% else %}
+          <a class="btn action-blue small-btn"
+             href="{{ url_for('download_job_document', job_id=document['job_id'], document_id=document['document_id']) }}">
+            Download
+          </a>
+          <a class="text-link" href="{{ url_for('job_detail', job_id=document['job_id']) }}#job-documents">
+            Open Job →
+          </a>
+        {% endif %}
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-mini">No documents match the current search and filters.</div>
+  {% endif %}
+</section>
+
+{% endblock %}

@@ -1350,3 +1350,62 @@ Client document upload/delete actions are recorded in the global Activity Log.
 Help & Tutorials now includes **Use Client Documents** and keeps tutorial numbering sequential.
 
 No manual database migration is required. The new table is created automatically at startup.
+
+
+## V2.26 — Document Center
+
+V2.26 adds a central **Documents** page for finding internal files across DispatchProof.
+
+### One searchable file index
+
+Document Center combines the existing:
+
+- Client Documents
+- Project Documents
+- Job Documents
+
+into one searchable view without moving or duplicating any files.
+
+### Search & filters
+
+Office users can search by:
+
+- filename
+- client
+- project
+- job
+- project/site
+- uploader
+
+Filters include:
+
+- All / Client / Project / Job document type
+- specific Client
+- specific Project
+
+### Direct actions
+
+Every result includes:
+
+- file scope
+- filename
+- hierarchy path
+- file size
+- uploader
+- Eastern timestamp
+- Download
+- Open Client / Open Project / Open Job
+
+### Permissions and privacy
+
+Document Center is available to signed-in Owner, Administrator, and Operations users.
+
+It only indexes internal document libraries. Nothing is added to public readiness links or client-facing reports.
+
+### No database migration
+
+V2.26 uses the existing Client, Project, and Job document tables. V2.25 backups remain compatible.
+
+### Help Center
+
+Help & Tutorials now includes **Use Document Center**.

@@ -29,6 +29,7 @@
       <a class="{% if request.path == '/completed' %}active{% endif %}" href="{{ url_for('completed_jobs') }}">Completed Jobs</a>
       <a class="{% if request.path.startswith('/email-outbox') %}active{% endif %}" href="{{ url_for('email_outbox') }}">Email Outbox</a>
       <a class="{% if request.path.startswith('/clients') or request.path.startswith('/projects') %}active{% endif %}" href="{{ url_for('clients') }}">Clients & Projects</a>
+      <a class="{% if request.path.startswith('/documents') %}active{% endif %}" href="{{ url_for('document_center') }}">Documents</a>
       <a class="{% if request.path.startswith('/help') %}active{% endif %}" href="{{ url_for('help_center') }}">Help & Tutorials</a>
       <a class="{% if request.path == '/account' %}active{% endif %}" href="{{ url_for('my_account') }}">My Account</a>
       {% if current_user_is_admin %}
