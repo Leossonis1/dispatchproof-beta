@@ -422,6 +422,43 @@
 
 
 
+{% if client_documents and assigned_client %}
+<section class="panel client-reference-documents" id="client-reference-documents">
+  <div class="panel-head">
+    <div>
+      <div class="eyebrow">Client Files</div>
+      <h2>Client Reference Files</h2>
+      <p>Shared internal files from {{ assigned_client['name'] }}. These apply across every project and installation for this client.</p>
+    </div>
+    <span class="internal-only-badge">INTERNAL ONLY</span>
+  </div>
+
+  <div class="job-document-list">
+    {% for document in client_documents %}
+    <article class="job-document-row">
+      <div class="job-document-main">
+        <div class="job-document-icon">FILE</div>
+        <div>
+          <strong>{{ document['original_filename'] }}</strong>
+          <span>{{ document['file_size']|pretty_bytes }} · client file · {{ document['created_at']|pretty_datetime }}</span>
+        </div>
+      </div>
+      <div class="job-document-actions">
+        <a class="btn action-blue small-btn"
+           href="{{ url_for('download_client_document', client_id=assigned_client['id'], document_id=document['id']) }}">
+          Download
+        </a>
+        <a class="text-link"
+           href="{{ url_for('client_detail', client_id=assigned_client['id']) }}#client-documents">
+          Open Client →
+        </a>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 {% if project_documents and assigned_project %}
 <section class="panel project-reference-documents" id="project-reference-documents">
   <div class="panel-head">

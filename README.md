@@ -1307,3 +1307,46 @@ Project document upload/delete actions are recorded in the global Activity Log.
 Help & Tutorials now includes **Use Project Documents** and tutorial card numbers are re-sequenced consistently.
 
 No manual database migration is required. The new table is created automatically at startup.
+
+
+## V2.25 — Client Documents
+
+V2.25 completes the DispatchProof internal file hierarchy:
+
+**Client Documents → Project Documents → Job Documents**
+
+### Client-level file library
+
+From a Client page, signed-in users can upload PDF, Word, Excel / CSV, TXT, images, DWG, or DXF files up to 20 MB each.
+
+Typical uses include client standards, master agreements, vendor requirements, recurring installation instructions, or reference drawings that apply across multiple projects.
+
+### Shared automatically
+
+A client document is stored once:
+
+- every Project under that client shows it under **Client Reference Files**
+- every Job assigned to that client shows it under **Client Reference Files**
+- no duplicate file copies are created
+
+### Permissions
+
+- Owner / Administrator: upload, download, delete
+- Operations: upload and download
+- public/client report viewers: no access
+
+### Backup & restore
+
+Client Documents are included in DispatchProof backup ZIPs.
+
+Backup & Restore now shows separate counts for Job Documents, Project Documents, and Client Documents.
+
+### Activity
+
+Client document upload/delete actions are recorded in the global Activity Log.
+
+### Help Center
+
+Help & Tutorials now includes **Use Client Documents** and keeps tutorial numbering sequential.
+
+No manual database migration is required. The new table is created automatically at startup.

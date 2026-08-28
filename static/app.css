@@ -3183,3 +3183,12 @@ main{
 .project-reference-documents .job-document-actions{
   align-items:center;
 }
+
+
+/* DispatchProof V2.25 — Client Documents */
+.client-reference-documents{
+  border-left:3px solid #475467;
+}
+.client-reference-documents .job-document-actions{
+  align-items:center;
+}
