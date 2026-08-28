@@ -15,6 +15,7 @@
                         q=search_query or None,
                         schedule=schedule_filter or None,
                         status=status_filter or None,
+                        crew=crew_filter or None,
                         client=client_filter or None,
                         project=project_filter or None,
                         completed='1' if include_completed else None) }}">
@@ -31,6 +32,7 @@
                       schedule='' if schedule_filter == 'overdue' else 'overdue',
                       q=search_query or None,
                       status=status_filter or None,
+                      crew=crew_filter or None,
                       client=client_filter or None,
                       project=project_filter or None,
                       completed='1' if include_completed else None) }}">
@@ -43,6 +45,7 @@
                       schedule='' if schedule_filter == 'today' else 'today',
                       q=search_query or None,
                       status=status_filter or None,
+                      crew=crew_filter or None,
                       client=client_filter or None,
                       project=project_filter or None,
                       completed='1' if include_completed else None) }}">
@@ -55,6 +58,7 @@
                       schedule='' if schedule_filter == 'next7' else 'next7',
                       q=search_query or None,
                       status=status_filter or None,
+                      crew=crew_filter or None,
                       client=client_filter or None,
                       project=project_filter or None,
                       completed='1' if include_completed else None) }}">
@@ -67,11 +71,40 @@
                       schedule='' if schedule_filter == 'later' else 'later',
                       q=search_query or None,
                       status=status_filter or None,
+                      crew=crew_filter or None,
                       client=client_filter or None,
                       project=project_filter or None,
                       completed='1' if include_completed else None) }}">
     <span>Later</span>
     <strong>{{ schedule_counts.later }}</strong>
+  </a>
+</section>
+
+<section class="crew-coverage-summary">
+  <a class="crew-coverage-card crew-assigned-card {% if crew_filter == 'assigned' %}selected{% endif %}"
+     href="{{ url_for('schedule_board',
+                      crew='' if crew_filter == 'assigned' else 'assigned',
+                      schedule=schedule_filter or None,
+                      q=search_query or None,
+                      status=status_filter or None,
+                      client=client_filter or None,
+                      project=project_filter or None,
+                      completed='1' if include_completed else None) }}">
+    <span>Crew Assigned</span>
+    <strong>{{ crew_counts.assigned }}</strong>
+  </a>
+
+  <a class="crew-coverage-card crew-unassigned-card {% if crew_filter == 'unassigned' %}selected{% endif %}"
+     href="{{ url_for('schedule_board',
+                      crew='' if crew_filter == 'unassigned' else 'unassigned',
+                      schedule=schedule_filter or None,
+                      q=search_query or None,
+                      status=status_filter or None,
+                      client=client_filter or None,
+                      project=project_filter or None,
+                      completed='1' if include_completed else None) }}">
+    <span>Crew Unassigned</span>
+    <strong>{{ crew_counts.unassigned }}</strong>
   </a>
 </section>
 
@@ -119,6 +152,15 @@
     </label>
 
     <label>
+      <span>Crew Coverage</span>
+      <select name="crew">
+        <option value="">All Crew Coverage</option>
+        <option value="assigned" {% if crew_filter == 'assigned' %}selected{% endif %}>Assigned</option>
+        <option value="unassigned" {% if crew_filter == 'unassigned' %}selected{% endif %}>Unassigned</option>
+      </select>
+    </label>
+
+    <label>
       <span>Status</span>
       <select name="status">
         <option value="">All Active Statuses</option>
@@ -155,6 +197,7 @@
     {% if search_query %}<span>Search: {{ search_query }}</span>{% endif %}
     {% if schedule_filter %}<span>Window: {{ schedule_filter|upper }}</span>{% endif %}
     {% if status_filter %}<span>Status: {{ status_filter }}</span>{% endif %}
+    {% if crew_filter %}<span>Crew: {{ crew_filter|title }}</span>{% endif %}
     {% if include_completed %}<span>Completed included</span>{% endif %}
   </div>
 </section>

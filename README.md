@@ -1632,3 +1632,51 @@ Signed-in users receive a branded **This DispatchProof page is no longer availab
 Help & Tutorials now includes **Close a Client Report**.
 
 No database migration is required.
+
+
+## V2.32 — Crew Coverage
+
+V2.32 turns Crew Assignment into an office coverage check.
+
+### Crew Assigned / Crew Unassigned cards
+
+Schedule now shows two internal coverage cards:
+
+- Crew Assigned
+- Crew Unassigned
+
+The counts cover active installation jobs.
+
+Click either card to filter Schedule immediately.
+
+### Crew Coverage filter
+
+Search & Filter now includes **Crew Coverage**:
+
+- All Crew Coverage
+- Assigned
+- Unassigned
+
+A job counts as assigned when it has a Crew Lead or at least one Crew / Installer name.
+
+**Planned Crew Size alone does not count as a named crew assignment.**
+
+### Needs Attention
+
+An active install in the next seven days with no named crew assignment can now surface in **Needs Attention**.
+
+Jobs that already have a more urgent reason, such as Today, Blocked, Review, or No Response, keep that primary reason but also show a **Crew not assigned** warning when applicable.
+
+### Search
+
+Dashboard and Schedule search can both match Crew Lead and Crew / Installer names.
+
+### Schedule Export / Print
+
+The existing Schedule CSV export preserves the Crew Coverage filter, and Print / Save PDF records the selected Crew Coverage filter in its print summary.
+
+### Help Center
+
+Help & Tutorials now includes **Check Crew Coverage**.
+
+No database migration is required.

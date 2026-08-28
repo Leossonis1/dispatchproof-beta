@@ -1,2 +1,2 @@
-DispatchProof Version 2.31 - Report Close + Missing Page Guard
-Adds Close Report controls and prevents stale job URLs from throwing a 500 error.
+DispatchProof Version 2.32 - Crew Coverage
+Adds assigned/unassigned crew coverage filtering and near-term crew-gap attention alerts.

@@ -64,6 +64,9 @@
           <span class="attention-label">{{ item.label }}</span>
         </div>
         <p>{{ item.message }}</p>
+        {% if item.crew_unassigned %}
+        <div class="attention-crew-warning">Crew not assigned</div>
+        {% endif %}
         <div class="attention-meta">
           <span>{{ job['installation_date']|pretty_date }}</span>
           {% if job['client_name'] %}<span>{{ job['client_name'] }}</span>{% endif %}
@@ -108,7 +111,7 @@
     <div class="attention-clear-icon">✓</div>
     <div>
       <strong>No urgent follow-up right now</strong>
-      <span>No overdue, today, blocked/review, or near-term no-response jobs.</span>
+      <span>No overdue, today, blocked/review, near-term no-response, or near-term crew-coverage issues.</span>
     </div>
   </div>
   {% endif %}
@@ -161,7 +164,7 @@
     <div>
       <div class="eyebrow">Find Work Fast</div>
       <h2>Search & Filter</h2>
-      <p>Search job, site, contact, client, project, project number, or email.</p>
+      <p>Search job, site, contact, client, project, crew, project number, or email.</p>
     </div>
     <div class="panel-head-actions">
       <a class="btn action-blue export-csv-btn"
@@ -178,7 +181,7 @@
     <label class="dashboard-search-field">
       <span>Search</span>
       <input type="search" name="q" value="{{ search_query }}"
-             placeholder="Job, site, contact, client, project...">
+             placeholder="Job, site, contact, client, project, crew...">
     </label>
 
     <label>

@@ -3835,3 +3835,70 @@ main{
   justify-content:center;
   margin-top:20px;
 }
+
+
+/* DispatchProof V2.32 — Crew Coverage */
+.crew-coverage-summary{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+  margin:10px 0 16px;
+}
+.crew-coverage-card{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  min-height:58px;
+  padding:12px 16px;
+  border:1px solid #d0d5dd;
+  border-top:3px solid #667085;
+  border-radius:12px;
+  background:#fff;
+  color:#101828;
+  text-decoration:none;
+}
+.crew-coverage-card span{
+  font-size:10px;
+  font-weight:800;
+}
+.crew-coverage-card strong{
+  font-size:22px;
+}
+.crew-assigned-card{
+  border-top-color:#12b76a;
+}
+.crew-unassigned-card{
+  border-top-color:#f79009;
+}
+.crew-coverage-card.selected{
+  outline:2px solid #155eef;
+  outline-offset:-2px;
+}
+.attention-crew-warning{
+  display:inline-flex;
+  width:max-content;
+  margin-top:5px;
+  padding:4px 7px;
+  border:1px solid #fedf89;
+  border-radius:999px;
+  background:#fffaeb;
+  color:#b54708;
+  font-size:8px;
+  font-weight:800;
+  text-transform:uppercase;
+  letter-spacing:.02em;
+}
+.attention-row.attention-crew{
+  border-left-color:#f79009;
+}
+@media(max-width:700px){
+  .crew-coverage-summary{
+    grid-template-columns:1fr;
+  }
+}
+@media print{
+  .crew-coverage-summary{
+    display:none !important;
+  }
+}
