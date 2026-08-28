@@ -1,2 +1,2 @@
-DispatchProof Version 2.30 - Crew Assignment
-Adds optional internal crew planning to jobs and the Schedule Board.
+DispatchProof Version 2.31 - Report Close + Missing Page Guard
+Adds Close Report controls and prevents stale job URLs from throwing a 500 error.

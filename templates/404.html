@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Not Found · DispatchProof{% endblock %}
+{% block content %}
+<div class="not-found-page">
+  <section class="panel not-found-card">
+    <div class="eyebrow">NOT FOUND</div>
+    <h1>This DispatchProof page is no longer available.</h1>
+    <p>The job, report, or link may have been removed, expired, or belonged to data that is no longer loaded.</p>
+    <div class="not-found-actions">
+      <a class="btn action-blue" href="{{ url_for('dashboard') }}">Back to Dashboard</a>
+    </div>
+  </section>
+</div>
+{% endblock %}

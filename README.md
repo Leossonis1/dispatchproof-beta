@@ -1607,3 +1607,28 @@ Changes made through Edit Job Details are recorded in Job Activity / Activity Lo
 ### Help Center
 
 Help & Tutorials now includes **Assign a Crew to an Install**.
+
+
+## V2.31 — Report Close + Missing Page Guard
+
+V2.31 is a small usability and hardening release.
+
+### Close Report
+
+Single-job public Installation Reports and Combined Client/Project Reports now include a **Close Report** button beside **Print / Save PDF**.
+
+The button first asks the browser to close the report tab. If the browser does not allow that and there is a prior page in the tab history, DispatchProof returns to that prior page instead.
+
+### Missing job protection
+
+A stale or missing `/jobs/<id>` URL now checks that the job exists before reading job fields. Previously, a missing job could trigger a `NoneType` 500 Internal Server Error. The route now returns a normal 404.
+
+### Friendly Not Found page
+
+Signed-in users receive a branded **This DispatchProof page is no longer available** page with a **Back to Dashboard** action instead of Flask's generic error page.
+
+### Help Center
+
+Help & Tutorials now includes **Close a Client Report**.
+
+No database migration is required.
