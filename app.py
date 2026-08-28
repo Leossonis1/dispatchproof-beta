@@ -866,6 +866,16 @@ def init_db():
             FOREIGN KEY(job_id) REFERENCES jobs(id),
             FOREIGN KEY(crew_member_id) REFERENCES crew_members(id)
         );
+
+        CREATE TABLE IF NOT EXISTS crew_unavailability (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            crew_member_id INTEGER NOT NULL,
+            start_date TEXT NOT NULL,
+            end_date TEXT NOT NULL,
+            reason TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(crew_member_id) REFERENCES crew_members(id)
+        );
         """)
         ensure_columns(db)
 
@@ -900,6 +910,10 @@ def init_db():
         db.execute("""
             CREATE INDEX IF NOT EXISTS idx_job_crew_assignments_member
             ON job_crew_assignments(crew_member_id, job_id)
+        """)
+        db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_crew_unavailability_member_dates
+            ON crew_unavailability(crew_member_id, start_date, end_date)
         """)
 
         db.execute("""
@@ -1134,7 +1148,79 @@ def get_active_crew_conflicts(db):
     return by_job, group_count
 
 
-def job_attention_reason(job, schedule_bucket, has_crew_conflict=False):
+def get_active_crew_unavailability_issues(db):
+    """
+    Return active jobs whose assigned Crew Directory members are unavailable
+    on the job's installation date. Completed jobs are intentionally excluded.
+
+    Returns:
+      by_job: {job_id: [{crew_member_name, installation_date, periods:[...]}]}
+      group_count: number of unique crew-member/date availability issues
+    """
+    rows = db.execute("""
+        SELECT
+            j.id AS job_id,
+            j.job_name,
+            j.installation_date,
+            cm.id AS crew_member_id,
+            cm.name AS crew_member_name,
+            cu.id AS unavailability_id,
+            cu.start_date,
+            cu.end_date,
+            cu.reason
+        FROM job_crew_assignments jca
+        JOIN jobs j ON j.id = jca.job_id
+        JOIN crew_members cm ON cm.id = jca.crew_member_id
+        JOIN crew_unavailability cu ON cu.crew_member_id = cm.id
+        WHERE j.status <> 'COMPLETED'
+          AND TRIM(COALESCE(j.installation_date, '')) <> ''
+          AND cu.start_date <= j.installation_date
+          AND cu.end_date >= j.installation_date
+        ORDER BY j.installation_date, cm.id, cu.start_date, cu.id
+    """).fetchall()
+
+    grouped = {}
+    for row in rows:
+        key = (row["job_id"], row["crew_member_id"])
+        issue = grouped.setdefault(key, {
+            "job_id": row["job_id"],
+            "job_name": row["job_name"],
+            "crew_member_id": row["crew_member_id"],
+            "crew_member_name": row["crew_member_name"],
+            "installation_date": row["installation_date"],
+            "periods": [],
+        })
+        issue["periods"].append({
+            "id": row["unavailability_id"],
+            "start_date": row["start_date"],
+            "end_date": row["end_date"],
+            "reason": (row["reason"] or "Unavailable").strip() or "Unavailable",
+        })
+
+    by_job = {}
+    for issue in grouped.values():
+        by_job.setdefault(issue["job_id"], []).append(issue)
+
+    group_count = len(grouped)
+    return by_job, group_count
+
+
+def get_member_unavailability_for_date(db, crew_member_id, install_date):
+    if not install_date:
+        return []
+    return db.execute("""
+        SELECT *
+        FROM crew_unavailability
+        WHERE crew_member_id = ?
+          AND start_date <= ?
+          AND end_date >= ?
+        ORDER BY start_date, end_date, id
+    """, (crew_member_id, install_date, install_date)).fetchall()
+
+
+def job_attention_reason(
+    job, schedule_bucket, has_crew_conflict=False, has_availability_issue=False
+):
     """Return the highest-priority office action for an active job."""
     status = (job["status"] or "").upper()
 
@@ -1162,9 +1248,17 @@ def job_attention_reason(job, schedule_bucket, has_crew_conflict=False):
             "message": "One or more assigned crew members are booked on another active install the same day.",
         }
 
-    if status == "BLOCKED":
+    if has_availability_issue:
         return {
             "priority": 4,
+            "level": "availability",
+            "label": "Crew unavailable",
+            "message": "An assigned crew member is marked unavailable on this installation date.",
+        }
+
+    if status == "BLOCKED":
+        return {
+            "priority": 5,
             "level": "critical",
             "label": "Blocked",
             "message": "The site is not ready and needs office follow-up.",
@@ -1172,7 +1266,7 @@ def job_attention_reason(job, schedule_bucket, has_crew_conflict=False):
 
     if status == "REVIEW":
         return {
-            "priority": 5,
+            "priority": 6,
             "level": "review",
             "label": "Needs review",
             "message": "A readiness response is waiting for office review.",
@@ -1180,7 +1274,7 @@ def job_attention_reason(job, schedule_bucket, has_crew_conflict=False):
 
     if status == "NO RESPONSE" and schedule_bucket == "next7":
         return {
-            "priority": 6,
+            "priority": 7,
             "level": "warning",
             "label": "No response · Next 7 Days",
             "message": "The install is approaching and readiness has not been confirmed.",
@@ -1188,7 +1282,7 @@ def job_attention_reason(job, schedule_bucket, has_crew_conflict=False):
 
     if schedule_bucket == "next7" and not job_has_crew_assignment(job):
         return {
-            "priority": 7,
+            "priority": 8,
             "level": "crew",
             "label": "Crew unassigned · Next 7 Days",
             "message": "No crew lead or installer has been assigned to this upcoming install.",
@@ -2310,6 +2404,7 @@ def database_record_counts(db_path):
         "client_documents": 0,
         "crew_members": 0,
         "job_crew_assignments": 0,
+        "crew_unavailability": 0,
     }
 
     conn = sqlite3.connect(db_path)
@@ -2333,6 +2428,7 @@ def database_record_counts(db_path):
             ("projects", "projects"),
             ("crew_members", "crew_members"),
             ("job_crew_assignments", "job_crew_assignments"),
+            ("crew_unavailability", "crew_unavailability"),
         ):
             try:
                 counts[key] = conn.execute(
@@ -2371,6 +2467,7 @@ def create_backup_archive():
         "client_documents": 0,
         "crew_members": 0,
         "job_crew_assignments": 0,
+        "crew_unavailability": 0,
         "uploaded_files": 0,
     }
 
@@ -2400,7 +2497,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.34",
+        "app_version": "2.35",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2630,7 +2727,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.34",
+        "app_version": "2.35",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2782,7 +2879,7 @@ def not_found(error):
 def health():
     return {
         "status": "ok",
-        "version": "2.34",
+        "version": "2.35",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -2902,7 +2999,13 @@ def crew_directory():
                      AND j.installation_date >= ?
                      AND j.installation_date <= ?
                     THEN j.id
-                END) AS next7_job_count
+                END) AS next7_job_count,
+                (
+                    SELECT COUNT(*)
+                    FROM crew_unavailability cu
+                    WHERE cu.crew_member_id = cm.id
+                      AND cu.end_date >= ?
+                ) AS upcoming_time_off_count
             FROM crew_members cm
             LEFT JOIN job_crew_assignments jca
               ON jca.crew_member_id = cm.id
@@ -2914,7 +3017,7 @@ def crew_directory():
                 CASE WHEN cm.is_active = 1 THEN 0 ELSE 1 END,
                 LOWER(cm.name),
                 cm.id
-        """, (today, next7, *params)).fetchall()
+        """, (today, next7, today, *params)).fetchall()
 
         counts = {
             "active": db.execute(
@@ -2929,6 +3032,11 @@ def crew_directory():
                 JOIN job_crew_assignments jca ON jca.job_id = j.id
                 WHERE j.status <> 'COMPLETED'
             """).fetchone()["c"],
+            "upcoming_time_off": db.execute("""
+                SELECT COUNT(*) AS c
+                FROM crew_unavailability
+                WHERE end_date >= ?
+            """, (today,)).fetchone()["c"],
         }
 
     return render_template(
@@ -3065,11 +3173,97 @@ def edit_crew_member(crew_member_id):
             LIMIT 50
         """, (crew_member_id,)).fetchall()
 
+        unavailability = db.execute("""
+            SELECT *
+            FROM crew_unavailability
+            WHERE crew_member_id = ?
+            ORDER BY
+                CASE WHEN end_date >= ? THEN 0 ELSE 1 END,
+                start_date ASC,
+                id ASC
+        """, (crew_member_id, local_today().isoformat())).fetchall()
+
     return render_template(
         "edit_crew_member.html",
         member=member,
         assignments=assignments,
+        unavailability=unavailability,
+        today_iso=local_today().isoformat(),
     )
+
+
+@app.post("/crew/<int:crew_member_id>/availability/add")
+def add_crew_unavailability(crew_member_id):
+    start_date = (request.form.get("start_date") or "").strip()
+    end_date = (request.form.get("end_date") or "").strip()
+    reason = (request.form.get("reason") or "Unavailable").strip() or "Unavailable"
+
+    try:
+        start_day = date.fromisoformat(start_date)
+        end_day = date.fromisoformat(end_date)
+    except ValueError:
+        flash("Enter valid start and end dates for crew availability.")
+        return redirect(url_for("edit_crew_member", crew_member_id=crew_member_id) + "#availability")
+
+    if end_day < start_day:
+        flash("End Date cannot be before Start Date.")
+        return redirect(url_for("edit_crew_member", crew_member_id=crew_member_id) + "#availability")
+
+    with get_db() as db:
+        member = db.execute(
+            "SELECT * FROM crew_members WHERE id = ?",
+            (crew_member_id,),
+        ).fetchone()
+        if not member:
+            abort(404)
+
+        db.execute("""
+            INSERT INTO crew_unavailability (
+                crew_member_id, start_date, end_date, reason, created_at
+            ) VALUES (?, ?, ?, ?, ?)
+        """, (crew_member_id, start_date, end_date, reason, now_iso()))
+        record_activity(
+            db,
+            "Crew Availability Added",
+            f"Marked {member['name']} unavailable {start_date} through {end_date}: {reason}.",
+        )
+        db.commit()
+
+    flash(f"Availability saved for {member['name']}.")
+    return redirect(url_for("edit_crew_member", crew_member_id=crew_member_id) + "#availability")
+
+
+@app.post("/crew/<int:crew_member_id>/availability/<int:availability_id>/delete")
+def delete_crew_unavailability(crew_member_id, availability_id):
+    with get_db() as db:
+        member = db.execute(
+            "SELECT * FROM crew_members WHERE id = ?",
+            (crew_member_id,),
+        ).fetchone()
+        if not member:
+            abort(404)
+
+        row = db.execute("""
+            SELECT *
+            FROM crew_unavailability
+            WHERE id = ? AND crew_member_id = ?
+        """, (availability_id, crew_member_id)).fetchone()
+        if not row:
+            abort(404)
+
+        db.execute(
+            "DELETE FROM crew_unavailability WHERE id = ? AND crew_member_id = ?",
+            (availability_id, crew_member_id),
+        )
+        record_activity(
+            db,
+            "Crew Availability Removed",
+            f"Removed {member['name']} availability {row['start_date']} through {row['end_date']} ({row['reason'] or 'Unavailable'}).",
+        )
+        db.commit()
+
+    flash(f"Availability removed for {member['name']}.")
+    return redirect(url_for("edit_crew_member", crew_member_id=crew_member_id) + "#availability")
 
 
 @app.post("/crew/<int:crew_member_id>/toggle")
@@ -3470,6 +3664,7 @@ def backup_restore():
         "projects": 0,
         "crew_members": 0,
         "job_crew_assignments": 0,
+        "crew_unavailability": 0,
     }
 
     if db_exists:
@@ -3542,6 +3737,9 @@ def backup_restore():
             ).fetchone()["c"]
             counts["job_crew_assignments"] = db.execute(
                 "SELECT COUNT(*) AS c FROM job_crew_assignments"
+            ).fetchone()["c"]
+            counts["crew_unavailability"] = db.execute(
+                "SELECT COUNT(*) AS c FROM crew_unavailability"
             ).fetchone()["c"]
 
     settings = get_app_settings()
@@ -4616,7 +4814,7 @@ def build_schedule_view(args):
 
     include_completed = (args.get("completed") or "").strip() == "1"
     crew_filter = (args.get("crew") or "").strip().lower()
-    if crew_filter not in {"assigned", "unassigned", "conflict"}:
+    if crew_filter not in {"assigned", "unassigned", "conflict", "unavailable"}:
         crew_filter = ""
 
     client_filter = normalize_optional_id(args.get("client"))
@@ -4648,13 +4846,16 @@ def build_schedule_view(args):
         """).fetchall()
 
         crew_conflicts_by_job, crew_conflict_group_count = get_active_crew_conflicts(db)
+        crew_unavailability_by_job, crew_unavailability_group_count = get_active_crew_unavailability_issues(db)
 
     conflict_job_ids = set(crew_conflicts_by_job.keys())
+    unavailable_job_ids = set(crew_unavailability_by_job.keys())
     schedule_counts = {"overdue": 0, "today": 0, "next7": 0, "later": 0}
     crew_counts = {
         "assigned": 0,
         "unassigned": 0,
         "conflict": len(conflict_job_ids),
+        "unavailable": len(unavailable_job_ids),
     }
     active_job_count = 0
     completed_job_count = 0
@@ -4693,6 +4894,8 @@ def build_schedule_view(args):
         if crew_filter == "unassigned" and job_has_crew_assignment(job):
             continue
         if crew_filter == "conflict" and job["id"] not in conflict_job_ids:
+            continue
+        if crew_filter == "unavailable" and job["id"] not in unavailable_job_ids:
             continue
         if client_filter and job["client_id"] != client_filter:
             continue
@@ -4756,6 +4959,8 @@ def build_schedule_view(args):
         "crew_counts": crew_counts,
         "crew_conflicts_by_job": crew_conflicts_by_job,
         "crew_conflict_group_count": crew_conflict_group_count,
+        "crew_unavailability_by_job": crew_unavailability_by_job,
+        "crew_unavailability_group_count": crew_unavailability_group_count,
         "search_query": search_query,
         "schedule_filter": schedule_filter,
         "status_filter": status_filter,
@@ -4916,6 +5121,7 @@ def dashboard():
         """).fetchall()
 
         crew_conflicts_by_job, crew_conflict_group_count = get_active_crew_conflicts(db)
+        crew_unavailability_by_job, crew_unavailability_group_count = get_active_crew_unavailability_issues(db)
 
     counts = {"READY": 0, "REVIEW": 0, "BLOCKED": 0, "NO RESPONSE": 0, "ON SITE": 0}
     schedule_counts = {"overdue": 0, "today": 0, "next7": 0, "later": 0}
@@ -4931,10 +5137,12 @@ def dashboard():
     attention_jobs = []
     for job in all_jobs:
         job_conflicts = crew_conflicts_by_job.get(job["id"], [])
+        availability_issues = crew_unavailability_by_job.get(job["id"], [])
         attention = job_attention_reason(
             job,
             schedule_buckets.get(job["id"]),
             has_crew_conflict=bool(job_conflicts),
+            has_availability_issue=bool(availability_issues),
         )
         if not attention:
             continue
@@ -4952,6 +5160,10 @@ def dashboard():
             "crew_conflict_names": [
                 conflict["crew_member_name"]
                 for conflict in job_conflicts
+            ],
+            "crew_unavailable_names": [
+                issue["crew_member_name"]
+                for issue in availability_issues
             ],
         })
 
@@ -5019,6 +5231,7 @@ def dashboard():
         attention_jobs=attention_jobs,
         attention_total=attention_total,
         crew_conflict_group_count=crew_conflict_group_count,
+        crew_unavailability_group_count=crew_unavailability_group_count,
         backup_status=backup_status,
         last_backup_at=last_backup_at,
     )
@@ -6965,6 +7178,8 @@ def job_detail(job_id):
         assignment_clients, assignment_projects = get_clients_and_projects(db)
         all_crew_conflicts, _crew_conflict_group_count = get_active_crew_conflicts(db)
         crew_conflicts = all_crew_conflicts.get(job_id, [])
+        all_crew_unavailability, _crew_unavailability_group_count = get_active_crew_unavailability_issues(db)
+        crew_unavailability_issues = all_crew_unavailability.get(job_id, [])
 
     return render_template(
         "job_detail.html",
@@ -6991,6 +7206,7 @@ def job_detail(job_id):
         assignment_clients=assignment_clients,
         assignment_projects=assignment_projects,
         crew_conflicts=crew_conflicts,
+        crew_unavailability_issues=crew_unavailability_issues,
     )
 
 @app.route("/jobs/<int:job_id>/arrival", methods=["GET", "POST"])
