@@ -1164,3 +1164,36 @@ The existing mobile behavior is unchanged; the desktop sidebar is already hidden
 ### No workflow or database changes
 
 V2.19 is a UI/navigation polish release only. V2.18.1 backups remain fully compatible.
+
+
+## V2.20 — Needs Attention
+
+V2.20 adds a compact operations priority queue to the Dashboard.
+
+### What appears in Needs Attention
+
+Active jobs are surfaced when they match one of these conditions:
+
+1. **Overdue install** — installation date has passed and the job is still active.
+2. **Install today** — installation date is today.
+3. **Blocked** — site is not ready.
+4. **Needs review** — a readiness response requires office review.
+5. **No Response · Next 7 Days** — readiness is still unanswered and the installation is approaching.
+
+Each job appears only once, using its highest-priority reason.
+
+### Simple priority order
+
+The panel orders jobs by urgency, then by installation date.
+
+It shows up to five items directly on the Dashboard and includes an **Open Job** action for each.
+
+### No workflow changes
+
+Needs Attention does not change statuses or add a new lifecycle state. It is calculated entirely from existing job status and installation date data.
+
+No database migration is required. V2.19 backups remain compatible.
+
+### Help Center
+
+Help & Tutorials now includes **Use Needs Attention**.

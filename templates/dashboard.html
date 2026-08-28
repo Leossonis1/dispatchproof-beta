@@ -40,6 +40,57 @@
 </div>
 {% endif %}
 
+<section class="panel attention-panel">
+  <div class="panel-head attention-panel-head">
+    <div>
+      <div class="eyebrow">Priority Queue</div>
+      <h2>Needs Attention</h2>
+      <p>Active installs most likely to need office action first.</p>
+    </div>
+    {% if attention_total %}
+    <span class="attention-count">{{ attention_total }} job{{ '' if attention_total == 1 else 's' }}</span>
+    {% endif %}
+  </div>
+
+  {% if attention_jobs %}
+  <div class="attention-list">
+    {% for item in attention_jobs %}
+    {% set job = item.job %}
+    <article class="attention-row attention-{{ item.level }}">
+      <div class="attention-marker"></div>
+      <div class="attention-copy">
+        <div class="attention-title-line">
+          <strong>{{ job['job_name'] }}</strong>
+          <span class="attention-label">{{ item.label }}</span>
+        </div>
+        <p>{{ item.message }}</p>
+        <div class="attention-meta">
+          <span>{{ job['installation_date']|pretty_date }}</span>
+          {% if job['client_name'] %}<span>{{ job['client_name'] }}</span>{% endif %}
+          {% if job['assigned_project_name'] %}<span>{{ job['assigned_project_name'] }}</span>{% endif %}
+          <span>{{ job['contact_name'] }}</span>
+        </div>
+      </div>
+      <a class="btn action-blue small-btn" href="{{ url_for('job_detail', job_id=job['id']) }}">Open Job</a>
+    </article>
+    {% endfor %}
+  </div>
+  {% if attention_total > attention_jobs|length %}
+  <div class="attention-more">
+    Showing the first {{ attention_jobs|length }} of {{ attention_total }} jobs needing attention.
+  </div>
+  {% endif %}
+  {% else %}
+  <div class="attention-clear">
+    <div class="attention-clear-icon">✓</div>
+    <div>
+      <strong>No urgent follow-up right now</strong>
+      <span>No overdue, today, blocked/review, or near-term no-response jobs.</span>
+    </div>
+  </div>
+  {% endif %}
+</section>
+
 <div class="stat-grid">
   <a class="stat ready {% if status_filter == 'READY' %}selected-stat{% endif %}"
      href="{{ url_for('dashboard', status='' if status_filter == 'READY' else 'READY', q=search_query or None, client=client_filter or None, project=project_filter or None, schedule=schedule_filter or None) }}">

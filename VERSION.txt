@@ -1,2 +1,2 @@
-DispatchProof Version 2.19 - Always-Visible Sidebar Session
-Pins the desktop sidebar to the viewport so the signed-in user card and Sign Out stay accessible on every page.
+DispatchProof Version 2.20 - Needs Attention
+Adds a Dashboard priority queue for overdue, today, blocked/review, and near-term no-response installs.
