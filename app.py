@@ -1961,7 +1961,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.27",
+        "app_version": "2.28",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2191,7 +2191,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.27",
+        "app_version": "2.28",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2338,7 +2338,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.27",
+        "version": "2.28",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -3902,6 +3902,147 @@ def activity_log():
     return render_template(
         "activity_log.html",
         events=events,
+    )
+
+
+@app.route("/schedule")
+def schedule_board():
+    search_query = (request.args.get("q") or "").strip()
+    schedule_filter = (request.args.get("schedule") or "").strip().lower()
+    valid_schedule_filters = {"overdue", "today", "next7", "later"}
+    if schedule_filter not in valid_schedule_filters:
+        schedule_filter = ""
+
+    status_filter = (request.args.get("status") or "").strip().upper()
+    valid_statuses = {"READY", "REVIEW", "BLOCKED", "NO RESPONSE", "ON SITE", "COMPLETED"}
+    if status_filter not in valid_statuses:
+        status_filter = ""
+
+    include_completed = (request.args.get("completed") or "").strip() == "1"
+    client_filter = normalize_optional_id(request.args.get("client"))
+    project_filter = normalize_optional_id(request.args.get("project"))
+
+    with get_db() as db:
+        all_jobs = db.execute("""
+            SELECT
+                j.*,
+                c.name AS client_name,
+                p.name AS assigned_project_name,
+                p.project_number AS assigned_project_number
+            FROM jobs j
+            LEFT JOIN clients c ON c.id = j.client_id
+            LEFT JOIN projects p ON p.id = j.project_id
+            ORDER BY j.installation_date ASC, j.id ASC
+        """).fetchall()
+
+        clients = db.execute("""
+            SELECT id, name
+            FROM clients
+            ORDER BY LOWER(name), id
+        """).fetchall()
+
+        projects = db.execute("""
+            SELECT id, client_id, name, project_number
+            FROM projects
+            ORDER BY LOWER(name), id
+        """).fetchall()
+
+    schedule_counts = {"overdue": 0, "today": 0, "next7": 0, "later": 0}
+    active_job_count = 0
+    completed_job_count = 0
+
+    for job in all_jobs:
+        if job["status"] == "COMPLETED":
+            completed_job_count += 1
+            continue
+
+        active_job_count += 1
+        bucket = job_schedule_bucket(job["installation_date"])
+        if bucket in schedule_counts:
+            schedule_counts[bucket] += 1
+
+    search_lower = search_query.lower()
+    visible_jobs = []
+
+    for job in all_jobs:
+        is_completed = job["status"] == "COMPLETED"
+        if is_completed and not include_completed and status_filter != "COMPLETED":
+            continue
+
+        bucket = job_schedule_bucket(job["installation_date"])
+
+        if schedule_filter and bucket != schedule_filter:
+            continue
+        if status_filter and job["status"] != status_filter:
+            continue
+        if client_filter and job["client_id"] != client_filter:
+            continue
+        if project_filter and job["project_id"] != project_filter:
+            continue
+
+        if search_lower:
+            searchable = " ".join([
+                job["job_name"] or "",
+                job["project_site"] or "",
+                job["contact_name"] or "",
+                job["contact_email"] or "",
+                job["client_name"] or "",
+                job["assigned_project_name"] or "",
+                job["assigned_project_number"] or "",
+            ]).lower()
+            if search_lower not in searchable:
+                continue
+
+        visible_jobs.append({
+            "job": job,
+            "bucket": bucket,
+        })
+
+    # Group by installation date while preserving chronological order.
+    grouped_days = []
+    current_date = None
+    current_group = None
+
+    for item in visible_jobs:
+        job = item["job"]
+        install_date = job["installation_date"] or ""
+        if install_date != current_date:
+            current_date = install_date
+            current_group = {
+                "date": install_date,
+                "bucket": item["bucket"],
+                "jobs": [],
+            }
+            grouped_days.append(current_group)
+        current_group["jobs"].append(job)
+
+    filters_active = bool(
+        search_query
+        or schedule_filter
+        or status_filter
+        or client_filter
+        or project_filter
+        or include_completed
+    )
+
+    return render_template(
+        "schedule.html",
+        grouped_days=grouped_days,
+        visible_job_count=len(visible_jobs),
+        active_job_count=active_job_count,
+        completed_job_count=completed_job_count,
+        schedule_counts=schedule_counts,
+        search_query=search_query,
+        schedule_filter=schedule_filter,
+        status_filter=status_filter,
+        client_filter=client_filter,
+        project_filter=project_filter,
+        include_completed=include_completed,
+        clients=clients,
+        projects=projects,
+        filters_active=filters_active,
+        today_iso=local_today().isoformat(),
+        tomorrow_iso=(local_today() + timedelta(days=1)).isoformat(),
     )
 
 
