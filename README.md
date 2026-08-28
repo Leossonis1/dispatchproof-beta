@@ -1878,3 +1878,51 @@ Crew availability is stored in the DispatchProof SQLite database, is included in
 Crew availability is internal operations data only. It is not shown on public readiness links, arrival links, single-job client reports, or combined client/project reports.
 
 Completed jobs do not create crew availability warnings.
+
+
+## V2.36 — Crew Staffing Gaps
+
+V2.36 compares each active job's **Planned Crew Size** with the number of unique named crew members assigned.
+
+For example:
+
+- Planned Crew Size: 4
+- Assigned Crew: 3
+- DispatchProof shows: **1 Crew Member Needed**
+
+### Counting rules
+
+DispatchProof counts unique named people from the Crew / Installers assignment and includes the Crew Lead when that lead is not already in the assigned list.
+
+A job is not treated as a staffing gap when:
+
+- Planned Crew Size is blank
+- assigned headcount meets or exceeds Planned Crew Size
+- the job is Completed
+
+### Schedule
+
+Schedule adds:
+
+- **Staffing Gaps** count
+- clickable Staffing Gaps filter card
+- **Crew Coverage → Staffing Gaps Only**
+- Planned / Assigned / Needed details on each affected job row
+
+### Job Detail
+
+The internal **Field Assignment** panel shows a **Staffing Gap** warning with Planned, Assigned, and additional crew members needed.
+
+### Needs Attention
+
+Active staffing gaps appear in the Dashboard priority queue. More urgent existing issues remain the primary reason while the staffing-gap detail still appears on the same row.
+
+### Privacy
+
+Staffing-gap information remains internal DispatchProof planning data and is not added to public readiness pages, arrival pages, or client-facing reports.
+
+### Help Center
+
+Help & Tutorials includes **Check Staffing Gaps**.
+
+No database migration is required.
