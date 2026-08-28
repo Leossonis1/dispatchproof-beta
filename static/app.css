@@ -2425,3 +2425,30 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(15,98,254,.12);bo
     width:100%;
   }
 }
+
+
+/* DispatchProof V2.13 — Reopen Completed Job */
+.completed-job-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.completed-job-actions form{
+  margin:0;
+}
+.reopen-job-btn{
+  border:1px solid #b42318;
+  background:#fff;
+  color:#b42318;
+}
+.reopen-job-btn:hover{
+  background:#fff4f2;
+}
+@media(max-width:720px){
+  .completed-job-actions{
+    width:100%;
+    justify-content:flex-start;
+  }
+}

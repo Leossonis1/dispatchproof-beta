@@ -1,2 +1,2 @@
-DispatchProof Version 2.12 - Completed Jobs Search & Filters
-Adds search plus Client/Project filters to completed installation history.
+DispatchProof Version 2.13 - Reopen Completed Job
+Adds an Owner/Administrator-only audited workflow to return an accidentally completed job to ON SITE while preserving all evidence and history.

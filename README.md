@@ -836,3 +836,56 @@ V2.12 does not change the database schema. The latest V2.11 backup remains fully
 ### Help Center
 
 Help & Tutorials now includes **Find a Completed Job** under Everyday Workflows.
+
+
+## V2.13 — Reopen Completed Job
+
+V2.13 adds a safe recovery path when an installation is marked complete by mistake.
+
+### Reopen Job
+
+Owner and Administrator accounts can open a completed installation and click **Reopen Job**.
+
+Reopening changes only:
+
+- Status: `COMPLETED` → `ON SITE`
+- Completed timestamp: cleared
+
+The job immediately returns to the active Dashboard.
+
+### Preserved records
+
+Reopening does **not** change or delete:
+
+- readiness response
+- readiness photos
+- installer arrival record
+- arrival evidence
+- failed mobilization history
+- client report token/link
+- combined reports
+- Office Notes
+- prior Job Activity
+
+The installer link that was revoked at completion is **not restored**. Since the successful arrival record is already locked, the reopened job simply returns to the ON SITE operational state.
+
+### Permissions
+
+Reopening is restricted to:
+
+- Owner
+- Administrator
+
+Operations users can view completed jobs but cannot reopen them.
+
+### Audit trail
+
+Every reopen writes a **Job Reopened** event to Job Activity identifying the transition from COMPLETED back to ON SITE.
+
+### No database migration
+
+V2.13 does not change the database schema. The latest V2.12 backup remains fully compatible.
+
+### Help Center
+
+Owner/Administrator Help & Tutorials now includes **Reopen a Completed Job** under Admin Tools.

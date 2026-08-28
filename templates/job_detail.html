@@ -23,7 +23,15 @@
     <strong>Job Completed</strong>
     <span>Completed {{ job['completed_at']|pretty_datetime }}. This job is removed from Upcoming Installations and all evidence remains preserved.</span>
   </div>
-  <a class="btn ghost" href="{{ url_for('completed_jobs') }}">Completed Jobs</a>
+  <div class="completed-job-actions">
+    <a class="btn ghost" href="{{ url_for('completed_jobs') }}">Completed Jobs</a>
+    {% if current_user_is_admin %}
+    <form method="post" action="{{ url_for('reopen_job', job_id=job['id']) }}"
+          onsubmit="return confirm('Reopen this completed job? It will return to ON SITE. Existing readiness, arrival evidence, reports, Office Notes, and history will remain preserved.');">
+      <button class="btn reopen-job-btn" type="submit">Reopen Job</button>
+    </form>
+    {% endif %}
+  </div>
 </div>
 {% elif job['arrival_status'] == 'NOT READY' %}
 <div class="dispatch-gate dispatch-failed">
