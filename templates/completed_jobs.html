@@ -17,7 +17,7 @@
       <p>Search job, site, contact, client, project, project number, or email.</p>
     </div>
     <div class="panel-head-actions">
-      <a class="btn ghost export-csv-btn"
+      <a class="btn action-blue export-csv-btn"
          href="{{ url_for('export_completed_csv', q=search_query or None, client=client_filter or None, project=project_filter or None) }}">
         Export CSV
       </a>

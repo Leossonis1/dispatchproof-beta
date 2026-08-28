@@ -9,9 +9,9 @@
   </div>
   <div class="page-head-actions">
     {% if job['status'] != 'COMPLETED' %}
-    <a class="btn ghost" href="{{ url_for('edit_job', job_id=job['id']) }}">Edit Job Details</a>
+    <a class="btn action-blue" href="{{ url_for('edit_job', job_id=job['id']) }}">Edit Job Details</a>
     {% endif %}
-    <a class="btn ghost" href="{{ url_for('new_job', duplicate_from=job['id']) }}">Duplicate Job</a>
+    <a class="btn action-blue" href="{{ url_for('new_job', duplicate_from=job['id']) }}">Duplicate Job</a>
     <span class="badge {{ job['status']|lower|replace(' ', '-') }}">{{ job['status'] }}</span>
   </div>
 </div>
@@ -69,7 +69,7 @@
     <strong>Readiness Needs Review — Hold Dispatch</strong>
     <span>The current response needs office review before the crew is dispatched.</span>
   </div>
-  <a class="btn ghost" href="{{ url_for('readiness_request', job_id=job['id']) }}">Review Readiness</a>
+  <a class="btn action-blue" href="{{ url_for('readiness_request', job_id=job['id']) }}">Review Readiness</a>
 </div>
 {% elif job['status'] == 'BLOCKED' %}
 <div class="dispatch-gate dispatch-blocked">
@@ -78,7 +78,7 @@
     <strong>Site Not Ready — Do Not Dispatch</strong>
     <span>The current readiness response contains a blocking condition.</span>
   </div>
-  <a class="btn ghost" href="{{ url_for('readiness_request', job_id=job['id']) }}">View Readiness</a>
+  <a class="btn action-blue" href="{{ url_for('readiness_request', job_id=job['id']) }}">View Readiness</a>
 </div>
 {% else %}
 <div class="dispatch-gate dispatch-waiting">
@@ -106,8 +106,8 @@
 
   <div class="button-row">
     <button class="btn primary" type="button" id="copyInstallerLinkButton" data-copy-url="{{ arrival_url|e }}" onclick="copyInstallerArrivalLink(this)">Copy Installer Link</button>
-    <a class="btn ghost" target="_blank" rel="noopener" href="{{ arrival_url }}">Open External Page</a>
-    <a class="btn ghost" href="{{ url_for('record_arrival', job_id=job['id']) }}">Record Internally</a>
+    <a class="btn action-blue" target="_blank" rel="noopener" href="{{ arrival_url }}">Open External Page</a>
+    <a class="btn action-blue" href="{{ url_for('record_arrival', job_id=job['id']) }}">Record Internally</a>
   </div>
 
   <p class="legal-note installer-security-note">
@@ -175,7 +175,7 @@
   <div class="button-row">
     <a class="btn primary" href="{{ url_for('client_report', job_id=job['id']) }}">Client Report & Email</a>
     {% if client_report_url %}
-      <a class="btn ghost" target="_blank" rel="noopener" href="{{ client_report_url }}">Preview Client Report</a>
+      <a class="btn action-blue" target="_blank" rel="noopener" href="{{ client_report_url }}">Preview Client Report</a>
     {% endif %}
   </div>
 </section>
@@ -192,7 +192,7 @@
     {% if job['response_at'] and job['status'] != 'COMPLETED' %}
     <div class="button-row">
       <form method="post" action="{{ url_for('reset_job', job_id=job['id']) }}" onsubmit="return confirm('{% if job['arrival_status'] %}Archive this entire mobilization attempt and start the next one? All readiness and arrival evidence will be preserved.{% else %}Archive this confirmation and request a new one? The current evidence will be preserved in Confirmation History.{% endif %}');">
-        <button class="btn ghost" type="submit">{% if job['arrival_status'] %}Start Next Mobilization{% else %}Request New Confirmation{% endif %}</button>
+        <button class="btn action-blue" type="submit">{% if job['arrival_status'] %}Start Next Mobilization{% else %}Request New Confirmation{% endif %}</button>
       </form>
     </div>
     {% endif %}

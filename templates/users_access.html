@@ -88,7 +88,7 @@
           </div>
 
           <div class="user-actions">
-            <a class="btn ghost small-btn" href="{{ url_for('edit_user', user_id=user['id']) }}">Edit User</a>
+            <a class="btn action-blue small-btn" href="{{ url_for('edit_user', user_id=user['id']) }}">Edit User</a>
 
             <form method="post" action="{{ url_for('toggle_user_access', user_id=user['id']) }}">
               <button class="btn ghost small-btn" type="submit">
@@ -101,7 +101,7 @@
             <summary>Administrator Password Reset</summary>
             <form method="post" action="{{ url_for('reset_user_password', user_id=user['id']) }}">
               <input required type="password" name="new_password" minlength="8" autocomplete="new-password" placeholder="New password">
-              <button class="btn ghost small-btn" type="submit">Set Password</button>
+              <button class="btn action-blue small-btn" type="submit">Set Password</button>
             </form>
           </details>
         </article>

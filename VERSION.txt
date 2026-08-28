@@ -1,2 +1,2 @@
-DispatchProof Version 2.16 - CSV Export
-Adds filtered CSV exports for active Dashboard jobs and Completed Jobs.
+DispatchProof Version 2.17 - Action Button UI Polish
+Makes important clickable actions consistently solid blue while preserving neutral and destructive button treatments.

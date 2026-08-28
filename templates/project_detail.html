@@ -9,7 +9,7 @@
     <p>{{ project['client_name'] }}{% if project['location'] %} · {{ project['location'] }}{% endif %}</p>
   </div>
   <div class="page-actions">
-    <a class="btn ghost" href="{{ url_for('project_combined_report', project_id=project['id']) }}">Combined Project Report</a>
+    <a class="btn action-blue" href="{{ url_for('project_combined_report', project_id=project['id']) }}">Combined Project Report</a>
     <a class="btn primary" href="{{ url_for('new_job', client_id=project['client_id'], project_id=project['id']) }}">+ New Job</a>
   </div>
 </div>
@@ -22,7 +22,7 @@
       <label>Project Number<input name="project_number" value="{{ project['project_number'] or '' }}"></label>
       <label>Project Location<input name="location" value="{{ project['location'] or '' }}"></label>
       <label>Notes<textarea name="notes" rows="3">{{ project['notes'] or '' }}</textarea></label>
-      <button class="btn ghost" type="submit">Save Project Details</button>
+      <button class="btn action-blue" type="submit">Save Project Details</button>
     </form>
   </section>
 

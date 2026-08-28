@@ -2729,3 +2729,36 @@ main{
     justify-content:flex-start;
   }
 }
+
+
+/* DispatchProof V2.17 — Action Button UI Polish
+   Important "do something" controls are solid blue.
+   Neutral navigation/cancel/clear controls stay outlined.
+   Destructive controls keep their existing red treatment. */
+.btn.action-blue{
+  background:var(--blue);
+  border-color:var(--blue);
+  color:#fff;
+  box-shadow:0 1px 2px rgba(16,24,40,.08);
+}
+.btn.action-blue:hover,
+.btn.primary:hover{
+  filter:brightness(.94);
+  transform:translateY(-1px);
+}
+.btn.action-blue:focus-visible,
+.btn.primary:focus-visible{
+  outline:3px solid rgba(15,98,254,.22);
+  outline-offset:2px;
+}
+.btn.action-blue:active,
+.btn.primary:active{
+  transform:translateY(0);
+}
+.btn.ghost{
+  transition:border-color .12s ease, background .12s ease, color .12s ease;
+}
+.btn.ghost:hover{
+  border-color:#98a2b3;
+  background:#f8fafc;
+}

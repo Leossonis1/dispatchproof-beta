@@ -32,8 +32,8 @@
     <div class="copy-box" id="outboxPublicLink">{{ event['public_url'] or '—' }}</div>
     {% if event['public_url'] %}
       <div class="button-row">
-        <button class="btn ghost" type="button" id="copyOutboxLinkButton" onclick="copyOutboxLink()">Copy Link</button>
-        <a class="btn ghost" target="_blank" href="{{ event['public_url'] }}">Open Link</a>
+        <button class="btn action-blue" type="button" id="copyOutboxLinkButton" onclick="copyOutboxLink()">Copy Link</button>
+        <a class="btn action-blue" target="_blank" href="{{ event['public_url'] }}">Open Link</a>
       </div>
     {% endif %}
   </section>

@@ -1072,3 +1072,41 @@ V2.16 does not change the database schema. V2.15.1 backups remain compatible.
 ### Help Center
 
 Help & Tutorials now includes **Export Jobs to CSV**.
+
+
+## V2.17 — Action Button UI Polish
+
+V2.17 improves visual consistency so important clickable actions are easier to notice.
+
+### Solid-blue action buttons
+
+Important actions now use the same solid-blue treatment as DispatchProof's primary workflow buttons, including examples such as:
+
+- Export CSV
+- Edit Job Details
+- Duplicate Job
+- Combined Client / Project Report
+- Save Client / Project Details
+- Preview / Open reports
+- Copy / Open secure links
+- readiness and arrival actions
+- Edit User / Set Password
+- Create Project
+- Print / Save PDF
+
+### Controls that intentionally remain neutral
+
+Outlined/white controls are reserved for actions that should visually step back, such as:
+
+- Cancel
+- Clear All
+- Back / return navigation
+- Completed Jobs navigation
+
+### Destructive actions
+
+Dangerous or revocation-style actions keep their existing red treatment.
+
+### No workflow or database changes
+
+V2.17 is a visual polish release only. No database migration is required and V2.16 backups remain compatible.

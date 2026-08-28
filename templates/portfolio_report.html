@@ -75,7 +75,7 @@
     <div class="copy-box" id="portfolioReportLink">{{ report_url }}</div>
     <div class="button-row">
       <button class="btn primary" type="button" id="copyPortfolioButton" onclick="copyPortfolioReportLink()">Copy Report Link</button>
-      <a class="btn ghost" target="_blank" rel="noopener" href="{{ report_url }}">Open Combined Report</a>
+      <a class="btn action-blue" target="_blank" rel="noopener" href="{{ report_url }}">Open Combined Report</a>
     </div>
 
     <div class="security-note-card">
@@ -86,7 +86,7 @@
       {% else %}
       <form method="post" action="{{ url_for('rotate_project_combined_report', project_id=entity['id']) }}" onsubmit="return confirm('Rotate the combined project report link? The current link will stop working immediately.');">
       {% endif %}
-        <button class="btn ghost" type="submit">Rotate Secure Link</button>
+        <button class="btn action-blue" type="submit">Rotate Secure Link</button>
       </form>
     </div>
 

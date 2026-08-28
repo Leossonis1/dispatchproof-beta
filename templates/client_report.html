@@ -63,14 +63,14 @@
     <div class="copy-box" id="clientReportLink">{{ report_url }}</div>
     <div class="button-row">
       <button class="btn primary" type="button" id="copyClientReportButton" onclick="copyClientReportLink()">Copy Report Link</button>
-      <a class="btn ghost" target="_blank" rel="noopener" href="{{ report_url }}">Open Client Report</a>
+      <a class="btn action-blue" target="_blank" rel="noopener" href="{{ report_url }}">Open Client Report</a>
     </div>
 
     <div class="security-note-card">
       <strong>Need to revoke a shared link?</strong>
       <p>Rotate it to immediately invalidate the previous client report URL.</p>
       <form method="post" action="{{ url_for('rotate_client_report', job_id=job['id']) }}" onsubmit="return confirm('Rotate the client report link? Anyone using the current link will lose access immediately.');">
-        <button class="btn ghost" type="submit">Rotate Secure Link</button>
+        <button class="btn action-blue" type="submit">Rotate Secure Link</button>
       </form>
     </div>
   </section>

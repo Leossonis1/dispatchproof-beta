@@ -9,7 +9,7 @@
     <p>Projects and installations for this client.</p>
   </div>
   <div class="page-actions">
-    <a class="btn ghost" href="{{ url_for('client_combined_report', client_id=client['id']) }}">Combined Client Report</a>
+    <a class="btn action-blue" href="{{ url_for('client_combined_report', client_id=client['id']) }}">Combined Client Report</a>
     <a class="btn primary" href="{{ url_for('new_project', client_id=client['id']) }}">+ New Project</a>
   </div>
 </div>
@@ -23,7 +23,7 @@
       <label>Contact Email<input type="email" name="contact_email" value="{{ client['contact_email'] or '' }}"></label>
       <label>Contact Phone<input name="contact_phone" value="{{ client['contact_phone'] or '' }}"></label>
       <label>Notes<textarea name="notes" rows="3">{{ client['notes'] or '' }}</textarea></label>
-      <button class="btn ghost" type="submit">Save Client Details</button>
+      <button class="btn action-blue" type="submit">Save Client Details</button>
     </form>
   </section>
 
@@ -49,7 +49,7 @@
     <div class="empty compact-empty">
       <h3>No projects yet</h3>
       <p>Create a project to group multiple installation jobs together.</p>
-      <a class="btn ghost" href="{{ url_for('new_project', client_id=client['id']) }}">Create Project</a>
+      <a class="btn action-blue" href="{{ url_for('new_project', client_id=client['id']) }}">Create Project</a>
     </div>
     {% endif %}
   </section>
