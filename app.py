@@ -1639,7 +1639,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.11",
+        "app_version": "2.12",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -1867,7 +1867,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.11",
+        "app_version": "2.12",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2010,7 +2010,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.11",
+        "version": "2.12",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -3228,21 +3228,83 @@ def dashboard():
 
 @app.route("/completed")
 def completed_jobs():
+    search_query = (request.args.get("q") or "").strip()
+
+    def parse_filter_id(value):
+        try:
+            parsed = int(value)
+            return parsed if parsed > 0 else None
+        except (TypeError, ValueError):
+            return None
+
+    client_filter = parse_filter_id(request.args.get("client"))
+    project_filter = parse_filter_id(request.args.get("project"))
+
     with get_db() as db:
-        jobs = db.execute("""
+        all_jobs = db.execute("""
             SELECT
                 j.*,
+                c.name AS client_name,
+                p.name AS assigned_project_name,
+                p.project_number AS assigned_project_number,
                 (
                     SELECT COUNT(*)
                     FROM mobilization_attempts ma
                     WHERE ma.job_id = j.id
                 ) + 1 AS attempt_number
             FROM jobs j
+            LEFT JOIN clients c ON c.id = j.client_id
+            LEFT JOIN projects p ON p.id = j.project_id
             WHERE j.status = 'COMPLETED'
-            ORDER BY completed_at DESC, installation_date DESC, id DESC
+            ORDER BY j.completed_at DESC, j.installation_date DESC, j.id DESC
         """).fetchall()
 
-    return render_template("completed_jobs.html", jobs=jobs)
+        clients = db.execute("""
+            SELECT id, name
+            FROM clients
+            ORDER BY LOWER(name), id
+        """).fetchall()
+
+        projects = db.execute("""
+            SELECT id, client_id, name, project_number
+            FROM projects
+            ORDER BY LOWER(name), id
+        """).fetchall()
+
+    search_lower = search_query.lower()
+    jobs = []
+    for job in all_jobs:
+        if client_filter and job["client_id"] != client_filter:
+            continue
+        if project_filter and job["project_id"] != project_filter:
+            continue
+        if search_lower:
+            searchable = " ".join([
+                job["job_name"] or "",
+                job["project_site"] or "",
+                job["contact_name"] or "",
+                job["contact_email"] or "",
+                job["client_name"] or "",
+                job["assigned_project_name"] or "",
+                job["assigned_project_number"] or "",
+            ]).lower()
+            if search_lower not in searchable:
+                continue
+        jobs.append(job)
+
+    filters_active = bool(search_query or client_filter or project_filter)
+
+    return render_template(
+        "completed_jobs.html",
+        jobs=jobs,
+        clients=clients,
+        projects=projects,
+        search_query=search_query,
+        client_filter=client_filter,
+        project_filter=project_filter,
+        filters_active=filters_active,
+        total_completed_jobs=len(all_jobs),
+    )
 
 @app.route("/jobs/new", methods=["GET", "POST"])
 def new_job():
