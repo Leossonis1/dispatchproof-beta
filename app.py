@@ -1075,7 +1075,66 @@ def job_has_crew_assignment(job):
         or (job["assigned_crew"] or "").strip()
     )
 
-def job_attention_reason(job, schedule_bucket):
+
+def get_active_crew_conflicts(db):
+    """
+    Return active same-day directory-crew conflicts.
+
+    A conflict exists when the same Crew Directory member is linked to
+    more than one non-completed job with the same installation date.
+
+    Returns:
+      by_job: {job_id: [{crew_member_name, installation_date, other_jobs:[...]}]}
+      group_count: number of unique crew-member/date conflict groups
+    """
+    rows = db.execute("""
+        SELECT
+            j.id AS job_id,
+            j.job_name,
+            j.installation_date,
+            cm.id AS crew_member_id,
+            cm.name AS crew_member_name
+        FROM job_crew_assignments jca
+        JOIN jobs j ON j.id = jca.job_id
+        JOIN crew_members cm ON cm.id = jca.crew_member_id
+        WHERE j.status <> 'COMPLETED'
+          AND TRIM(COALESCE(j.installation_date, '')) <> ''
+        ORDER BY
+            j.installation_date,
+            cm.id,
+            j.id
+    """).fetchall()
+
+    groups = {}
+    for row in rows:
+        key = (row["installation_date"], row["crew_member_id"])
+        groups.setdefault(key, []).append(row)
+
+    by_job = {}
+    group_count = 0
+
+    for (install_date, _member_id), group_rows in groups.items():
+        unique_job_ids = {row["job_id"] for row in group_rows}
+        if len(unique_job_ids) < 2:
+            continue
+
+        group_count += 1
+        for row in group_rows:
+            others = [
+                other["job_name"]
+                for other in group_rows
+                if other["job_id"] != row["job_id"]
+            ]
+            by_job.setdefault(row["job_id"], []).append({
+                "crew_member_name": row["crew_member_name"],
+                "installation_date": install_date,
+                "other_jobs": others,
+            })
+
+    return by_job, group_count
+
+
+def job_attention_reason(job, schedule_bucket, has_crew_conflict=False):
     """Return the highest-priority office action for an active job."""
     status = (job["status"] or "").upper()
 
@@ -1095,9 +1154,17 @@ def job_attention_reason(job, schedule_bucket):
             "message": "This installation is scheduled for today.",
         }
 
-    if status == "BLOCKED":
+    if has_crew_conflict:
         return {
             "priority": 3,
+            "level": "conflict",
+            "label": "Crew conflict",
+            "message": "One or more assigned crew members are booked on another active install the same day.",
+        }
+
+    if status == "BLOCKED":
+        return {
+            "priority": 4,
             "level": "critical",
             "label": "Blocked",
             "message": "The site is not ready and needs office follow-up.",
@@ -1105,7 +1172,7 @@ def job_attention_reason(job, schedule_bucket):
 
     if status == "REVIEW":
         return {
-            "priority": 4,
+            "priority": 5,
             "level": "review",
             "label": "Needs review",
             "message": "A readiness response is waiting for office review.",
@@ -1113,7 +1180,7 @@ def job_attention_reason(job, schedule_bucket):
 
     if status == "NO RESPONSE" and schedule_bucket == "next7":
         return {
-            "priority": 5,
+            "priority": 6,
             "level": "warning",
             "label": "No response · Next 7 Days",
             "message": "The install is approaching and readiness has not been confirmed.",
@@ -1121,7 +1188,7 @@ def job_attention_reason(job, schedule_bucket):
 
     if schedule_bucket == "next7" and not job_has_crew_assignment(job):
         return {
-            "priority": 6,
+            "priority": 7,
             "level": "crew",
             "label": "Crew unassigned · Next 7 Days",
             "message": "No crew lead or installer has been assigned to this upcoming install.",
@@ -2333,7 +2400,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.33.2",
+        "app_version": "2.34",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2563,7 +2630,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.33.2",
+        "app_version": "2.34",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2715,7 +2782,7 @@ def not_found(error):
 def health():
     return {
         "status": "ok",
-        "version": "2.33.2",
+        "version": "2.34",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -4549,7 +4616,7 @@ def build_schedule_view(args):
 
     include_completed = (args.get("completed") or "").strip() == "1"
     crew_filter = (args.get("crew") or "").strip().lower()
-    if crew_filter not in {"assigned", "unassigned"}:
+    if crew_filter not in {"assigned", "unassigned", "conflict"}:
         crew_filter = ""
 
     client_filter = normalize_optional_id(args.get("client"))
@@ -4580,8 +4647,15 @@ def build_schedule_view(args):
             ORDER BY LOWER(name), id
         """).fetchall()
 
+        crew_conflicts_by_job, crew_conflict_group_count = get_active_crew_conflicts(db)
+
+    conflict_job_ids = set(crew_conflicts_by_job.keys())
     schedule_counts = {"overdue": 0, "today": 0, "next7": 0, "later": 0}
-    crew_counts = {"assigned": 0, "unassigned": 0}
+    crew_counts = {
+        "assigned": 0,
+        "unassigned": 0,
+        "conflict": len(conflict_job_ids),
+    }
     active_job_count = 0
     completed_job_count = 0
 
@@ -4617,6 +4691,8 @@ def build_schedule_view(args):
         if crew_filter == "assigned" and not job_has_crew_assignment(job):
             continue
         if crew_filter == "unassigned" and job_has_crew_assignment(job):
+            continue
+        if crew_filter == "conflict" and job["id"] not in conflict_job_ids:
             continue
         if client_filter and job["client_id"] != client_filter:
             continue
@@ -4678,6 +4754,8 @@ def build_schedule_view(args):
         "completed_job_count": completed_job_count,
         "schedule_counts": schedule_counts,
         "crew_counts": crew_counts,
+        "crew_conflicts_by_job": crew_conflicts_by_job,
+        "crew_conflict_group_count": crew_conflict_group_count,
         "search_query": search_query,
         "schedule_filter": schedule_filter,
         "status_filter": status_filter,
@@ -4837,6 +4915,8 @@ def dashboard():
             ORDER BY LOWER(name), id
         """).fetchall()
 
+        crew_conflicts_by_job, crew_conflict_group_count = get_active_crew_conflicts(db)
+
     counts = {"READY": 0, "REVIEW": 0, "BLOCKED": 0, "NO RESPONSE": 0, "ON SITE": 0}
     schedule_counts = {"overdue": 0, "today": 0, "next7": 0, "later": 0}
     schedule_buckets = {}
@@ -4850,7 +4930,12 @@ def dashboard():
 
     attention_jobs = []
     for job in all_jobs:
-        attention = job_attention_reason(job, schedule_buckets.get(job["id"]))
+        job_conflicts = crew_conflicts_by_job.get(job["id"], [])
+        attention = job_attention_reason(
+            job,
+            schedule_buckets.get(job["id"]),
+            has_crew_conflict=bool(job_conflicts),
+        )
         if not attention:
             continue
         bucket = schedule_buckets.get(job["id"])
@@ -4864,6 +4949,10 @@ def dashboard():
                 bucket in {"overdue", "today", "next7"}
                 and not job_has_crew_assignment(job)
             ),
+            "crew_conflict_names": [
+                conflict["crew_member_name"]
+                for conflict in job_conflicts
+            ],
         })
 
     attention_jobs.sort(key=lambda item: (
@@ -4929,6 +5018,7 @@ def dashboard():
         due_reminder_count=due_reminder_count,
         attention_jobs=attention_jobs,
         attention_total=attention_total,
+        crew_conflict_group_count=crew_conflict_group_count,
         backup_status=backup_status,
         last_backup_at=last_backup_at,
     )
@@ -6873,6 +6963,8 @@ def job_detail(job_id):
             (job["project_id"],),
         ).fetchone() if job["project_id"] else None
         assignment_clients, assignment_projects = get_clients_and_projects(db)
+        all_crew_conflicts, _crew_conflict_group_count = get_active_crew_conflicts(db)
+        crew_conflicts = all_crew_conflicts.get(job_id, [])
 
     return render_template(
         "job_detail.html",
@@ -6898,6 +6990,7 @@ def job_detail(job_id):
         assigned_project=assigned_project,
         assignment_clients=assignment_clients,
         assignment_projects=assignment_projects,
+        crew_conflicts=crew_conflicts,
     )
 
 @app.route("/jobs/<int:job_id>/arrival", methods=["GET", "POST"])
