@@ -1090,6 +1090,80 @@ def job_has_crew_assignment(job):
     )
 
 
+def job_assigned_crew_names(job):
+    """
+    Return unique named people counted toward Planned Crew Size.
+
+    assigned_crew normally already contains the lead, but older/custom data can
+    contain a lead separately. Counting by normalized name prevents double
+    counting the same person.
+    """
+    names = parse_crew_names(job["assigned_crew"])
+    seen = {name.lower() for name in names}
+
+    lead = (job["crew_lead"] or "").strip()
+    if lead and lead.lower() not in seen:
+        names.insert(0, lead)
+
+    return names
+
+
+def job_staffing_gap(job):
+    """
+    Return staffing-gap details when Planned Crew Size exceeds named crew.
+
+    Jobs without Planned Crew Size are intentionally not treated as staffing
+    gaps because DispatchProof has no target headcount to compare against.
+    """
+    try:
+        planned = int(job["planned_crew_size"] or 0)
+    except (TypeError, ValueError):
+        planned = 0
+
+    if planned < 1:
+        return None
+
+    assigned_names = job_assigned_crew_names(job)
+    assigned = len(assigned_names)
+    needed = planned - assigned
+
+    if needed <= 0:
+        return None
+
+    return {
+        "planned": planned,
+        "assigned": assigned,
+        "needed": needed,
+        "assigned_names": assigned_names,
+    }
+
+
+def get_active_staffing_gaps(jobs):
+    """
+    Return staffing gaps for non-completed jobs.
+
+    Returns:
+      by_job: {job_id: {planned, assigned, needed, assigned_names}}
+      job_count: number of active jobs with a staffing gap
+      total_needed: total additional crew members needed across those jobs
+    """
+    by_job = {}
+    total_needed = 0
+
+    for job in jobs:
+        if (job["status"] or "").upper() == "COMPLETED":
+            continue
+
+        gap = job_staffing_gap(job)
+        if not gap:
+            continue
+
+        by_job[job["id"]] = gap
+        total_needed += gap["needed"]
+
+    return by_job, len(by_job), total_needed
+
+
 def get_active_crew_conflicts(db):
     """
     Return active same-day directory-crew conflicts.
@@ -1219,7 +1293,11 @@ def get_member_unavailability_for_date(db, crew_member_id, install_date):
 
 
 def job_attention_reason(
-    job, schedule_bucket, has_crew_conflict=False, has_availability_issue=False
+    job,
+    schedule_bucket,
+    has_crew_conflict=False,
+    has_availability_issue=False,
+    has_staffing_gap=False,
 ):
     """Return the highest-priority office action for an active job."""
     status = (job["status"] or "").upper()
@@ -1286,6 +1364,14 @@ def job_attention_reason(
             "level": "crew",
             "label": "Crew unassigned · Next 7 Days",
             "message": "No crew lead or installer has been assigned to this upcoming install.",
+        }
+
+    if has_staffing_gap:
+        return {
+            "priority": 9,
+            "level": "staffing",
+            "label": "Staffing gap",
+            "message": "Planned Crew Size is larger than the number of named crew members assigned.",
         }
 
     return None
@@ -2497,7 +2583,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.35.1",
+        "app_version": "2.36",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2727,7 +2813,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.35.1",
+        "app_version": "2.36",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2879,7 +2965,7 @@ def not_found(error):
 def health():
     return {
         "status": "ok",
-        "version": "2.35.1",
+        "version": "2.36",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -4814,8 +4900,16 @@ def build_schedule_view(args):
 
     include_completed = (args.get("completed") or "").strip() == "1"
     crew_filter = (args.get("crew") or "").strip().lower()
-    if crew_filter not in {"assigned", "unassigned", "conflict", "unavailable"}:
+    if crew_filter not in {"assigned", "unassigned", "conflict", "unavailable", "gap"}:
         crew_filter = ""
+
+    crew_filter_label = {
+        "assigned": "Assigned",
+        "unassigned": "Unassigned",
+        "conflict": "Conflicts",
+        "unavailable": "Unavailable Crew",
+        "gap": "Staffing Gaps",
+    }.get(crew_filter, "")
 
     client_filter = normalize_optional_id(args.get("client"))
     project_filter = normalize_optional_id(args.get("project"))
@@ -4848,14 +4942,18 @@ def build_schedule_view(args):
         crew_conflicts_by_job, crew_conflict_group_count = get_active_crew_conflicts(db)
         crew_unavailability_by_job, crew_unavailability_group_count = get_active_crew_unavailability_issues(db)
 
+    staffing_gaps_by_job, staffing_gap_job_count, staffing_gap_total_needed = get_active_staffing_gaps(all_jobs)
+
     conflict_job_ids = set(crew_conflicts_by_job.keys())
     unavailable_job_ids = set(crew_unavailability_by_job.keys())
+    staffing_gap_job_ids = set(staffing_gaps_by_job.keys())
     schedule_counts = {"overdue": 0, "today": 0, "next7": 0, "later": 0}
     crew_counts = {
         "assigned": 0,
         "unassigned": 0,
         "conflict": len(conflict_job_ids),
         "unavailable": len(unavailable_job_ids),
+        "gap": staffing_gap_job_count,
     }
     active_job_count = 0
     completed_job_count = 0
@@ -4896,6 +4994,8 @@ def build_schedule_view(args):
         if crew_filter == "conflict" and job["id"] not in conflict_job_ids:
             continue
         if crew_filter == "unavailable" and job["id"] not in unavailable_job_ids:
+            continue
+        if crew_filter == "gap" and job["id"] not in staffing_gap_job_ids:
             continue
         if client_filter and job["client_id"] != client_filter:
             continue
@@ -4961,10 +5061,14 @@ def build_schedule_view(args):
         "crew_conflict_group_count": crew_conflict_group_count,
         "crew_unavailability_by_job": crew_unavailability_by_job,
         "crew_unavailability_group_count": crew_unavailability_group_count,
+        "staffing_gaps_by_job": staffing_gaps_by_job,
+        "staffing_gap_job_count": staffing_gap_job_count,
+        "staffing_gap_total_needed": staffing_gap_total_needed,
         "search_query": search_query,
         "schedule_filter": schedule_filter,
         "status_filter": status_filter,
         "crew_filter": crew_filter,
+        "crew_filter_label": crew_filter_label,
         "client_filter": client_filter,
         "project_filter": project_filter,
         "include_completed": include_completed,
@@ -5123,6 +5227,8 @@ def dashboard():
         crew_conflicts_by_job, crew_conflict_group_count = get_active_crew_conflicts(db)
         crew_unavailability_by_job, crew_unavailability_group_count = get_active_crew_unavailability_issues(db)
 
+    staffing_gaps_by_job, staffing_gap_job_count, staffing_gap_total_needed = get_active_staffing_gaps(all_jobs)
+
     counts = {"READY": 0, "REVIEW": 0, "BLOCKED": 0, "NO RESPONSE": 0, "ON SITE": 0}
     schedule_counts = {"overdue": 0, "today": 0, "next7": 0, "later": 0}
     schedule_buckets = {}
@@ -5138,11 +5244,13 @@ def dashboard():
     for job in all_jobs:
         job_conflicts = crew_conflicts_by_job.get(job["id"], [])
         availability_issues = crew_unavailability_by_job.get(job["id"], [])
+        staffing_gap = staffing_gaps_by_job.get(job["id"])
         attention = job_attention_reason(
             job,
             schedule_buckets.get(job["id"]),
             has_crew_conflict=bool(job_conflicts),
             has_availability_issue=bool(availability_issues),
+            has_staffing_gap=bool(staffing_gap),
         )
         if not attention:
             continue
@@ -5165,6 +5273,7 @@ def dashboard():
                 issue["crew_member_name"]
                 for issue in availability_issues
             ],
+            "staffing_gap": staffing_gap,
         })
 
     attention_jobs.sort(key=lambda item: (
@@ -5232,6 +5341,8 @@ def dashboard():
         attention_total=attention_total,
         crew_conflict_group_count=crew_conflict_group_count,
         crew_unavailability_group_count=crew_unavailability_group_count,
+        staffing_gap_job_count=staffing_gap_job_count,
+        staffing_gap_total_needed=staffing_gap_total_needed,
         backup_status=backup_status,
         last_backup_at=last_backup_at,
     )
@@ -7181,6 +7292,8 @@ def job_detail(job_id):
         all_crew_unavailability, _crew_unavailability_group_count = get_active_crew_unavailability_issues(db)
         crew_unavailability_issues = all_crew_unavailability.get(job_id, [])
 
+    staffing_gap = None if job["status"] == "COMPLETED" else job_staffing_gap(job)
+
     return render_template(
         "job_detail.html",
         job=job,
@@ -7207,6 +7320,7 @@ def job_detail(job_id):
         assignment_projects=assignment_projects,
         crew_conflicts=crew_conflicts,
         crew_unavailability_issues=crew_unavailability_issues,
+        staffing_gap=staffing_gap,
     )
 
 @app.route("/jobs/<int:job_id>/arrival", methods=["GET", "POST"])
