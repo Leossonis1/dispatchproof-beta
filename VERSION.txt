@@ -1,2 +1,2 @@
-DispatchProof Version 2.23 - Job Communication History
-Adds job-level readiness request, reminder, and client-report communication history with direct preview links.
+DispatchProof Version 2.24 - Project Documents
+Adds internal project-level documents shared across every installation assigned to the project.

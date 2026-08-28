@@ -1261,3 +1261,49 @@ The panel follows existing Job Detail permissions, so Owner, Administrator, and 
 No database migration is required. V2.22 backups remain compatible.
 
 Help & Tutorials now includes **Review Job Communication History**.
+
+
+## V2.24 — Project Documents
+
+V2.24 adds **Project Documents** for files that belong to an entire project rather than one installation.
+
+### Project-level file library
+
+From a Project page, signed-in users can upload:
+
+- PDF
+- Word
+- Excel / CSV
+- TXT
+- images
+- DWG / DXF
+
+Files are limited to 20 MB each and remain internal to DispatchProof.
+
+### Shared to every project job
+
+Every installation assigned to the project automatically gets a **Project Reference Files** panel on Job Detail.
+
+The job does not receive a duplicate copy. It references the same project-level file, so updating the project file library keeps the organization clean.
+
+### Permissions
+
+- Owner / Administrator: upload, download, delete
+- Operations: upload and download
+- Public/client report viewers: no access
+
+### Backup & restore
+
+Project Documents are stored in the same protected upload area and included in DispatchProof backup ZIPs.
+
+Backup & Restore now shows a separate **Project Documents** count.
+
+### Activity
+
+Project document upload/delete actions are recorded in the global Activity Log.
+
+### Help Center cleanup
+
+Help & Tutorials now includes **Use Project Documents** and tutorial card numbers are re-sequenced consistently.
+
+No manual database migration is required. The new table is created automatically at startup.

@@ -34,6 +34,61 @@
   </section>
 </div>
 
+<section class="panel job-documents-panel" id="project-documents">
+  <div class="panel-head">
+    <div>
+      <div class="eyebrow">Internal Files</div>
+      <h2>Project Documents</h2>
+      <p>Upload scopes, drawings, spreadsheets, or reference files once for every installation in this project.</p>
+    </div>
+    <span class="internal-only-badge">INTERNAL ONLY</span>
+  </div>
+
+  <form method="post" action="{{ url_for('upload_project_document', project_id=project['id']) }}"
+        enctype="multipart/form-data" class="job-document-upload">
+    <label>Choose Document
+      <input type="file" name="project_document"
+             accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.webp,.dwg,.dxf"
+             required>
+    </label>
+    <div class="job-document-upload-footer">
+      <span>PDF, Word, Excel, CSV, TXT, images, DWG, or DXF · 20 MB max · internal only.</span>
+      <button class="btn primary" type="submit">Upload Project Document</button>
+    </div>
+  </form>
+
+  {% if project_documents %}
+  <div class="job-document-list">
+    {% for document in project_documents %}
+    <article class="job-document-row">
+      <div class="job-document-main">
+        <div class="job-document-icon">FILE</div>
+        <div>
+          <strong>{{ document['original_filename'] }}</strong>
+          <span>{{ document['file_size']|pretty_bytes }} · uploaded by {{ document['actor_name'] }} · {{ document['created_at']|pretty_datetime }}</span>
+        </div>
+      </div>
+      <div class="job-document-actions">
+        <a class="btn action-blue small-btn"
+           href="{{ url_for('download_project_document', project_id=project['id'], document_id=document['id']) }}">
+          Download
+        </a>
+        {% if current_user_is_admin %}
+        <form method="post"
+              action="{{ url_for('delete_project_document', project_id=project['id'], document_id=document['id']) }}"
+              onsubmit="return confirm('Delete this internal project document?');">
+          <button class="btn danger small-btn" type="submit">Delete</button>
+        </form>
+        {% endif %}
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-mini">No internal project documents yet.</div>
+  {% endif %}
+</section>
+
 <section class="panel">
   <div class="panel-head"><div><h2>Project Installations</h2><p>Running and completed installation jobs.</p></div></div>
   {% if jobs %}

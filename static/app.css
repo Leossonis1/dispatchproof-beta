@@ -3174,3 +3174,12 @@ main{
     flex-direction:column;
   }
 }
+
+
+/* DispatchProof V2.24 — Project Documents */
+.project-reference-documents{
+  border-left:3px solid #667085;
+}
+.project-reference-documents .job-document-actions{
+  align-items:center;
+}
