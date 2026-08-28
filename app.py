@@ -1886,7 +1886,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.21",
+        "app_version": "2.22",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2116,7 +2116,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.21",
+        "app_version": "2.22",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2261,7 +2261,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.21",
+        "version": "2.22",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -3450,7 +3450,29 @@ def dashboard():
                     SELECT COUNT(*)
                     FROM mobilization_attempts ma
                     WHERE ma.job_id = j.id
-                ) + 1 AS attempt_number
+                ) + 1 AS attempt_number,
+                (
+                    SELECT COUNT(*)
+                    FROM email_events ee
+                    WHERE ee.job_id = j.id
+                      AND ee.event_type = 'REMINDER'
+                ) AS reminder_event_count,
+                (
+                    SELECT ee.created_at
+                    FROM email_events ee
+                    WHERE ee.job_id = j.id
+                      AND ee.event_type = 'REMINDER'
+                    ORDER BY ee.id DESC
+                    LIMIT 1
+                ) AS last_reminder_event_at,
+                (
+                    SELECT ee.status
+                    FROM email_events ee
+                    WHERE ee.job_id = j.id
+                      AND ee.event_type = 'REMINDER'
+                    ORDER BY ee.id DESC
+                    LIMIT 1
+                ) AS last_reminder_event_status
             FROM jobs j
             LEFT JOIN clients c ON c.id = j.client_id
             LEFT JOIN projects p ON p.id = j.project_id
@@ -4029,6 +4051,20 @@ def readiness_request(job_id):
             ORDER BY id DESC
             LIMIT 10
         """, (job_id,)).fetchall()
+        reminder_event_count = db.execute("""
+            SELECT COUNT(*) AS c
+            FROM email_events
+            WHERE job_id = ?
+              AND event_type = 'REMINDER'
+        """, (job_id,)).fetchone()["c"]
+        latest_reminder_event = db.execute("""
+            SELECT *
+            FROM email_events
+            WHERE job_id = ?
+              AND event_type = 'REMINDER'
+            ORDER BY id DESC
+            LIMIT 1
+        """, (job_id,)).fetchone()
 
     if not job:
         abort(404)
@@ -4049,6 +4085,8 @@ def readiness_request(job_id):
         email_preview_subject=subject,
         email_preview_html=email_preview_html,
         request_event=request_event,
+        reminder_event_count=reminder_event_count,
+        latest_reminder_event=latest_reminder_event,
     )
 
 @app.post("/jobs/<int:job_id>/send-readiness-email")
