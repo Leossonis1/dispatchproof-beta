@@ -1023,3 +1023,52 @@ V2.15.1 fixes horizontal page overflow introduced by the expanded V2.15 Dashboar
 - Mobile/tablet breakpoints remain responsive.
 
 No workflow, database, search, status, or schedule logic changed.
+
+
+## V2.16 — CSV Export
+
+V2.16 adds spreadsheet-friendly exports for both active and completed installations.
+
+### Active Dashboard export
+
+Click **Export CSV** from Dashboard to export the current active-job view.
+
+The export respects the current:
+
+- Search
+- Client
+- Project
+- Schedule
+- Status
+
+Active CSV columns include job/client/project details, attempt, installation date, schedule bucket, status, contact information, readiness response time, arrival status, and arrival time.
+
+### Completed Jobs export
+
+Click **Export CSV** from Completed Jobs to export the current completed-history view.
+
+The export respects the current:
+
+- Search
+- Client
+- Project
+
+Completed CSV columns include job/client/project details, attempt, installation date, completion time, contact information, readiness response time, arrival status, and arrival time.
+
+### Spreadsheet compatibility
+
+CSV downloads include a UTF-8 BOM for reliable opening in Microsoft Excel and support standard spreadsheet applications such as Google Sheets.
+
+Displayed timestamps use the configured DispatchProof timezone.
+
+### Permissions
+
+Exports are available to signed-in Owner, Administrator, and Operations users because they contain the same operational job data those users can already view.
+
+### No database migration
+
+V2.16 does not change the database schema. V2.15.1 backups remain compatible.
+
+### Help Center
+
+Help & Tutorials now includes **Export Jobs to CSV**.

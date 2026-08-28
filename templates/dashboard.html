@@ -89,9 +89,15 @@
       <h2>Search & Filter</h2>
       <p>Search job, site, contact, client, project, project number, or email.</p>
     </div>
-    {% if filters_active %}
-    <a class="btn ghost" href="{{ url_for('dashboard') }}">Clear All</a>
-    {% endif %}
+    <div class="panel-head-actions">
+      <a class="btn ghost export-csv-btn"
+         href="{{ url_for('export_active_csv', q=search_query or None, client=client_filter or None, project=project_filter or None, schedule=schedule_filter or None, status=status_filter or None) }}">
+        Export CSV
+      </a>
+      {% if filters_active %}
+      <a class="btn ghost" href="{{ url_for('dashboard') }}">Clear All</a>
+      {% endif %}
+    </div>
   </div>
 
   <form class="dashboard-filter-form" method="get" action="{{ url_for('dashboard') }}">

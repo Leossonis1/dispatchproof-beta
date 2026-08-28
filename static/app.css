@@ -2710,3 +2710,22 @@ main{
     width:100%;
   }
 }
+
+
+/* DispatchProof V2.16 — CSV Export */
+.panel-head-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.export-csv-btn{
+  white-space:nowrap;
+}
+@media(max-width:620px){
+  .panel-head-actions{
+    width:100%;
+    justify-content:flex-start;
+  }
+}

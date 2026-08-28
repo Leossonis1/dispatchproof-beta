@@ -1,2 +1,2 @@
-DispatchProof Version 2.15.1 - Dashboard Width Fix
-Fixes horizontal page overflow introduced by the V2.15 schedule/filter layout at common desktop and laptop widths.
+DispatchProof Version 2.16 - CSV Export
+Adds filtered CSV exports for active Dashboard jobs and Completed Jobs.
