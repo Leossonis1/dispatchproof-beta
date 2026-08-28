@@ -933,3 +933,49 @@ Help & Tutorials now includes **Respond to a Backup Reminder**.
 ### No destructive migration
 
 V2.14 adds only one nullable settings field (`last_backup_at`) and migrates existing databases automatically.
+
+
+## V2.14.1 — Eastern Time Display Fix
+
+V2.14.1 corrects the timestamp display mismatch caused by Render using UTC.
+
+### What changed
+
+DispatchProof now converts stored timestamps to the configured display timezone before showing them in the UI.
+
+The default timezone is:
+
+`America/New_York`
+
+This automatically handles:
+
+- EST (UTC-5) during standard time
+- EDT (UTC-4) during daylight saving time
+
+### What it fixes
+
+The shared `pretty_datetime` formatter is used throughout DispatchProof, so the correction applies to:
+
+- Backup Status / Last Backup
+- Job Activity
+- Office Notes
+- readiness timestamps
+- arrival timestamps
+- completed-job timestamps
+- Email Outbox timestamps
+- report view timestamps
+- other formatted date/time displays
+
+Stored database values are not rewritten, preserving backup compatibility and audit history.
+
+### Optional future deployment setting
+
+The display timezone can be changed later with:
+
+`DISPATCHPROOF_TIMEZONE`
+
+Example:
+
+`America/Chicago`
+
+No environment change is required for the current Eastern Time setup.
