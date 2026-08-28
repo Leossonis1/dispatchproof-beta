@@ -720,6 +720,13 @@ def schedule_bucket_label(bucket):
         "unscheduled": "No Date",
     }.get(bucket, "Later")
 
+def job_has_crew_assignment(job):
+    """True when at least one named crew assignment exists."""
+    return bool(
+        (job["crew_lead"] or "").strip()
+        or (job["assigned_crew"] or "").strip()
+    )
+
 def job_attention_reason(job, schedule_bucket):
     """Return the highest-priority office action for an active job."""
     status = (job["status"] or "").upper()
@@ -762,6 +769,14 @@ def job_attention_reason(job, schedule_bucket):
             "level": "warning",
             "label": "No response · Next 7 Days",
             "message": "The install is approaching and readiness has not been confirmed.",
+        }
+
+    if schedule_bucket == "next7" and not job_has_crew_assignment(job):
+        return {
+            "priority": 6,
+            "level": "crew",
+            "label": "Crew unassigned · Next 7 Days",
+            "message": "No crew lead or installer has been assigned to this upcoming install.",
         }
 
     return None
@@ -1964,7 +1979,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.31",
+        "app_version": "2.32",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2194,7 +2209,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.31",
+        "app_version": "2.32",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2346,7 +2361,7 @@ def not_found(error):
 def health():
     return {
         "status": "ok",
-        "version": "2.31",
+        "version": "2.32",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -3926,6 +3941,10 @@ def build_schedule_view(args):
         status_filter = ""
 
     include_completed = (args.get("completed") or "").strip() == "1"
+    crew_filter = (args.get("crew") or "").strip().lower()
+    if crew_filter not in {"assigned", "unassigned"}:
+        crew_filter = ""
+
     client_filter = normalize_optional_id(args.get("client"))
     project_filter = normalize_optional_id(args.get("project"))
 
@@ -3955,6 +3974,7 @@ def build_schedule_view(args):
         """).fetchall()
 
     schedule_counts = {"overdue": 0, "today": 0, "next7": 0, "later": 0}
+    crew_counts = {"assigned": 0, "unassigned": 0}
     active_job_count = 0
     completed_job_count = 0
 
@@ -3967,6 +3987,11 @@ def build_schedule_view(args):
         bucket = job_schedule_bucket(job["installation_date"])
         if bucket in schedule_counts:
             schedule_counts[bucket] += 1
+
+        if job_has_crew_assignment(job):
+            crew_counts["assigned"] += 1
+        else:
+            crew_counts["unassigned"] += 1
 
     search_lower = search_query.lower()
     visible_jobs = []
@@ -3981,6 +4006,10 @@ def build_schedule_view(args):
         if schedule_filter and bucket != schedule_filter:
             continue
         if status_filter and job["status"] != status_filter:
+            continue
+        if crew_filter == "assigned" and not job_has_crew_assignment(job):
+            continue
+        if crew_filter == "unassigned" and job_has_crew_assignment(job):
             continue
         if client_filter and job["client_id"] != client_filter:
             continue
@@ -4028,6 +4057,7 @@ def build_schedule_view(args):
         search_query
         or schedule_filter
         or status_filter
+        or crew_filter
         or client_filter
         or project_filter
         or include_completed
@@ -4040,9 +4070,11 @@ def build_schedule_view(args):
         "active_job_count": active_job_count,
         "completed_job_count": completed_job_count,
         "schedule_counts": schedule_counts,
+        "crew_counts": crew_counts,
         "search_query": search_query,
         "schedule_filter": schedule_filter,
         "status_filter": status_filter,
+        "crew_filter": crew_filter,
         "client_filter": client_filter,
         "project_filter": project_filter,
         "include_completed": include_completed,
@@ -4214,12 +4246,17 @@ def dashboard():
         attention = job_attention_reason(job, schedule_buckets.get(job["id"]))
         if not attention:
             continue
+        bucket = schedule_buckets.get(job["id"])
         attention_jobs.append({
             "job": job,
             "priority": attention["priority"],
             "level": attention["level"],
             "label": attention["label"],
             "message": attention["message"],
+            "crew_unassigned": (
+                bucket in {"overdue", "today", "next7"}
+                and not job_has_crew_assignment(job)
+            ),
         })
 
     attention_jobs.sort(key=lambda item: (
@@ -4250,6 +4287,8 @@ def dashboard():
                 job["client_name"] or "",
                 job["assigned_project_name"] or "",
                 job["assigned_project_number"] or "",
+                job["crew_lead"] or "",
+                job["assigned_crew"] or "",
             ]).lower()
             if search_lower not in searchable:
                 continue
