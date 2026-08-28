@@ -1781,3 +1781,55 @@ V2.33 stored the directory rename correctly but skipped the linked-job sync beca
 Small visual correction for the Crew Member detail page.
 
 The **Open Job →** action under **Linked Installation Jobs** is now explicitly styled by its location as a solid blue DispatchProof action button. This also covers deployments where an older cached/template copy omitted the normal button utility classes.
+
+
+## V2.34 — Crew Conflict Detection
+
+V2.34 prevents the same reusable crew member from being silently double-booked on two active installation jobs on the same date.
+
+### What counts as a conflict
+
+A conflict exists when:
+
+- the person is a Crew Directory member,
+- they are assigned to two or more jobs,
+- those jobs have the same Installation Date,
+- and the jobs are not Completed.
+
+Custom free-text crew names are not treated as reusable identity records and therefore do not create automatic conflicts.
+
+### Schedule
+
+Schedule adds:
+
+- **Crew Conflicts** count
+- clickable Crew Conflicts card
+- **Crew Coverage → Conflicts Only**
+- red conflict details directly under affected installation rows
+
+### Job Detail
+
+The internal **Field Assignment** panel shows **Crew Conflict Detected** with the affected crew member and the other same-day job.
+
+### Needs Attention
+
+Crew conflicts surface in the Dashboard priority queue.
+
+If another issue is already more urgent, such as an overdue/today install, the row keeps that primary reason and also shows the crew-conflict warning.
+
+### Privacy
+
+Crew conflict information stays internal.
+
+It is not added to:
+
+- readiness links
+- arrival links
+- single-job client reports
+- combined client/project reports
+
+### Help Center
+
+Help & Tutorials now includes **Resolve a Crew Conflict**.
+
+No database migration is required.

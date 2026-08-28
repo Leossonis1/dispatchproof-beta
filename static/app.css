@@ -4232,3 +4232,71 @@ main{
 .crew-assignment-history-meta a:last-child:active{
   transform:translateY(0);
 }
+
+
+/* DispatchProof V2.34 — Crew Conflict Detection */
+.crew-coverage-summary{
+  grid-template-columns:repeat(3,minmax(0,1fr));
+}
+.crew-conflict-card{
+  border-top-color:#d92d20;
+}
+.schedule-crew-conflict{
+  margin-top:8px;
+  padding:7px 9px;
+  border:1px solid #fecdca;
+  border-radius:8px;
+  background:#fef3f2;
+  color:#b42318;
+  font-size:9px;
+}
+.crew-conflict-alert{
+  display:grid;
+  gap:5px;
+  margin:0 0 12px;
+  padding:11px 12px;
+  border:1px solid #fecdca;
+  border-left:3px solid #d92d20;
+  border-radius:9px;
+  background:#fef3f2;
+  color:#912018;
+  font-size:10px;
+}
+.crew-conflict-alert-title{
+  color:#b42318;
+  font-weight:900;
+  text-transform:uppercase;
+  letter-spacing:.03em;
+}
+.attention-row.attention-conflict{
+  border-left-color:#d92d20;
+}
+.attention-conflict-warning,
+.attention-conflict-summary{
+  display:inline-flex;
+  width:max-content;
+  max-width:100%;
+  margin-top:5px;
+  padding:4px 7px;
+  border:1px solid #fecdca;
+  border-radius:999px;
+  background:#fef3f2;
+  color:#b42318;
+  font-size:8px;
+  font-weight:800;
+}
+.attention-conflict-summary{
+  margin-top:7px;
+}
+@media(max-width:700px){
+  .crew-coverage-summary{
+    grid-template-columns:1fr;
+  }
+}
+@media print{
+  .schedule-crew-conflict{
+    border:1px solid #777 !important;
+    background:#fff !important;
+    color:#111 !important;
+  }
+}

@@ -106,6 +106,19 @@
     <span>Crew Unassigned</span>
     <strong>{{ crew_counts.unassigned }}</strong>
   </a>
+
+  <a class="crew-coverage-card crew-conflict-card {% if crew_filter == 'conflict' %}selected{% endif %}"
+     href="{{ url_for('schedule_board',
+                      crew='' if crew_filter == 'conflict' else 'conflict',
+                      schedule=schedule_filter or None,
+                      q=search_query or None,
+                      status=status_filter or None,
+                      client=client_filter or None,
+                      project=project_filter or None,
+                      completed='1' if include_completed else None) }}">
+    <span>Crew Conflicts</span>
+    <strong>{{ crew_counts.conflict }}</strong>
+  </a>
 </section>
 
 <section class="panel schedule-filter-panel">
@@ -157,6 +170,7 @@
         <option value="">All Crew Coverage</option>
         <option value="assigned" {% if crew_filter == 'assigned' %}selected{% endif %}>Assigned</option>
         <option value="unassigned" {% if crew_filter == 'unassigned' %}selected{% endif %}>Unassigned</option>
+        <option value="conflict" {% if crew_filter == 'conflict' %}selected{% endif %}>Conflicts Only</option>
       </select>
     </label>
 
@@ -251,6 +265,16 @@
             </div>
             {% else %}
             <div class="schedule-crew-line schedule-crew-unassigned">Crew not assigned</div>
+            {% endif %}
+
+            {% set job_conflicts = crew_conflicts_by_job.get(job['id'], []) %}
+            {% if job_conflicts %}
+            <div class="schedule-crew-conflict">
+              <strong>Crew conflict:</strong>
+              {% for conflict in job_conflicts %}
+                {{ conflict.crew_member_name }}{% if conflict.other_jobs %} also on {{ conflict.other_jobs|join(', ') }}{% endif %}{% if not loop.last %} · {% endif %}
+              {% endfor %}
+            </div>
             {% endif %}
           </div>
 

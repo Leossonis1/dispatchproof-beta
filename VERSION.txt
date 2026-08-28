@@ -1,2 +1,2 @@
-DispatchProof Version 2.33.2 - Crew Open Job Button Polish
-Forces linked Crew Directory Open Job actions to render as blue DispatchProof buttons.
+DispatchProof Version 2.34 - Crew Conflict Detection
+Detects same-day double-booked Crew Directory members across active installation jobs.
