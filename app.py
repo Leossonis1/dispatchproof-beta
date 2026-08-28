@@ -1961,7 +1961,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.26.1",
+        "app_version": "2.27",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2191,7 +2191,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.26.1",
+        "app_version": "2.27",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2338,7 +2338,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.26.1",
+        "version": "2.27",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -3535,6 +3535,24 @@ def document_center():
 
     with get_db() as db:
         clients, projects = get_clients_and_projects(db)
+        jobs = db.execute("""
+            SELECT
+                j.id,
+                j.job_name,
+                j.project_site,
+                j.status,
+                j.client_id,
+                j.project_id,
+                c.name AS client_name,
+                p.name AS project_name
+            FROM jobs j
+            LEFT JOIN clients c ON c.id = j.client_id
+            LEFT JOIN projects p ON p.id = j.project_id
+            ORDER BY CASE WHEN j.status = 'COMPLETED' THEN 1 ELSE 0 END,
+                     j.installation_date DESC,
+                     j.job_name COLLATE NOCASE,
+                     j.id DESC
+        """).fetchall()
 
         # Keep these as three simple queries instead of one compound UNION.
         # This is more tolerant of restored/upgraded beta databases and avoids
@@ -3654,7 +3672,215 @@ def document_center():
         selected_project_id=project_id,
         clients=clients,
         projects=projects,
+        jobs=jobs,
     )
+
+
+@app.post("/documents/upload")
+def document_center_upload():
+    document_scope = (request.form.get("document_scope") or "").strip().upper()
+    client_id = normalize_optional_id(request.form.get("upload_client_id"))
+    project_id = normalize_optional_id(request.form.get("upload_project_id"))
+    job_id = normalize_optional_id(request.form.get("upload_job_id"))
+    uploaded = request.files.get("document_file")
+
+    if document_scope not in {"CLIENT", "PROJECT", "JOB"}:
+        flash("Choose whether this is a Client, Project, or Job Document.")
+        return redirect(url_for("document_center") + "#quick-upload")
+
+    if not uploaded or not uploaded.filename:
+        flash("Choose a document before uploading.")
+        return redirect(url_for("document_center") + "#quick-upload")
+
+    original_filename = secure_filename(uploaded.filename)
+    if not original_filename:
+        flash("That document filename could not be used.")
+        return redirect(url_for("document_center") + "#quick-upload")
+
+    if not allowed_document(original_filename):
+        flash("Unsupported document type. Use PDF, Word, Excel, CSV, TXT, image, DWG, or DXF files.")
+        return redirect(url_for("document_center") + "#quick-upload")
+
+    actor_type, actor_name = activity_actor()
+
+    with get_db() as db:
+        if document_scope == "CLIENT":
+            if not client_id:
+                flash("Choose a client for this Client Document.")
+                return redirect(url_for("document_center") + "#quick-upload")
+
+            parent = db.execute(
+                "SELECT * FROM clients WHERE id = ?",
+                (client_id,),
+            ).fetchone()
+            if not parent:
+                abort(404)
+
+            stored_filename = f"clientdoc_{client_id}_{secrets.token_hex(8)}_{original_filename}"
+            destination = UPLOAD_DIR / stored_filename
+            uploaded.save(destination)
+
+            try:
+                file_size = destination.stat().st_size
+            except OSError:
+                destination.unlink(missing_ok=True)
+                flash("The client document could not be saved.")
+                return redirect(url_for("document_center") + "#quick-upload")
+
+            if file_size > MAX_JOB_DOCUMENT_BYTES:
+                destination.unlink(missing_ok=True)
+                flash("Documents can be up to 20 MB each.")
+                return redirect(url_for("document_center") + "#quick-upload")
+
+            try:
+                db.execute("""
+                    INSERT INTO client_documents (
+                        client_id, stored_filename, original_filename, file_size,
+                        content_type, actor_type, actor_name, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    client_id,
+                    stored_filename,
+                    original_filename,
+                    file_size,
+                    uploaded.mimetype or "",
+                    actor_type,
+                    actor_name,
+                    now_iso(),
+                ))
+                record_activity(
+                    db,
+                    "Client Document Uploaded",
+                    f"Uploaded internal client document {original_filename} to {parent['name']} from Document Center.",
+                )
+                db.commit()
+            except Exception:
+                destination.unlink(missing_ok=True)
+                raise
+
+            flash(f"Client Document uploaded to {parent['name']}.")
+            return redirect(url_for("document_center", scope="CLIENT"))
+
+        if document_scope == "PROJECT":
+            if not project_id:
+                flash("Choose a project for this Project Document.")
+                return redirect(url_for("document_center") + "#quick-upload")
+
+            parent = db.execute("""
+                SELECT p.*, c.name AS client_name
+                FROM projects p
+                JOIN clients c ON c.id = p.client_id
+                WHERE p.id = ?
+            """, (project_id,)).fetchone()
+            if not parent:
+                abort(404)
+
+            stored_filename = f"projdoc_{project_id}_{secrets.token_hex(8)}_{original_filename}"
+            destination = UPLOAD_DIR / stored_filename
+            uploaded.save(destination)
+
+            try:
+                file_size = destination.stat().st_size
+            except OSError:
+                destination.unlink(missing_ok=True)
+                flash("The project document could not be saved.")
+                return redirect(url_for("document_center") + "#quick-upload")
+
+            if file_size > MAX_JOB_DOCUMENT_BYTES:
+                destination.unlink(missing_ok=True)
+                flash("Documents can be up to 20 MB each.")
+                return redirect(url_for("document_center") + "#quick-upload")
+
+            try:
+                db.execute("""
+                    INSERT INTO project_documents (
+                        project_id, stored_filename, original_filename, file_size,
+                        content_type, actor_type, actor_name, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    project_id,
+                    stored_filename,
+                    original_filename,
+                    file_size,
+                    uploaded.mimetype or "",
+                    actor_type,
+                    actor_name,
+                    now_iso(),
+                ))
+                record_activity(
+                    db,
+                    "Project Document Uploaded",
+                    f"Uploaded internal project document {original_filename} to "
+                    f"{parent['client_name']} / {parent['name']} from Document Center.",
+                )
+                db.commit()
+            except Exception:
+                destination.unlink(missing_ok=True)
+                raise
+
+            flash(f"Project Document uploaded to {parent['name']}.")
+            return redirect(url_for("document_center", scope="PROJECT"))
+
+        if not job_id:
+            flash("Choose a job for this Job Document.")
+            return redirect(url_for("document_center") + "#quick-upload")
+
+        parent = db.execute("""
+            SELECT j.*, c.name AS client_name, p.name AS project_name
+            FROM jobs j
+            LEFT JOIN clients c ON c.id = j.client_id
+            LEFT JOIN projects p ON p.id = j.project_id
+            WHERE j.id = ?
+        """, (job_id,)).fetchone()
+        if not parent:
+            abort(404)
+
+        stored_filename = f"jobdoc_{job_id}_{secrets.token_hex(8)}_{original_filename}"
+        destination = UPLOAD_DIR / stored_filename
+        uploaded.save(destination)
+
+        try:
+            file_size = destination.stat().st_size
+        except OSError:
+            destination.unlink(missing_ok=True)
+            flash("The job document could not be saved.")
+            return redirect(url_for("document_center") + "#quick-upload")
+
+        if file_size > MAX_JOB_DOCUMENT_BYTES:
+            destination.unlink(missing_ok=True)
+            flash("Documents can be up to 20 MB each.")
+            return redirect(url_for("document_center") + "#quick-upload")
+
+        try:
+            db.execute("""
+                INSERT INTO job_documents (
+                    job_id, stored_filename, original_filename, file_size,
+                    content_type, actor_type, actor_name, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                job_id,
+                stored_filename,
+                original_filename,
+                file_size,
+                uploaded.mimetype or "",
+                actor_type,
+                actor_name,
+                now_iso(),
+            ))
+            record_activity(
+                db,
+                "Job Document Uploaded",
+                f"Uploaded internal job document {original_filename} to "
+                f"{parent['job_name']} from Document Center.",
+                job_id=job_id,
+            )
+            db.commit()
+        except Exception:
+            destination.unlink(missing_ok=True)
+            raise
+
+    flash(f"Job Document uploaded to {parent['job_name']}.")
+    return redirect(url_for("document_center", scope="JOB"))
 
 
 @app.route("/help")
