@@ -261,6 +261,21 @@ def ensure_columns(db):
     """)
 
     db.execute("""
+        CREATE TABLE IF NOT EXISTS client_documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_id INTEGER NOT NULL,
+            stored_filename TEXT NOT NULL UNIQUE,
+            original_filename TEXT NOT NULL,
+            file_size INTEGER NOT NULL DEFAULT 0,
+            content_type TEXT,
+            actor_type TEXT NOT NULL,
+            actor_name TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE
+        )
+    """)
+
+    db.execute("""
         CREATE TABLE IF NOT EXISTS app_migrations (
             migration_key TEXT PRIMARY KEY,
             applied_at TEXT NOT NULL,
@@ -570,6 +585,11 @@ def init_db():
         db.execute("""
             CREATE INDEX IF NOT EXISTS idx_project_documents_project_id
             ON project_documents(project_id, created_at DESC, id DESC)
+        """)
+
+        db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_client_documents_client_id
+            ON client_documents(client_id, created_at DESC, id DESC)
         """)
 
         activity_migration = db.execute(
@@ -1834,6 +1854,16 @@ def stored_project_document_file_count():
         if p.is_file() and p.name.startswith("projdoc_")
     )
 
+def stored_client_document_file_count():
+    """Count the actual internal client-document files that a backup can preserve."""
+    if not UPLOAD_DIR.exists():
+        return 0
+    return sum(
+        1
+        for p in UPLOAD_DIR.rglob("*")
+        if p.is_file() and p.name.startswith("clientdoc_")
+    )
+
 def database_record_counts(db_path):
     counts = {
         "jobs": 0,
@@ -1844,6 +1874,7 @@ def database_record_counts(db_path):
         "job_notes": 0,
         "job_documents": 0,
         "project_documents": 0,
+        "client_documents": 0,
     }
 
     conn = sqlite3.connect(db_path)
@@ -1862,6 +1893,7 @@ def database_record_counts(db_path):
             ("job_notes", "job_notes"),
             ("job_documents", "job_documents"),
             ("project_documents", "project_documents"),
+            ("client_documents", "client_documents"),
             ("clients", "clients"),
             ("projects", "projects"),
         ):
@@ -1899,6 +1931,7 @@ def create_backup_archive():
         "job_notes": 0,
         "job_documents": 0,
         "project_documents": 0,
+        "client_documents": 0,
         "uploaded_files": 0,
     }
 
@@ -1919,11 +1952,16 @@ def create_backup_archive():
         stored_project_document_file_count(),
     )
 
+    backup_counts["client_documents"] = max(
+        backup_counts.get("client_documents", 0),
+        stored_client_document_file_count(),
+    )
+
     metadata = {
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.24",
+        "app_version": "2.25",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2153,7 +2191,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.24",
+        "app_version": "2.25",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2194,6 +2232,7 @@ def ensure_db():
         "reopen_job",
         "delete_job_document",
         "delete_project_document",
+        "delete_client_document",
     }
     if request.endpoint in admin_only_endpoints and user_authenticated() and not current_user_is_admin():
         flash("Administrator access is required for that page.")
@@ -2299,7 +2338,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.24",
+        "version": "2.25",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -2724,6 +2763,7 @@ def backup_restore():
     upload_count = stored_upload_file_count()
     stored_document_count = stored_job_document_file_count()
     stored_project_document_count = stored_project_document_file_count()
+    stored_client_document_count = stored_client_document_file_count()
 
     counts = {
         "jobs": 0,
@@ -2736,6 +2776,7 @@ def backup_restore():
         "job_notes": 0,
         "job_documents": 0,
         "project_documents": 0,
+        "client_documents": 0,
         "clients": 0,
         "projects": 0,
     }
@@ -2791,6 +2832,13 @@ def backup_restore():
             counts["project_documents"] = max(
                 database_project_document_count,
                 stored_project_document_count,
+            )
+            database_client_document_count = db.execute(
+                "SELECT COUNT(*) AS c FROM client_documents"
+            ).fetchone()["c"]
+            counts["client_documents"] = max(
+                database_client_document_count,
+                stored_client_document_count,
             )
             counts["clients"] = db.execute(
                 "SELECT COUNT(*) AS c FROM clients"
@@ -3301,7 +3349,21 @@ def client_detail(client_id):
                      j.installation_date, j.id
         """, (client_id,)).fetchall()
 
-    return render_template("client_detail.html", client=client, projects=projects, jobs=jobs)
+        client_documents = db.execute("""
+            SELECT *
+            FROM client_documents
+            WHERE client_id = ?
+            ORDER BY id DESC
+            LIMIT 100
+        """, (client_id,)).fetchall()
+
+    return render_template(
+        "client_detail.html",
+        client=client,
+        projects=projects,
+        jobs=jobs,
+        client_documents=client_documents,
+    )
 
 
 @app.route("/clients/<int:client_id>/projects/new", methods=["GET", "POST"])
@@ -3405,11 +3467,20 @@ def project_detail(project_id):
             LIMIT 100
         """, (project_id,)).fetchall()
 
+        client_documents = db.execute("""
+            SELECT *
+            FROM client_documents
+            WHERE client_id = ?
+            ORDER BY id DESC
+            LIMIT 100
+        """, (project["client_id"],)).fetchall()
+
     return render_template(
         "project_detail.html",
         project=project,
         jobs=jobs,
         project_documents=project_documents,
+        client_documents=client_documents,
     )
 
 
@@ -4716,6 +4787,135 @@ def reopen_job(job_id):
     return redirect(url_for("job_detail", job_id=job_id))
 
 
+@app.post("/clients/<int:client_id>/documents")
+def upload_client_document(client_id):
+    uploaded = request.files.get("client_document")
+    if not uploaded or not uploaded.filename:
+        flash("Choose a client document before uploading.")
+        return redirect(url_for("client_detail", client_id=client_id) + "#client-documents")
+
+    with get_db() as db:
+        client = db.execute(
+            "SELECT * FROM clients WHERE id = ?",
+            (client_id,),
+        ).fetchone()
+    if not client:
+        abort(404)
+
+    original_filename = secure_filename(uploaded.filename)
+    if not original_filename:
+        flash("That document filename could not be used.")
+        return redirect(url_for("client_detail", client_id=client_id) + "#client-documents")
+
+    if not allowed_document(original_filename):
+        flash("Unsupported document type. Use PDF, Word, Excel, CSV, TXT, image, DWG, or DXF files.")
+        return redirect(url_for("client_detail", client_id=client_id) + "#client-documents")
+
+    stored_filename = f"clientdoc_{client_id}_{secrets.token_hex(8)}_{original_filename}"
+    destination = UPLOAD_DIR / stored_filename
+    uploaded.save(destination)
+
+    try:
+        file_size = destination.stat().st_size
+    except OSError:
+        destination.unlink(missing_ok=True)
+        flash("The client document could not be saved.")
+        return redirect(url_for("client_detail", client_id=client_id) + "#client-documents")
+
+    if file_size > MAX_JOB_DOCUMENT_BYTES:
+        destination.unlink(missing_ok=True)
+        flash("Client documents can be up to 20 MB each.")
+        return redirect(url_for("client_detail", client_id=client_id) + "#client-documents")
+
+    actor_type, actor_name = activity_actor()
+    try:
+        with get_db() as db:
+            db.execute("""
+                INSERT INTO client_documents (
+                    client_id, stored_filename, original_filename, file_size,
+                    content_type, actor_type, actor_name, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                client_id,
+                stored_filename,
+                original_filename,
+                file_size,
+                uploaded.mimetype or "",
+                actor_type,
+                actor_name,
+                now_iso(),
+            ))
+            record_activity(
+                db,
+                "Client Document Uploaded",
+                f"Uploaded internal client document {original_filename} to {client['name']}.",
+            )
+            db.commit()
+    except Exception:
+        destination.unlink(missing_ok=True)
+        raise
+
+    flash("Internal client document uploaded.")
+    return redirect(url_for("client_detail", client_id=client_id) + "#client-documents")
+
+
+@app.get("/clients/<int:client_id>/documents/<int:document_id>/download")
+def download_client_document(client_id, document_id):
+    with get_db() as db:
+        document = db.execute("""
+            SELECT *
+            FROM client_documents
+            WHERE id = ? AND client_id = ?
+        """, (document_id, client_id)).fetchone()
+
+    if not document:
+        abort(404)
+
+    path = UPLOAD_DIR / document["stored_filename"]
+    if not path.exists():
+        abort(404)
+
+    return send_file(
+        path,
+        as_attachment=True,
+        download_name=document["original_filename"],
+        mimetype=document["content_type"] or None,
+    )
+
+
+@app.post("/clients/<int:client_id>/documents/<int:document_id>/delete")
+def delete_client_document(client_id, document_id):
+    with get_db() as db:
+        document = db.execute("""
+            SELECT cd.*, c.name AS client_name
+            FROM client_documents cd
+            JOIN clients c ON c.id = cd.client_id
+            WHERE cd.id = ? AND cd.client_id = ?
+        """, (document_id, client_id)).fetchone()
+        if not document:
+            abort(404)
+
+        db.execute(
+            "DELETE FROM client_documents WHERE id = ? AND client_id = ?",
+            (document_id, client_id),
+        )
+        record_activity(
+            db,
+            "Client Document Deleted",
+            f"Deleted internal client document {document['original_filename']} from "
+            f"{document['client_name']}.",
+        )
+        db.commit()
+
+    try:
+        (UPLOAD_DIR / document["stored_filename"]).unlink(missing_ok=True)
+    except OSError:
+        pass
+
+    flash("Internal client document deleted.")
+    return redirect(url_for("client_detail", client_id=client_id) + "#client-documents")
+
+
 @app.post("/projects/<int:project_id>/documents")
 def upload_project_document(project_id):
     uploaded = request.files.get("project_document")
@@ -5202,6 +5402,15 @@ def job_detail(job_id):
                 ORDER BY id DESC
                 LIMIT 100
             """, (job["project_id"],)).fetchall()
+        client_documents = []
+        if job["client_id"]:
+            client_documents = db.execute("""
+                SELECT *
+                FROM client_documents
+                WHERE client_id = ?
+                ORDER BY id DESC
+                LIMIT 100
+            """, (job["client_id"],)).fetchall()
 
     if not job:
         abort(404)
@@ -5280,6 +5489,7 @@ def job_detail(job_id):
         communication_events=communication_events,
         communication_event_count=communication_event_count,
         project_documents=project_documents,
+        client_documents=client_documents,
         assigned_client=assigned_client,
         assigned_project=assigned_project,
         assignment_clients=assignment_clients,
