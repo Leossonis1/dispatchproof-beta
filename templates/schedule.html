@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}Schedule · DispatchProof{% endblock %}
+{% block content %}
+
+<div class="page-head schedule-page-head">
+  <div>
+    <div class="eyebrow">OPERATIONS</div>
+    <h1>Schedule</h1>
+    <p>See what is installing when, without digging through the full dashboard.</p>
+  </div>
+  <a class="btn primary" href="{{ url_for('new_job') }}">+ New Job</a>
+</div>
+
+<section class="schedule-board-summary">
+  <a class="schedule-board-card schedule-overdue {% if schedule_filter == 'overdue' %}selected{% endif %}"
+     href="{{ url_for('schedule_board',
+                      schedule='' if schedule_filter == 'overdue' else 'overdue',
+                      q=search_query or None,
+                      status=status_filter or None,
+                      client=client_filter or None,
+                      project=project_filter or None,
+                      completed='1' if include_completed else None) }}">
+    <span>Overdue</span>
+    <strong>{{ schedule_counts.overdue }}</strong>
+  </a>
+
+  <a class="schedule-board-card schedule-today {% if schedule_filter == 'today' %}selected{% endif %}"
+     href="{{ url_for('schedule_board',
+                      schedule='' if schedule_filter == 'today' else 'today',
+                      q=search_query or None,
+                      status=status_filter or None,
+                      client=client_filter or None,
+                      project=project_filter or None,
+                      completed='1' if include_completed else None) }}">
+    <span>Today</span>
+    <strong>{{ schedule_counts.today }}</strong>
+  </a>
+
+  <a class="schedule-board-card schedule-next7 {% if schedule_filter == 'next7' %}selected{% endif %}"
+     href="{{ url_for('schedule_board',
+                      schedule='' if schedule_filter == 'next7' else 'next7',
+                      q=search_query or None,
+                      status=status_filter or None,
+                      client=client_filter or None,
+                      project=project_filter or None,
+                      completed='1' if include_completed else None) }}">
+    <span>Next 7 Days</span>
+    <strong>{{ schedule_counts.next7 }}</strong>
+  </a>
+
+  <a class="schedule-board-card schedule-later {% if schedule_filter == 'later' %}selected{% endif %}"
+     href="{{ url_for('schedule_board',
+                      schedule='' if schedule_filter == 'later' else 'later',
+                      q=search_query or None,
+                      status=status_filter or None,
+                      client=client_filter or None,
+                      project=project_filter or None,
+                      completed='1' if include_completed else None) }}">
+    <span>Later</span>
+    <strong>{{ schedule_counts.later }}</strong>
+  </a>
+</section>
+
+<section class="panel schedule-filter-panel">
+  <div class="panel-head">
+    <div>
+      <div class="eyebrow">FIND INSTALLS FAST</div>
+      <h2>Search & Filter</h2>
+      <p>Search by job, site, contact, client, project, project number, or email.</p>
+    </div>
+    {% if filters_active %}
+    <a class="btn action-blue small-btn" href="{{ url_for('schedule_board') }}">Clear All</a>
+    {% endif %}
+  </div>
+
+  <form class="schedule-filter-form" method="get" action="{{ url_for('schedule_board') }}">
+    <label class="schedule-search-field">
+      <span>Search</span>
+      <input type="search" name="q" value="{{ search_query }}"
+             placeholder="Job, site, contact, client, project...">
+    </label>
+
+    <label>
+      <span>Client</span>
+      <select name="client">
+        <option value="">All Clients</option>
+        {% for client in clients %}
+        <option value="{{ client['id'] }}" {% if client_filter == client['id'] %}selected{% endif %}>
+          {{ client['name'] }}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      <span>Project</span>
+      <select name="project">
+        <option value="">All Projects</option>
+        {% for project in projects %}
+        <option value="{{ project['id'] }}" {% if project_filter == project['id'] %}selected{% endif %}>
+          {{ project['name'] }}{% if project['project_number'] %} · {{ project['project_number'] }}{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      <span>Status</span>
+      <select name="status">
+        <option value="">All Active Statuses</option>
+        <option value="READY" {% if status_filter == 'READY' %}selected{% endif %}>Ready</option>
+        <option value="REVIEW" {% if status_filter == 'REVIEW' %}selected{% endif %}>Review</option>
+        <option value="BLOCKED" {% if status_filter == 'BLOCKED' %}selected{% endif %}>Blocked</option>
+        <option value="NO RESPONSE" {% if status_filter == 'NO RESPONSE' %}selected{% endif %}>No Response</option>
+        <option value="ON SITE" {% if status_filter == 'ON SITE' %}selected{% endif %}>On Site</option>
+        <option value="COMPLETED" {% if status_filter == 'COMPLETED' %}selected{% endif %}>Completed</option>
+      </select>
+    </label>
+
+    <label class="schedule-completed-toggle">
+      <input type="checkbox" name="completed" value="1" {% if include_completed %}checked{% endif %}>
+      <span>Include Completed</span>
+    </label>
+
+    <button class="btn action-blue schedule-filter-button" type="submit">Apply Filters</button>
+  </form>
+
+  <div class="schedule-result-count">
+    <strong>{{ visible_job_count }}</strong> install{{ '' if visible_job_count == 1 else 's' }} shown
+    · {{ active_job_count }} active
+    {% if completed_job_count %}· {{ completed_job_count }} completed total{% endif %}
+  </div>
+</section>
+
+<section class="schedule-board">
+  {% if grouped_days %}
+    {% for group in grouped_days %}
+    <div class="schedule-day-group">
+      <div class="schedule-day-heading">
+        <div>
+          {% if group.date == today_iso %}
+            <span class="schedule-day-kicker">TODAY</span>
+          {% elif group.date == tomorrow_iso %}
+            <span class="schedule-day-kicker">TOMORROW</span>
+          {% elif group.bucket == 'overdue' %}
+            <span class="schedule-day-kicker schedule-day-overdue">OVERDUE</span>
+          {% elif group.bucket == 'next7' %}
+            <span class="schedule-day-kicker">UPCOMING</span>
+          {% else %}
+            <span class="schedule-day-kicker">LATER</span>
+          {% endif %}
+          <h2>{{ group.date|pretty_date }}</h2>
+        </div>
+        <span>{{ group.jobs|length }} install{{ '' if group.jobs|length == 1 else 's' }}</span>
+      </div>
+
+      <div class="schedule-day-list">
+        {% for job in group.jobs %}
+        <article class="schedule-job-row">
+          <div class="schedule-job-main">
+            <div class="schedule-job-title-line">
+              <strong>{{ job['job_name'] }}</strong>
+              <span class="schedule-status status-{{ job['status']|lower|replace(' ', '-') }}">
+                {{ job['status']|title }}
+              </span>
+            </div>
+
+            <div class="schedule-job-site">{{ job['project_site'] or 'No project/site entered' }}</div>
+
+            <div class="schedule-job-meta">
+              {% if job['client_name'] %}<span>{{ job['client_name'] }}</span>{% endif %}
+              {% if job['assigned_project_name'] %}<span>{{ job['assigned_project_name'] }}</span>{% endif %}
+              <span>{{ job['contact_name'] }}</span>
+            </div>
+          </div>
+
+          <a class="btn action-blue small-btn"
+             href="{{ url_for('job_detail', job_id=job['id']) }}">
+            Open Job →
+          </a>
+        </article>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="panel schedule-empty-state">
+      <div class="schedule-empty-icon">✓</div>
+      <div>
+        <h2>No installs match this view</h2>
+        <p>Clear the filters or choose another schedule window.</p>
+      </div>
+    </div>
+  {% endif %}
+</section>
+
+{% endblock %}

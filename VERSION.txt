@@ -1,2 +1,2 @@
-DispatchProof Version 2.27 - Document Center Quick Upload
-Adds direct Client, Project, and Job document uploads from Document Center.
+DispatchProof Version 2.28 - Schedule Board
+Adds a date-focused operations view for active and completed installation jobs.

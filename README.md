@@ -1458,3 +1458,54 @@ After upload, DispatchProof returns to Document Center filtered to the uploaded 
 Help & Tutorials now includes **Quick Upload a Document**.
 
 No database migration is required.
+
+
+## V2.28 — Schedule Board
+
+V2.28 adds a dedicated **Schedule** page for date-focused installation planning.
+
+### Date buckets
+
+The top of Schedule shows active installation counts for:
+
+- Overdue
+- Today
+- Next 7 Days
+- Later
+
+Each card is clickable and filters the board to that date window.
+
+### Day-by-day installation list
+
+Jobs are grouped by installation date and show:
+
+- job name
+- status
+- project/site
+- client
+- project
+- site contact
+- Open Job →
+
+### Search & filters
+
+Schedule can be narrowed by:
+
+- search text
+- Client
+- Project
+- Status
+
+An **Include Completed** option lets office users see completed installations in the same date-focused view.
+
+### Permissions
+
+Schedule is operational work and is available to Owner, Administrator, and Operations users.
+
+### No migration
+
+V2.28 uses the existing Jobs / Clients / Projects data. No database migration is required.
+
+### Help Center
+
+Help & Tutorials now includes **Use the Schedule Board**.
