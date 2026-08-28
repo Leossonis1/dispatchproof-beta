@@ -1961,7 +1961,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.28",
+        "app_version": "2.29",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2191,7 +2191,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.28",
+        "app_version": "2.29",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2338,7 +2338,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.28",
+        "version": "2.29",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -3905,22 +3905,21 @@ def activity_log():
     )
 
 
-@app.route("/schedule")
-def schedule_board():
-    search_query = (request.args.get("q") or "").strip()
-    schedule_filter = (request.args.get("schedule") or "").strip().lower()
+def build_schedule_view(args):
+    search_query = (args.get("q") or "").strip()
+    schedule_filter = (args.get("schedule") or "").strip().lower()
     valid_schedule_filters = {"overdue", "today", "next7", "later"}
     if schedule_filter not in valid_schedule_filters:
         schedule_filter = ""
 
-    status_filter = (request.args.get("status") or "").strip().upper()
+    status_filter = (args.get("status") or "").strip().upper()
     valid_statuses = {"READY", "REVIEW", "BLOCKED", "NO RESPONSE", "ON SITE", "COMPLETED"}
     if status_filter not in valid_statuses:
         status_filter = ""
 
-    include_completed = (request.args.get("completed") or "").strip() == "1"
-    client_filter = normalize_optional_id(request.args.get("client"))
-    project_filter = normalize_optional_id(request.args.get("project"))
+    include_completed = (args.get("completed") or "").strip() == "1"
+    client_filter = normalize_optional_id(args.get("client"))
+    project_filter = normalize_optional_id(args.get("project"))
 
     with get_db() as db:
         all_jobs = db.execute("""
@@ -3998,7 +3997,6 @@ def schedule_board():
             "bucket": bucket,
         })
 
-    # Group by installation date while preserving chronological order.
     grouped_days = []
     current_date = None
     current_group = None
@@ -4025,24 +4023,85 @@ def schedule_board():
         or include_completed
     )
 
-    return render_template(
-        "schedule.html",
-        grouped_days=grouped_days,
-        visible_job_count=len(visible_jobs),
-        active_job_count=active_job_count,
-        completed_job_count=completed_job_count,
-        schedule_counts=schedule_counts,
-        search_query=search_query,
-        schedule_filter=schedule_filter,
-        status_filter=status_filter,
-        client_filter=client_filter,
-        project_filter=project_filter,
-        include_completed=include_completed,
-        clients=clients,
-        projects=projects,
-        filters_active=filters_active,
-        today_iso=local_today().isoformat(),
-        tomorrow_iso=(local_today() + timedelta(days=1)).isoformat(),
+    return {
+        "grouped_days": grouped_days,
+        "visible_jobs": visible_jobs,
+        "visible_job_count": len(visible_jobs),
+        "active_job_count": active_job_count,
+        "completed_job_count": completed_job_count,
+        "schedule_counts": schedule_counts,
+        "search_query": search_query,
+        "schedule_filter": schedule_filter,
+        "status_filter": status_filter,
+        "client_filter": client_filter,
+        "project_filter": project_filter,
+        "include_completed": include_completed,
+        "clients": clients,
+        "projects": projects,
+        "filters_active": filters_active,
+        "today_iso": local_today().isoformat(),
+        "tomorrow_iso": (local_today() + timedelta(days=1)).isoformat(),
+    }
+
+
+@app.route("/schedule")
+def schedule_board():
+    schedule_data = build_schedule_view(request.args)
+    return render_template("schedule.html", **schedule_data)
+
+
+@app.route("/schedule/export.csv")
+def schedule_export_csv():
+    schedule_data = build_schedule_view(request.args)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "Install Date",
+        "Schedule Window",
+        "Status",
+        "Job",
+        "Project / Site",
+        "Client",
+        "Project",
+        "Project Number",
+        "Site Contact",
+        "Contact Email",
+        "Contact Phone",
+    ])
+
+    bucket_labels = {
+        "overdue": "Overdue",
+        "today": "Today",
+        "next7": "Next 7 Days",
+        "later": "Later",
+    }
+
+    for item in schedule_data["visible_jobs"]:
+        job = item["job"]
+        writer.writerow([
+            job["installation_date"] or "",
+            bucket_labels.get(item["bucket"], item["bucket"] or ""),
+            job["status"] or "",
+            job["job_name"] or "",
+            job["project_site"] or "",
+            job["client_name"] or "",
+            job["assigned_project_name"] or "",
+            job["assigned_project_number"] or "",
+            job["contact_name"] or "",
+            job["contact_email"] or "",
+            job["contact_phone"] or "",
+        ])
+
+    filename = f"dispatchproof_schedule_{local_today().isoformat()}.csv"
+    csv_text = output.getvalue()
+
+    return app.response_class(
+        csv_text,
+        mimetype="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        },
     )
 
 
