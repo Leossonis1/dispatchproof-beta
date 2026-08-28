@@ -1418,3 +1418,43 @@ V2.26.1 fixes an Internal Server Error encountered when opening the new Document
 The Document Center now loads Client Documents, Project Documents, and Job Documents with three independent SQLite queries, then combines and sorts them in Python.
 
 No schema or template changes are required, and V2.25/V2.26 backups remain compatible.
+
+
+## V2.27 — Document Center Quick Upload
+
+V2.27 adds **Quick Upload** directly to Document Center.
+
+### Upload without navigating away
+
+Choose:
+
+- Client Document
+- Project Document
+- Job Document
+
+Then choose the correct parent record and file.
+
+DispatchProof stores the file in the same underlying Client, Project, or Job document library used by the existing parent pages. No duplicate copy is created.
+
+### Same rules as existing uploads
+
+Quick Upload keeps the established behavior:
+
+- PDF, Word, Excel / CSV, TXT, images, DWG, DXF
+- 20 MB maximum per file
+- internal-only
+- Owner / Administrator / Operations upload access
+- delete remains available only from the original parent page to Owner / Administrator
+- included in Backup & Restore
+- upload recorded in Activity Log
+- Job Document upload also appears in Job Activity
+
+### Document Center behavior
+
+After upload, DispatchProof returns to Document Center filtered to the uploaded document level so the new file is immediately visible.
+
+### Help Center
+
+Help & Tutorials now includes **Quick Upload a Document**.
+
+No database migration is required.

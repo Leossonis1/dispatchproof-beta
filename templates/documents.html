@@ -33,6 +33,86 @@
   </a>
 </section>
 
+<section class="panel document-quick-upload" id="quick-upload">
+  <div class="panel-head">
+    <div>
+      <div class="eyebrow">ADD FILE</div>
+      <h2>Quick Upload</h2>
+      <p>Upload a document here and DispatchProof will store it at the Client, Project, or Job level you choose.</p>
+    </div>
+    <span class="internal-only-badge">INTERNAL ONLY</span>
+  </div>
+
+  <form method="post"
+        action="{{ url_for('document_center_upload') }}"
+        enctype="multipart/form-data"
+        class="document-upload-form"
+        data-document-upload-form>
+
+    <label>
+      Document Level
+      <select name="document_scope" data-document-scope required>
+        <option value="">Choose level...</option>
+        <option value="CLIENT">Client Document</option>
+        <option value="PROJECT">Project Document</option>
+        <option value="JOB">Job Document</option>
+      </select>
+    </label>
+
+    <label data-upload-target="CLIENT">
+      Client
+      <select name="upload_client_id">
+        <option value="">Choose client...</option>
+        {% for client in clients %}
+        <option value="{{ client['id'] }}">{{ client['name'] }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label data-upload-target="PROJECT" hidden>
+      Project
+      <select name="upload_project_id">
+        <option value="">Choose project...</option>
+        {% for project in projects %}
+        <option value="{{ project['id'] }}">
+          {{ project['client_name'] }} · {{ project['name'] }}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label data-upload-target="JOB" hidden>
+      Job
+      <select name="upload_job_id">
+        <option value="">Choose job...</option>
+        {% for job in jobs %}
+        <option value="{{ job['id'] }}">
+          {{ job['job_name'] }}
+          {% if job['client_name'] %} · {{ job['client_name'] }}{% endif %}
+          {% if job['project_name'] %} · {{ job['project_name'] }}{% endif %}
+          {% if job['status'] == 'COMPLETED' %} · Completed{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      Document
+      <input type="file"
+             name="document_file"
+             accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.webp,.dwg,.dxf"
+             required>
+    </label>
+
+    <button class="btn action-blue" type="submit">Upload Document</button>
+  </form>
+
+  <div class="document-upload-help">
+    PDF, Word, Excel, CSV, TXT, images, DWG, or DXF · 20 MB max.
+    The file remains internal and is included in DispatchProof backups.
+  </div>
+</section>
+
 <section class="panel">
   <div class="panel-head document-filter-head">
     <div>
@@ -170,5 +250,31 @@
   <div class="empty-mini">No documents match the current search and filters.</div>
   {% endif %}
 </section>
+
+<script>
+(function(){
+  const form = document.querySelector('[data-document-upload-form]');
+  if (!form) return;
+
+  const scope = form.querySelector('[data-document-scope]');
+  const targets = Array.from(form.querySelectorAll('[data-upload-target]'));
+
+  function syncUploadTarget(){
+    const selected = scope.value;
+    targets.forEach((label) => {
+      const active = label.dataset.uploadTarget === selected;
+      label.hidden = !active;
+      const select = label.querySelector('select');
+      if (select) {
+        select.required = active;
+        if (!active) select.value = '';
+      }
+    });
+  }
+
+  scope.addEventListener('change', syncUploadTarget);
+  syncUploadTarget();
+})();
+</script>
 
 {% endblock %}

@@ -1,2 +1,2 @@
-DispatchProof Version 2.26.1 - Document Center Hotfix
-Fixes the Document Center server error by loading each document scope independently.
+DispatchProof Version 2.27 - Document Center Quick Upload
+Adds direct Client, Project, and Job document uploads from Document Center.

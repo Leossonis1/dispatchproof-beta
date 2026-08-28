@@ -3356,3 +3356,56 @@ main{
     flex-direction:column;
   }
 }
+
+
+/* DispatchProof V2.27 — Document Center Quick Upload */
+.document-quick-upload{
+  border-left:3px solid #155eef;
+}
+.document-upload-form{
+  display:grid;
+  grid-template-columns:1fr 1.4fr 1.6fr auto;
+  gap:10px;
+  align-items:end;
+}
+.document-upload-form label{
+  display:grid;
+  gap:6px;
+  color:#344054;
+  font-size:9px;
+  font-weight:800;
+}
+.document-upload-form input,
+.document-upload-form select{
+  width:100%;
+  min-height:42px;
+  padding:9px 11px;
+  border:1px solid #d0d5dd;
+  border-radius:9px;
+  background:#fff;
+  color:#101828;
+}
+.document-upload-form label[hidden]{
+  display:none !important;
+}
+.document-upload-help{
+  margin-top:10px;
+  padding:8px 10px;
+  border-radius:8px;
+  background:#f8fafc;
+  color:#667085;
+  font-size:8px;
+}
+@media(max-width:950px){
+  .document-upload-form{
+    grid-template-columns:1fr 1fr;
+  }
+  .document-upload-form .btn{
+    width:100%;
+  }
+}
+@media(max-width:700px){
+  .document-upload-form{
+    grid-template-columns:1fr;
+  }
+}
