@@ -16,7 +16,7 @@
   <div>
     <strong>Copying setup from {{ duplicate_source['job_name'] }}</strong>
     <span>Client/project, site, contact, checklist, and reminder settings are copied. The new job starts fresh with NO RESPONSE.</span>
-    <small>Readiness responses, arrival records, photos/evidence, reports, activity history, and Office Notes are not copied.</small>
+    <small>Crew assignment, readiness responses, arrival records, photos/evidence, reports, activity history, and Office Notes are not copied.</small>
   </div>
 </div>
 {% endif %}
@@ -80,6 +80,29 @@
     <label>Phone <span class="muted">(optional)</span>
       <input name="contact_phone" value="{{ form_values.contact_phone|e }}" placeholder="330-555-0152">
     </label>
+  </div>
+
+  <div class="section-break crew-assignment-form-section">
+    <div>
+      <div class="eyebrow">Internal Dispatch</div>
+      <h2>Crew Assignment</h2>
+      <p>Optional internal planning details. These do not appear on client-facing reports or public links.</p>
+    </div>
+
+    <div class="form-grid two">
+      <label>Crew Lead <span class="muted">(optional)</span>
+        <input name="crew_lead" value="{{ form_values.crew_lead|e }}" placeholder="Mike Davis">
+      </label>
+
+      <label>Planned Crew Size <span class="muted">(optional)</span>
+        <input type="number" min="1" step="1" name="planned_crew_size"
+               value="{{ form_values.planned_crew_size|e }}" placeholder="3">
+      </label>
+
+      <label class="crew-names-field">Crew / Installers <span class="muted">(optional)</span>
+        <textarea name="assigned_crew" rows="3" placeholder="Mike Davis, Chris Smith, Jordan Lee">{{ form_values.assigned_crew|e }}</textarea>
+      </label>
+    </div>
   </div>
 
   <div class="section-break">

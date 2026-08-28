@@ -80,7 +80,7 @@
     <div>
       <div class="eyebrow">FIND INSTALLS FAST</div>
       <h2>Search & Filter</h2>
-      <p>Search by job, site, contact, client, project, project number, or email.</p>
+      <p>Search by job, site, contact, client, project, crew, project number, or email.</p>
     </div>
     {% if filters_active %}
     <a class="btn action-blue small-btn" href="{{ url_for('schedule_board') }}">Clear All</a>
@@ -91,7 +91,7 @@
     <label class="schedule-search-field">
       <span>Search</span>
       <input type="search" name="q" value="{{ search_query }}"
-             placeholder="Job, site, contact, client, project...">
+             placeholder="Job, site, contact, client, project, crew...">
     </label>
 
     <label>
@@ -199,6 +199,16 @@
               {% if job['assigned_project_name'] %}<span>{{ job['assigned_project_name'] }}</span>{% endif %}
               <span>{{ job['contact_name'] }}</span>
             </div>
+
+            {% if job['crew_lead'] or job['planned_crew_size'] or job['assigned_crew'] %}
+            <div class="schedule-crew-line">
+              {% if job['crew_lead'] %}<span><strong>Lead:</strong> {{ job['crew_lead'] }}</span>{% endif %}
+              {% if job['planned_crew_size'] %}<span><strong>Crew:</strong> {{ job['planned_crew_size'] }}</span>{% endif %}
+              {% if job['assigned_crew'] %}<span><strong>Assigned:</strong> {{ job['assigned_crew'] }}</span>{% endif %}
+            </div>
+            {% else %}
+            <div class="schedule-crew-line schedule-crew-unassigned">Crew not assigned</div>
+            {% endif %}
           </div>
 
           <a class="btn action-blue small-btn"

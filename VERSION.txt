@@ -1,2 +1,2 @@
-DispatchProof Version 2.29 - Schedule Export
-Adds filtered Schedule CSV export and print/save-PDF support.
+DispatchProof Version 2.30 - Crew Assignment
+Adds optional internal crew planning to jobs and the Schedule Board.

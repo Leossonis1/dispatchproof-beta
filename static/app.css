@@ -3734,3 +3734,78 @@ main{
     color:#111 !important;
   }
 }
+
+
+/* DispatchProof V2.30 — Crew Assignment */
+.crew-assignment-form-section{
+  border-left:3px solid #155eef;
+  padding-left:16px;
+}
+.crew-names-field{
+  grid-column:1 / -1;
+}
+.crew-names-field textarea{
+  width:100%;
+  resize:vertical;
+}
+.crew-assignment-panel{
+  border-left:3px solid #155eef;
+}
+.crew-assignment-summary{
+  display:grid;
+  grid-template-columns:1fr 1fr 2fr;
+  gap:10px;
+  margin-bottom:12px;
+}
+.crew-assignment-summary>div{
+  display:grid;
+  gap:5px;
+  min-height:64px;
+  padding:12px 14px;
+  border:1px solid #e4e7ec;
+  border-radius:10px;
+  background:#f8fafc;
+}
+.crew-assignment-summary span{
+  color:#667085;
+  font-size:8px;
+  font-weight:800;
+  text-transform:uppercase;
+}
+.crew-assignment-summary strong{
+  color:#101828;
+  font-size:11px;
+  white-space:pre-wrap;
+}
+.schedule-crew-line{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:7px;
+  padding-top:7px;
+  border-top:1px dashed #e4e7ec;
+  color:#475467;
+  font-size:8px;
+}
+.schedule-crew-line span+span::before{
+  content:"·";
+  margin-right:8px;
+  color:#98a2b3;
+}
+.schedule-crew-unassigned{
+  color:#98a2b3;
+  font-style:italic;
+}
+@media(max-width:760px){
+  .crew-assignment-summary{
+    grid-template-columns:1fr;
+  }
+  .crew-names-field{
+    grid-column:auto;
+  }
+}
+@media print{
+  .schedule-crew-line{
+    color:#111 !important;
+  }
+}

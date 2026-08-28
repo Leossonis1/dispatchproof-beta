@@ -13,7 +13,7 @@
 
 <div class="edit-job-notice">
   <strong>What this changes</strong>
-  <span>Job/site name, installation date, contact information, and reminder settings.</span>
+  <span>Job/site name, installation date, contact information, crew assignment, and reminder settings.</span>
   <small>Client/Project assignment, readiness checklist, responses, photos, arrival records, reports, Office Notes, and audit history are not changed here.</small>
 </div>
 
@@ -52,6 +52,27 @@
 
       <label>Phone <span class="muted">(optional)</span>
         <input name="contact_phone" value="{{ form_values.contact_phone|e }}">
+      </label>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Internal Dispatch</div>
+    <h2>Crew Assignment</h2>
+    <p class="section-copy">Optional internal planning details. These stay out of public/client reports.</p>
+
+    <div class="form-grid two">
+      <label>Crew Lead
+        <input name="crew_lead" value="{{ form_values.crew_lead|e }}" placeholder="Mike Davis">
+      </label>
+
+      <label>Planned Crew Size
+        <input type="number" min="1" step="1" name="planned_crew_size"
+               value="{{ form_values.planned_crew_size|e }}" placeholder="3">
+      </label>
+
+      <label class="crew-names-field">Crew / Installers
+        <textarea name="assigned_crew" rows="3" placeholder="Mike Davis, Chris Smith, Jordan Lee">{{ form_values.assigned_crew|e }}</textarea>
       </label>
     </div>
   </section>

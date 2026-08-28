@@ -1549,3 +1549,61 @@ Schedule export is available anywhere the Schedule Board is available, including
 Help & Tutorials now includes **Export or Print the Schedule**.
 
 No database migration is required.
+
+
+## V2.30 — Crew Assignment
+
+V2.30 adds optional internal field-crew planning to installation jobs.
+
+### Crew Assignment fields
+
+Each active job can store:
+
+- Crew Lead
+- Planned Crew Size
+- Crew / Installer names
+
+The fields are optional and can be entered while creating a job or later through **Edit Job Details**.
+
+### Job Detail
+
+A new internal **Field Assignment** panel shows the current crew plan near the top of the job.
+
+### Schedule Board
+
+Schedule now shows crew assignment under each install.
+
+Schedule search also matches Crew Lead and Crew / Installer names.
+
+### Schedule CSV
+
+Schedule CSV exports now include:
+
+- Crew Lead
+- Planned Crew Size
+- Crew / Installers
+
+### Privacy
+
+Crew Assignment is internal planning data.
+
+It is not added to:
+
+- public readiness links
+- installer arrival links
+- single-job client reports
+- combined client/project reports
+
+### Duplicate Job
+
+Duplicating a job does **not** copy its crew assignment. The new install starts unassigned so the office can schedule the correct field crew for the new date.
+
+### Backup / Activity
+
+Crew assignment lives in the Jobs database and is automatically included in DispatchProof Backup & Restore.
+
+Changes made through Edit Job Details are recorded in Job Activity / Activity Log.
+
+### Help Center
+
+Help & Tutorials now includes **Assign a Crew to an Install**.
