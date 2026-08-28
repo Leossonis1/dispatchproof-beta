@@ -14,6 +14,8 @@ import tempfile
 import zipfile
 import re
 import html as html_lib
+import csv
+import io
 from email.message import EmailMessage
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -1780,7 +1782,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.15.1",
+        "app_version": "2.16",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2010,7 +2012,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.15.1",
+        "app_version": "2.16",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2154,7 +2156,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.15.1",
+        "version": "2.16",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -3502,6 +3504,219 @@ def completed_jobs():
         filters_active=filters_active,
         total_completed_jobs=len(all_jobs),
     )
+
+def export_filter_id(value):
+    try:
+        parsed = int(value)
+        return parsed if parsed > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+def csv_download(rows, headers, filename):
+    stream = io.StringIO(newline="")
+    writer = csv.writer(stream)
+    writer.writerow(headers)
+    writer.writerows(rows)
+
+    # UTF-8 BOM helps Excel open names/characters cleanly.
+    payload = io.BytesIO(("\ufeff" + stream.getvalue()).encode("utf-8"))
+    payload.seek(0)
+    return send_file(
+        payload,
+        mimetype="text/csv; charset=utf-8",
+        as_attachment=True,
+        download_name=filename,
+    )
+
+@app.get("/export/active.csv")
+def export_active_csv():
+    status_filter = (request.args.get("status") or "").strip().upper()
+    if status_filter not in {"READY", "REVIEW", "BLOCKED", "NO RESPONSE", "ON SITE"}:
+        status_filter = ""
+
+    schedule_filter = (request.args.get("schedule") or "").strip().lower()
+    if schedule_filter not in {"overdue", "today", "next7", "later"}:
+        schedule_filter = ""
+
+    search_query = (request.args.get("q") or "").strip()
+    search_lower = search_query.lower()
+    client_filter = export_filter_id(request.args.get("client"))
+    project_filter = export_filter_id(request.args.get("project"))
+
+    with get_db() as db:
+        all_jobs = db.execute("""
+            SELECT
+                j.*,
+                c.name AS client_name,
+                p.name AS assigned_project_name,
+                p.project_number AS assigned_project_number,
+                (
+                    SELECT COUNT(*)
+                    FROM mobilization_attempts ma
+                    WHERE ma.job_id = j.id
+                ) + 1 AS attempt_number
+            FROM jobs j
+            LEFT JOIN clients c ON c.id = j.client_id
+            LEFT JOIN projects p ON p.id = j.project_id
+            WHERE j.status != 'COMPLETED'
+            ORDER BY j.installation_date ASC, j.id DESC
+        """).fetchall()
+
+    export_jobs = []
+    for job in all_jobs:
+        bucket = job_schedule_bucket(job["installation_date"])
+        if status_filter and job["status"] != status_filter:
+            continue
+        if schedule_filter and bucket != schedule_filter:
+            continue
+        if client_filter and job["client_id"] != client_filter:
+            continue
+        if project_filter and job["project_id"] != project_filter:
+            continue
+        if search_lower:
+            searchable = " ".join([
+                job["job_name"] or "",
+                job["project_site"] or "",
+                job["contact_name"] or "",
+                job["contact_email"] or "",
+                job["client_name"] or "",
+                job["assigned_project_name"] or "",
+                job["assigned_project_number"] or "",
+            ]).lower()
+            if search_lower not in searchable:
+                continue
+        export_jobs.append((job, bucket))
+
+    rows = []
+    for job, bucket in export_jobs:
+        rows.append([
+            job["job_name"] or "",
+            job["client_name"] or "",
+            job["assigned_project_name"] or "",
+            job["assigned_project_number"] or "",
+            job["project_site"] or "",
+            job["attempt_number"],
+            job["installation_date"] or "",
+            schedule_bucket_label(bucket),
+            job["status"] or "",
+            job["contact_name"] or "",
+            job["contact_email"] or "",
+            job["contact_phone"] or "",
+            format_datetime(job["response_at"]) if job["response_at"] else "",
+            job["arrival_status"] or "",
+            format_datetime(job["arrived_at"]) if job["arrived_at"] else "",
+        ])
+
+    filename = f"dispatchproof_active_jobs_{local_today().isoformat()}.csv"
+    return csv_download(
+        rows,
+        [
+            "Job",
+            "Client",
+            "Project",
+            "Project Number",
+            "Project / Site",
+            "Attempt",
+            "Installation Date",
+            "Schedule",
+            "Status",
+            "Site Contact",
+            "Contact Email",
+            "Contact Phone",
+            "Readiness Response",
+            "Arrival Status",
+            "Arrival Time",
+        ],
+        filename,
+    )
+
+@app.get("/export/completed.csv")
+def export_completed_csv():
+    search_query = (request.args.get("q") or "").strip()
+    search_lower = search_query.lower()
+    client_filter = export_filter_id(request.args.get("client"))
+    project_filter = export_filter_id(request.args.get("project"))
+
+    with get_db() as db:
+        all_jobs = db.execute("""
+            SELECT
+                j.*,
+                c.name AS client_name,
+                p.name AS assigned_project_name,
+                p.project_number AS assigned_project_number,
+                (
+                    SELECT COUNT(*)
+                    FROM mobilization_attempts ma
+                    WHERE ma.job_id = j.id
+                ) + 1 AS attempt_number
+            FROM jobs j
+            LEFT JOIN clients c ON c.id = j.client_id
+            LEFT JOIN projects p ON p.id = j.project_id
+            WHERE j.status = 'COMPLETED'
+            ORDER BY j.completed_at DESC, j.installation_date DESC, j.id DESC
+        """).fetchall()
+
+    export_jobs = []
+    for job in all_jobs:
+        if client_filter and job["client_id"] != client_filter:
+            continue
+        if project_filter and job["project_id"] != project_filter:
+            continue
+        if search_lower:
+            searchable = " ".join([
+                job["job_name"] or "",
+                job["project_site"] or "",
+                job["contact_name"] or "",
+                job["contact_email"] or "",
+                job["client_name"] or "",
+                job["assigned_project_name"] or "",
+                job["assigned_project_number"] or "",
+            ]).lower()
+            if search_lower not in searchable:
+                continue
+        export_jobs.append(job)
+
+    rows = []
+    for job in export_jobs:
+        rows.append([
+            job["job_name"] or "",
+            job["client_name"] or "",
+            job["assigned_project_name"] or "",
+            job["assigned_project_number"] or "",
+            job["project_site"] or "",
+            job["attempt_number"],
+            job["installation_date"] or "",
+            format_datetime(job["completed_at"]) if job["completed_at"] else "",
+            job["contact_name"] or "",
+            job["contact_email"] or "",
+            job["contact_phone"] or "",
+            format_datetime(job["response_at"]) if job["response_at"] else "",
+            job["arrival_status"] or "",
+            format_datetime(job["arrived_at"]) if job["arrived_at"] else "",
+        ])
+
+    filename = f"dispatchproof_completed_jobs_{local_today().isoformat()}.csv"
+    return csv_download(
+        rows,
+        [
+            "Job",
+            "Client",
+            "Project",
+            "Project Number",
+            "Project / Site",
+            "Attempt",
+            "Installation Date",
+            "Completed",
+            "Site Contact",
+            "Contact Email",
+            "Contact Phone",
+            "Readiness Response",
+            "Arrival Status",
+            "Arrival Time",
+        ],
+        filename,
+    )
+
 
 @app.route("/jobs/new", methods=["GET", "POST"])
 def new_job():
