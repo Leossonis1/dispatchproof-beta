@@ -21,6 +21,9 @@
   <div class="crew-directory-stat">
     <span>Active Jobs with Crew</span><strong>{{ counts.assigned_active_jobs }}</strong>
   </div>
+  <div class="crew-directory-stat crew-timeoff-stat">
+    <span>Upcoming Time Off</span><strong>{{ counts.upcoming_time_off }}</strong>
+  </div>
 </section>
 
 <section class="panel crew-add-panel" id="add-crew">
@@ -114,6 +117,7 @@
       <div class="crew-directory-work">
         <span><strong>{{ member['active_job_count'] }}</strong> active job{{ '' if member['active_job_count'] == 1 else 's' }}</span>
         <span><strong>{{ member['next7_job_count'] }}</strong> next 7 days</span>
+        <span><strong>{{ member['upcoming_time_off_count'] }}</strong> time off</span>
       </div>
 
       <div class="crew-directory-actions">

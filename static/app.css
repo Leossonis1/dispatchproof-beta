@@ -4300,3 +4300,134 @@ main{
     color:#111 !important;
   }
 }
+
+
+/* DispatchProof V2.35 — Crew Availability */
+.crew-directory-summary{
+  grid-template-columns:repeat(4,minmax(0,1fr));
+}
+.crew-timeoff-stat{
+  border-top-color:#7f56d9;
+}
+.crew-availability-form{
+  margin-top:14px;
+}
+.crew-availability-actions{
+  justify-content:flex-end;
+}
+.crew-availability-list{
+  display:grid;
+  gap:8px;
+  margin-top:16px;
+}
+.crew-availability-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  padding:11px 12px;
+  border:1px solid #e4e7ec;
+  border-radius:10px;
+  background:#fff;
+}
+.crew-availability-row > div:first-child strong,
+.crew-availability-row > div:first-child span{
+  display:block;
+}
+.crew-availability-row > div:first-child span{
+  margin-top:3px;
+  color:#667085;
+  font-size:10px;
+}
+.crew-availability-row-actions{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.crew-availability-row-actions form{
+  margin:0;
+}
+.crew-availability-past{
+  background:#f9fafb;
+  opacity:.72;
+}
+.status-pill.crew-unavailable-pill{
+  background:#f4f3ff;
+  color:#6941c6;
+}
+.crew-availability-empty{
+  margin-top:14px;
+}
+.crew-coverage-summary{
+  grid-template-columns:repeat(4,minmax(0,1fr));
+}
+.crew-unavailable-card{
+  border-top-color:#7f56d9;
+}
+.schedule-crew-unavailable{
+  margin-top:8px;
+  padding:7px 9px;
+  border:1px solid #d9d6fe;
+  border-radius:8px;
+  background:#f4f3ff;
+  color:#5925dc;
+  font-size:9px;
+}
+.crew-unavailable-alert{
+  display:grid;
+  gap:5px;
+  margin:0 0 12px;
+  padding:11px 12px;
+  border:1px solid #d9d6fe;
+  border-left:3px solid #7f56d9;
+  border-radius:9px;
+  background:#f4f3ff;
+  color:#53389e;
+  font-size:10px;
+}
+.crew-unavailable-alert-title{
+  color:#5925dc;
+  font-weight:900;
+  text-transform:uppercase;
+  letter-spacing:.03em;
+}
+.attention-row.attention-availability{
+  border-left-color:#7f56d9;
+}
+.attention-availability-warning,
+.attention-availability-summary{
+  display:inline-flex;
+  width:max-content;
+  max-width:100%;
+  margin-top:5px;
+  padding:4px 7px;
+  border:1px solid #d9d6fe;
+  border-radius:999px;
+  background:#f4f3ff;
+  color:#5925dc;
+  font-size:8px;
+  font-weight:800;
+}
+@media(max-width:900px){
+  .crew-directory-summary,
+  .crew-coverage-summary{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+@media(max-width:700px){
+  .crew-directory-summary,
+  .crew-coverage-summary{
+    grid-template-columns:1fr;
+  }
+  .crew-availability-row{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+}
+@media print{
+  .schedule-crew-unavailable{
+    border:1px solid #777 !important;
+    background:#fff !important;
+    color:#111 !important;
+  }
+}

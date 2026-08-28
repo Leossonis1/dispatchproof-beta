@@ -1,2 +1,2 @@
-DispatchProof Version 2.34 - Crew Conflict Detection
-Detects same-day double-booked Crew Directory members across active installation jobs.
+DispatchProof Version 2.35.1 - Crew Availability Profile Fix
+Re-deploys the Crew Member profile availability section while preserving V2.35 availability logic.

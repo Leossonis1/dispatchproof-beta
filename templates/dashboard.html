@@ -49,6 +49,9 @@
       {% if crew_conflict_group_count %}
       <div class="attention-conflict-summary">{{ crew_conflict_group_count }} crew conflict{{ '' if crew_conflict_group_count == 1 else 's' }} detected</div>
       {% endif %}
+      {% if crew_unavailability_group_count %}
+      <div class="attention-availability-summary">{{ crew_unavailability_group_count }} crew availability issue{{ '' if crew_unavailability_group_count == 1 else 's' }} detected</div>
+      {% endif %}
     </div>
     {% if attention_total %}
     <span class="attention-count">{{ attention_total }} job{{ '' if attention_total == 1 else 's' }}</span>
@@ -73,6 +76,11 @@
         {% if item.crew_conflict_names %}
         <div class="attention-conflict-warning">
           Crew conflict: {{ item.crew_conflict_names|join(', ') }}
+        </div>
+        {% endif %}
+        {% if item.crew_unavailable_names %}
+        <div class="attention-availability-warning">
+          Crew unavailable: {{ item.crew_unavailable_names|join(', ') }}
         </div>
         {% endif %}
         <div class="attention-meta">
@@ -119,7 +127,7 @@
     <div class="attention-clear-icon">✓</div>
     <div>
       <strong>No urgent follow-up right now</strong>
-      <span>No overdue, today, crew-conflict, blocked/review, near-term no-response, or near-term crew-coverage issues.</span>
+      <span>No overdue, today, crew-conflict, crew-availability, blocked/review, near-term no-response, or near-term crew-coverage issues.</span>
     </div>
   </div>
   {% endif %}

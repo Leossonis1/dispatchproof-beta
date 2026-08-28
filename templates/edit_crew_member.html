@@ -48,6 +48,65 @@
   </form>
 </section>
 
+<section class="panel" id="availability">
+  <div class="section-heading-row">
+    <div>
+      <div class="eyebrow">Scheduling</div>
+      <h2>Crew Availability</h2>
+      <p>Add PTO, vacation, personal days, or any date range when this crew member should not be scheduled.</p>
+    </div>
+    <span class="internal-badge">Internal Only</span>
+  </div>
+
+  <form method="post" action="{{ url_for('add_crew_unavailability', crew_member_id=member['id']) }}" class="crew-availability-form">
+    <div class="form-grid three">
+      <label>Start Date
+        <input type="date" name="start_date" required>
+      </label>
+      <label>End Date
+        <input type="date" name="end_date" required>
+      </label>
+      <label>Reason
+        <select name="reason">
+          <option value="PTO">PTO</option>
+          <option value="Vacation">Vacation</option>
+          <option value="Personal">Personal</option>
+          <option value="Unavailable">Unavailable</option>
+          <option value="Training">Training</option>
+          <option value="Other">Other</option>
+        </select>
+      </label>
+    </div>
+    <div class="form-actions crew-availability-actions">
+      <button class="btn primary" type="submit">Add Unavailable Dates</button>
+    </div>
+  </form>
+
+  {% if unavailability %}
+  <div class="crew-availability-list">
+    {% for item in unavailability %}
+    <article class="crew-availability-row {% if item['end_date'] < today_iso %}crew-availability-past{% endif %}">
+      <div>
+        <strong>{{ item['reason'] or 'Unavailable' }}</strong>
+        <span>
+          {{ item['start_date']|pretty_date }}
+          {% if item['end_date'] != item['start_date'] %} → {{ item['end_date']|pretty_date }}{% endif %}
+        </span>
+      </div>
+      <div class="crew-availability-row-actions">
+        {% if item['end_date'] < today_iso %}<span class="status-pill">PAST</span>{% else %}<span class="status-pill crew-unavailable-pill">UNAVAILABLE</span>{% endif %}
+        <form method="post" action="{{ url_for('delete_crew_unavailability', crew_member_id=member['id'], availability_id=item['id']) }}" onsubmit="return confirm('Remove these unavailable dates?');">
+          <button class="btn ghost small-btn" type="submit">Remove</button>
+        </form>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state crew-availability-empty">No unavailable dates have been added for this crew member.</div>
+  {% endif %}
+</section>
+
 <section class="panel">
   <div class="section-heading-row">
     <div>

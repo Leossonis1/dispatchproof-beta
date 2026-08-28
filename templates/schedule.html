@@ -119,6 +119,20 @@
     <span>Crew Conflicts</span>
     <strong>{{ crew_counts.conflict }}</strong>
   </a>
+
+
+  <a class="crew-coverage-card crew-unavailable-card {% if crew_filter == 'unavailable' %}selected{% endif %}"
+     href="{{ url_for('schedule_board',
+                      crew='' if crew_filter == 'unavailable' else 'unavailable',
+                      schedule=schedule_filter or None,
+                      q=search_query or None,
+                      status=status_filter or None,
+                      client=client_filter or None,
+                      project=project_filter or None,
+                      completed='1' if include_completed else None) }}">
+    <span>Crew Unavailable</span>
+    <strong>{{ crew_counts.unavailable }}</strong>
+  </a>
 </section>
 
 <section class="panel schedule-filter-panel">
@@ -171,6 +185,7 @@
         <option value="assigned" {% if crew_filter == 'assigned' %}selected{% endif %}>Assigned</option>
         <option value="unassigned" {% if crew_filter == 'unassigned' %}selected{% endif %}>Unassigned</option>
         <option value="conflict" {% if crew_filter == 'conflict' %}selected{% endif %}>Conflicts Only</option>
+        <option value="unavailable" {% if crew_filter == 'unavailable' %}selected{% endif %}>Unavailable Crew Only</option>
       </select>
     </label>
 
@@ -273,6 +288,16 @@
               <strong>Crew conflict:</strong>
               {% for conflict in job_conflicts %}
                 {{ conflict.crew_member_name }}{% if conflict.other_jobs %} also on {{ conflict.other_jobs|join(', ') }}{% endif %}{% if not loop.last %} · {% endif %}
+              {% endfor %}
+            </div>
+            {% endif %}
+
+            {% set availability_issues = crew_unavailability_by_job.get(job['id'], []) %}
+            {% if availability_issues %}
+            <div class="schedule-crew-unavailable">
+              <strong>Crew unavailable:</strong>
+              {% for issue in availability_issues %}
+                {{ issue.crew_member_name }}{% if issue.periods %} · {{ issue.periods[0].reason }}{% endif %}{% if not loop.last %} · {% endif %}
               {% endfor %}
             </div>
             {% endif %}

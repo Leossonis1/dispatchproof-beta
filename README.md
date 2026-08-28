@@ -1833,3 +1833,48 @@ It is not added to:
 Help & Tutorials now includes **Resolve a Crew Conflict**.
 
 No database migration is required.
+
+
+## V2.35 — Crew Availability
+
+V2.35 adds reusable crew PTO / unavailable dates and internal scheduling warnings.
+
+### Crew profiles
+
+Each Crew Member page now has **Crew Availability** where the office can add a Start Date, End Date, and reason such as PTO, Vacation, Personal, Training, or Unavailable.
+
+Availability records remain on the crew profile until removed, including past records for reference.
+
+### Automatic availability warnings
+
+DispatchProof checks active jobs against Crew Directory assignments. A warning appears when a job's Installation Date falls inside an assigned crew member's unavailable date range.
+
+Warnings appear internally on:
+
+- Schedule
+- Job Detail → Field Assignment
+- Dashboard → Needs Attention
+
+### Schedule filtering
+
+Schedule adds:
+
+- **Crew Unavailable** count
+- clickable **Crew Unavailable** card
+- **Crew Coverage → Unavailable Crew Only**
+
+The count represents affected active jobs.
+
+### Crew Directory
+
+Crew Directory adds an **Upcoming Time Off** summary and a per-person time-off count.
+
+### Backup & activity history
+
+Crew availability is stored in the DispatchProof SQLite database, is included in Backup & Restore, and its record count is shown on the backup page. Add/remove actions are also recorded in Activity Log.
+
+### Privacy
+
+Crew availability is internal operations data only. It is not shown on public readiness links, arrival links, single-job client reports, or combined client/project reports.
+
+Completed jobs do not create crew availability warnings.
