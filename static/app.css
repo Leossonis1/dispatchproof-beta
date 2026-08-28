@@ -3634,3 +3634,103 @@ main{
     flex-direction:column;
   }
 }
+
+
+/* DispatchProof V2.29 — Schedule Export */
+.schedule-head-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.schedule-print-summary{
+  display:none;
+}
+@media(max-width:900px){
+  .schedule-head-actions{
+    justify-content:flex-start;
+    margin-top:10px;
+  }
+}
+@media print{
+  .sidebar,
+  .schedule-head-actions,
+  .schedule-board-summary,
+  .schedule-filter-panel,
+  .flash,
+  .btn,
+  button,
+  a.btn{
+    display:none !important;
+  }
+
+  body,
+  .app-shell,
+  .content,
+  main{
+    background:#fff !important;
+    color:#111 !important;
+    margin:0 !important;
+    padding:0 !important;
+  }
+
+  .content,
+  main{
+    width:100% !important;
+    max-width:none !important;
+  }
+
+  .page-head{
+    margin-bottom:12px !important;
+  }
+
+  .page-head .eyebrow{
+    color:#111 !important;
+  }
+
+  .schedule-print-summary{
+    display:flex !important;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:16px;
+    padding:10px 0 14px;
+    border-bottom:1px solid #999;
+    margin-bottom:14px;
+    font-size:10px;
+  }
+
+  .schedule-print-summary>div{
+    display:grid;
+    gap:3px;
+  }
+
+  .schedule-day-group{
+    break-inside:avoid;
+    border:1px solid #bbb !important;
+    box-shadow:none !important;
+    margin-bottom:12px !important;
+  }
+
+  .schedule-day-heading{
+    background:#f3f3f3 !important;
+    color:#111 !important;
+  }
+
+  .schedule-job-row{
+    break-inside:avoid;
+  }
+
+  .schedule-job-title-line strong,
+  .schedule-job-site,
+  .schedule-job-meta,
+  .schedule-day-heading h2{
+    color:#111 !important;
+  }
+
+  .schedule-status{
+    border:1px solid #999 !important;
+    background:#fff !important;
+    color:#111 !important;
+  }
+}

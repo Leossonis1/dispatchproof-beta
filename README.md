@@ -1509,3 +1509,43 @@ V2.28 uses the existing Jobs / Clients / Projects data. No database migration is
 ### Help Center
 
 Help & Tutorials now includes **Use the Schedule Board**.
+
+
+## V2.29 — Schedule Export
+
+V2.29 makes the Schedule Board useful outside DispatchProof.
+
+### Export CSV
+
+**Export CSV** downloads exactly the installations currently shown on Schedule.
+
+The export respects:
+
+- search text
+- Overdue / Today / Next 7 Days / Later window
+- Client
+- Project
+- Status
+- Include Completed
+
+CSV columns include install date, schedule window, status, job, project/site, client, project, project number, site contact, email, and phone.
+
+### Print / Save PDF
+
+**Print / Save PDF** opens the browser print dialog with a clean Schedule-only layout.
+
+Navigation, filter controls, and action buttons are removed from the printed version.
+
+### Shared filter logic
+
+The on-screen Schedule and CSV export use the same server-side filter helper, preventing the export from drifting from what the office sees.
+
+### Permissions
+
+Schedule export is available anywhere the Schedule Board is available, including Operations.
+
+### Help Center
+
+Help & Tutorials now includes **Export or Print the Schedule**.
+
+No database migration is required.

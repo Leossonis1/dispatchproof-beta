@@ -8,7 +8,21 @@
     <h1>Schedule</h1>
     <p>See what is installing when, without digging through the full dashboard.</p>
   </div>
-  <a class="btn primary" href="{{ url_for('new_job') }}">+ New Job</a>
+
+  <div class="schedule-head-actions">
+    <a class="btn action-blue"
+       href="{{ url_for('schedule_export_csv',
+                        q=search_query or None,
+                        schedule=schedule_filter or None,
+                        status=status_filter or None,
+                        client=client_filter or None,
+                        project=project_filter or None,
+                        completed='1' if include_completed else None) }}">
+      Export CSV
+    </a>
+    <button class="btn action-blue" type="button" onclick="window.print()">Print / Save PDF</button>
+    <a class="btn primary" href="{{ url_for('new_job') }}">+ New Job</a>
+  </div>
 </div>
 
 <section class="schedule-board-summary">
@@ -129,6 +143,19 @@
     <strong>{{ visible_job_count }}</strong> install{{ '' if visible_job_count == 1 else 's' }} shown
     · {{ active_job_count }} active
     {% if completed_job_count %}· {{ completed_job_count }} completed total{% endif %}
+  </div>
+</section>
+
+<section class="schedule-print-summary">
+  <div>
+    <strong>DispatchProof Schedule</strong>
+    <span>{{ visible_job_count }} install{{ '' if visible_job_count == 1 else 's' }} shown</span>
+  </div>
+  <div>
+    {% if search_query %}<span>Search: {{ search_query }}</span>{% endif %}
+    {% if schedule_filter %}<span>Window: {{ schedule_filter|upper }}</span>{% endif %}
+    {% if status_filter %}<span>Status: {{ status_filter }}</span>{% endif %}
+    {% if include_completed %}<span>Completed included</span>{% endif %}
   </div>
 </section>
 

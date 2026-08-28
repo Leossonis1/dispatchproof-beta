@@ -1,2 +1,2 @@
-DispatchProof Version 2.28 - Schedule Board
-Adds a date-focused operations view for active and completed installation jobs.
+DispatchProof Version 2.29 - Schedule Export
+Adds filtered Schedule CSV export and print/save-PDF support.
