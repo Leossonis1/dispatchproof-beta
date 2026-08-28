@@ -18,6 +18,23 @@
   </div>
 </div>
 
+<div class="backup-freshness-card backup-freshness-{{ backup_status.level }}">
+  <div>
+    <div class="eyebrow">Backup Status</div>
+    <strong>{{ backup_status.label }}</strong>
+    <span>{{ backup_status.message }}</span>
+  </div>
+  <div class="backup-freshness-time">
+    {% if last_backup_at %}
+    <small>Last Backup</small>
+    <b>{{ last_backup_at|pretty_datetime }}</b>
+    {% else %}
+    <small>Last Backup</small>
+    <b>Not recorded yet</b>
+    {% endif %}
+  </div>
+</div>
+
 <div class="split backup-grid">
   <section class="panel">
     <div class="backup-icon">↓</div>

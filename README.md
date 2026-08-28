@@ -889,3 +889,47 @@ V2.13 does not change the database schema. The latest V2.12 backup remains fully
 ### Help Center
 
 Owner/Administrator Help & Tutorials now includes **Reopen a Completed Job** under Admin Tools.
+
+
+## V2.14 — Backup Reminder
+
+V2.14 adds an in-app backup freshness reminder for Owner and Administrator accounts.
+
+### Dashboard reminder
+
+DispatchProof tracks the most recent backup checkpoint and shows:
+
+- **No Dashboard warning** when the latest backup is under 3 days old
+- **Backup recommended** when the latest backup is 3–6 days old
+- **Backup overdue** when the latest backup is 7+ days old
+- **No backup recorded** when no backup date is available
+
+The banner includes **Back Up Now**, which opens Backup & Restore.
+
+Operations users do not see backup reminders because Backup & Restore is an administrator-only area.
+
+### Backup Status
+
+Backup & Restore now displays:
+
+- current backup status
+- most recent backup date/time
+- freshness message
+
+### Tracking
+
+Clicking **Download Backup ZIP** records the backup checkpoint before the ZIP is created. This means the backup file itself contains the checkpoint date and activity record.
+
+### Restore-aware reminder
+
+The backup manifest already records when the ZIP was created. V2.14 now uses that timestamp after a restore, so restoring a recent backup does not incorrectly show “No backup recorded.”
+
+Older databases are migrated automatically. If an older database contains a previous **Backup Downloaded** Activity Log event, DispatchProof uses that as an initial last-backup date.
+
+### Help Center
+
+Help & Tutorials now includes **Respond to a Backup Reminder**.
+
+### No destructive migration
+
+V2.14 adds only one nullable settings field (`last_backup_at`) and migrates existing databases automatically.

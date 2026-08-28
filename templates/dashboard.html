@@ -11,6 +11,23 @@
   <a class="btn primary" href="{{ url_for('new_job') }}">+ New Job</a>
 </div>
 
+{% if current_user_is_admin and backup_status and backup_status.show_dashboard %}
+<div class="backup-reminder-banner backup-reminder-{{ backup_status.level }}">
+  <div class="backup-reminder-mark">{% if backup_status.level == 'urgent' %}!{% else %}↓{% endif %}</div>
+  <div class="backup-reminder-copy">
+    <strong>{{ backup_status.label }}</strong>
+    <span>{{ backup_status.message }}</span>
+    {% if last_backup_at %}
+    <small>Last backup: {{ last_backup_at|pretty_datetime }}</small>
+    {% else %}
+    <small>No successful backup date is currently recorded.</small>
+    {% endif %}
+  </div>
+  <a class="btn {% if backup_status.level == 'urgent' %}backup-urgent-btn{% else %}primary{% endif %}"
+     href="{{ url_for('backup_restore') }}">Back Up Now</a>
+</div>
+{% endif %}
+
 {% if due_reminder_count %}
 <div class="reminder-banner">
   <div>
