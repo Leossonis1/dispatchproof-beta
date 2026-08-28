@@ -1639,7 +1639,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.12",
+        "app_version": "2.13",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -1867,7 +1867,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.12",
+        "app_version": "2.13",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -1905,6 +1905,7 @@ def ensure_db():
         "change_user_role",
         "edit_user",
         "activity_log",
+        "reopen_job",
     }
     if request.endpoint in admin_only_endpoints and user_authenticated() and not current_user_is_admin():
         flash("Administrator access is required for that page.")
@@ -2010,7 +2011,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.12",
+        "version": "2.13",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -4022,6 +4023,45 @@ def complete_job(job_id):
         db.commit()
 
     flash("Job marked complete. All readiness and arrival evidence remains preserved.")
+    return redirect(url_for("job_detail", job_id=job_id))
+
+
+@app.post("/jobs/<int:job_id>/reopen")
+def reopen_job(job_id):
+    with get_db() as db:
+        job = db.execute(
+            "SELECT * FROM jobs WHERE id = ?",
+            (job_id,),
+        ).fetchone()
+
+        if not job:
+            abort(404)
+
+        if job["status"] != "COMPLETED":
+            flash("Only completed jobs can be reopened.")
+            return redirect(url_for("job_detail", job_id=job_id))
+
+        # Jobs can only reach COMPLETED after a successful READY arrival.
+        # Reopening restores the operational state without changing any evidence.
+        db.execute("""
+            UPDATE jobs
+            SET status = 'ON SITE',
+                completed_at = NULL
+            WHERE id = ?
+        """, (job_id,))
+
+        record_activity(
+            db,
+            "Job Reopened",
+            (
+                f"Reopened {job['job_name']} from COMPLETED to ON SITE. "
+                "Readiness, arrival evidence, reports, Office Notes, and prior activity were preserved."
+            ),
+            job_id=job_id,
+        )
+        db.commit()
+
+    flash("Job reopened and returned to On Site. Existing evidence and history were preserved.")
     return redirect(url_for("job_detail", job_id=job_id))
 
 
