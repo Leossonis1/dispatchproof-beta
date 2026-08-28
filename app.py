@@ -15,7 +15,7 @@ import zipfile
 import re
 import html as html_lib
 from email.message import EmailMessage
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -622,6 +622,37 @@ def backup_reminder_state(last_backup_at):
         "label": label,
         "message": message,
     }
+
+def local_today():
+    return datetime.now(DISPLAY_TIMEZONE).date()
+
+def job_schedule_bucket(installation_date):
+    """Classify an installation date for Dashboard schedule attention."""
+    if not installation_date:
+        return "unscheduled"
+
+    try:
+        install_day = date.fromisoformat(installation_date)
+    except Exception:
+        return "unscheduled"
+
+    today = local_today()
+    if install_day < today:
+        return "overdue"
+    if install_day == today:
+        return "today"
+    if install_day <= today + timedelta(days=7):
+        return "next7"
+    return "later"
+
+def schedule_bucket_label(bucket):
+    return {
+        "overdue": "Overdue",
+        "today": "Today",
+        "next7": "Next 7 Days",
+        "later": "Later",
+        "unscheduled": "No Date",
+    }.get(bucket, "Later")
 
 def pretty_number(value):
     if value is None or value == "":
@@ -1749,7 +1780,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.14.1",
+        "app_version": "2.15",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -1979,7 +2010,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.14.1",
+        "app_version": "2.15",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2123,7 +2154,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.14.1",
+        "version": "2.15",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -3277,6 +3308,11 @@ def dashboard():
     if status_filter not in valid_statuses:
         status_filter = ""
 
+    schedule_filter = (request.args.get("schedule") or "").strip().lower()
+    valid_schedule_filters = {"overdue", "today", "next7", "later"}
+    if schedule_filter not in valid_schedule_filters:
+        schedule_filter = ""
+
     search_query = (request.args.get("q") or "").strip()
 
     def parse_filter_id(value):
@@ -3321,13 +3357,22 @@ def dashboard():
         """).fetchall()
 
     counts = {"READY": 0, "REVIEW": 0, "BLOCKED": 0, "NO RESPONSE": 0, "ON SITE": 0}
+    schedule_counts = {"overdue": 0, "today": 0, "next7": 0, "later": 0}
+    schedule_buckets = {}
+
     for job in all_jobs:
         counts[job["status"]] = counts.get(job["status"], 0) + 1
+        bucket = job_schedule_bucket(job["installation_date"])
+        schedule_buckets[job["id"]] = bucket
+        if bucket in schedule_counts:
+            schedule_counts[bucket] += 1
 
     search_lower = search_query.lower()
     jobs = []
     for job in all_jobs:
         if status_filter and job["status"] != status_filter:
+            continue
+        if schedule_filter and schedule_buckets.get(job["id"]) != schedule_filter:
             continue
         if client_filter and job["client_id"] != client_filter:
             continue
@@ -3347,7 +3392,7 @@ def dashboard():
                 continue
         jobs.append(job)
 
-    filters_active = bool(status_filter or search_query or client_filter or project_filter)
+    filters_active = bool(status_filter or schedule_filter or search_query or client_filter or project_filter)
     due_reminder_count = sum(1 for j in all_jobs if reminder_due(j))
 
     backup_status = None
@@ -3362,6 +3407,9 @@ def dashboard():
         jobs=jobs,
         counts=counts,
         status_filter=status_filter,
+        schedule_filter=schedule_filter,
+        schedule_counts=schedule_counts,
+        schedule_buckets=schedule_buckets,
         search_query=search_query,
         client_filter=client_filter,
         project_filter=project_filter,
