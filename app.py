@@ -1961,7 +1961,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.25",
+        "app_version": "2.26",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2191,7 +2191,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.25",
+        "app_version": "2.26",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2338,7 +2338,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.25",
+        "version": "2.26",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -3521,6 +3521,130 @@ def update_job_assignment(job_id):
 
     flash("Client / project assignment updated.")
     return redirect(url_for("job_detail", job_id=job_id))
+
+
+@app.route("/documents")
+def document_center():
+    search_query = (request.args.get("q") or "").strip()
+    scope_filter = (request.args.get("scope") or "").strip().upper()
+    if scope_filter not in {"", "CLIENT", "PROJECT", "JOB"}:
+        scope_filter = ""
+
+    client_id = normalize_optional_id(request.args.get("client_id"))
+    project_id = normalize_optional_id(request.args.get("project_id"))
+
+    with get_db() as db:
+        clients, projects = get_clients_and_projects(db)
+
+        rows = db.execute("""
+            SELECT
+                'CLIENT' AS document_scope,
+                cd.id AS document_id,
+                cd.original_filename,
+                cd.file_size,
+                cd.actor_name,
+                cd.created_at,
+                c.id AS client_id,
+                c.name AS client_name,
+                NULL AS project_id,
+                NULL AS project_name,
+                NULL AS job_id,
+                NULL AS job_name,
+                NULL AS project_site
+            FROM client_documents cd
+            JOIN clients c ON c.id = cd.client_id
+
+            UNION ALL
+
+            SELECT
+                'PROJECT' AS document_scope,
+                pd.id AS document_id,
+                pd.original_filename,
+                pd.file_size,
+                pd.actor_name,
+                pd.created_at,
+                c.id AS client_id,
+                c.name AS client_name,
+                p.id AS project_id,
+                p.name AS project_name,
+                NULL AS job_id,
+                NULL AS job_name,
+                p.location AS project_site
+            FROM project_documents pd
+            JOIN projects p ON p.id = pd.project_id
+            JOIN clients c ON c.id = p.client_id
+
+            UNION ALL
+
+            SELECT
+                'JOB' AS document_scope,
+                jd.id AS document_id,
+                jd.original_filename,
+                jd.file_size,
+                jd.actor_name,
+                jd.created_at,
+                c.id AS client_id,
+                c.name AS client_name,
+                p.id AS project_id,
+                p.name AS project_name,
+                j.id AS job_id,
+                j.job_name AS job_name,
+                j.project_site AS project_site
+            FROM job_documents jd
+            JOIN jobs j ON j.id = jd.job_id
+            LEFT JOIN clients c ON c.id = j.client_id
+            LEFT JOIN projects p ON p.id = j.project_id
+
+            ORDER BY created_at DESC, document_id DESC
+        """).fetchall()
+
+    documents = []
+    q_lower = search_query.lower()
+
+    for row in rows:
+        if scope_filter and row["document_scope"] != scope_filter:
+            continue
+        if client_id and row["client_id"] != client_id:
+            continue
+        if project_id and row["project_id"] != project_id:
+            continue
+
+        if q_lower:
+            searchable = " ".join(
+                str(value or "")
+                for value in (
+                    row["original_filename"],
+                    row["client_name"],
+                    row["project_name"],
+                    row["job_name"],
+                    row["project_site"],
+                    row["actor_name"],
+                    row["document_scope"],
+                )
+            ).lower()
+            if q_lower not in searchable:
+                continue
+
+        documents.append(row)
+
+    scope_counts = {
+        "CLIENT": sum(1 for row in rows if row["document_scope"] == "CLIENT"),
+        "PROJECT": sum(1 for row in rows if row["document_scope"] == "PROJECT"),
+        "JOB": sum(1 for row in rows if row["document_scope"] == "JOB"),
+    }
+
+    return render_template(
+        "documents.html",
+        documents=documents,
+        total_document_count=len(rows),
+        scope_counts=scope_counts,
+        search_query=search_query,
+        scope_filter=scope_filter,
+        selected_client_id=client_id,
+        selected_project_id=project_id,
+        clients=clients,
+        projects=projects,
+    )
 
 
 @app.route("/help")
