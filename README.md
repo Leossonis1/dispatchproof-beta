@@ -1229,3 +1229,20 @@ V2.21 does not change the database schema. V2.20 backups remain compatible.
 ### Help Center
 
 The **Use Needs Attention** tutorial now explains the new quick reminder action.
+
+
+## V2.22 — Reminder History & Repeat Guard
+
+V2.22 adds follow-up visibility around readiness reminders.
+
+For No Response jobs in **Needs Attention**, DispatchProof now shows the total reminder count, latest reminder timestamp, and latest status such as OUTBOX or SENT.
+
+If no reminder exists, the action remains **Generate Reminder**. If a reminder already exists, it changes to **Generate Another Reminder**.
+
+Generating another reminder after one already exists displays a confirmation first. This applies on both Dashboard and the Readiness Request page.
+
+Request Details now includes **Reminder History**, showing the total count and latest reminder activity.
+
+Reminder history is derived from the existing `email_events` log, so free-beta Outbox Mode reminders are represented accurately too.
+
+No database migration is required. V2.21 backups remain compatible.

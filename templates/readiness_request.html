@@ -54,6 +54,17 @@
           Disabled
         {% endif %}
       </dd></div>
+      <div><dt>Reminder History</dt><dd>
+        {% if reminder_event_count %}
+          {{ reminder_event_count }} generated
+          {% if latest_reminder_event %}
+            · Last {{ latest_reminder_event['created_at']|pretty_datetime }}
+            · {{ latest_reminder_event['status'] }}
+          {% endif %}
+        {% else %}
+          None generated yet
+        {% endif %}
+      </dd></div>
     </dl>
   </section>
 
@@ -76,13 +87,25 @@
     </form>
 
     {% if email_mode == 'outbox' and job['status'] == 'NO RESPONSE' %}
-    <form method="post" action="{{ url_for('send_reminder', job_id=job['id']) }}">
-      <button class="btn action-blue wide" type="submit">Generate Reminder Preview</button>
+    <form method="post"
+          action="{{ url_for('send_reminder', job_id=job['id']) }}"
+          {% if reminder_event_count %}
+          onsubmit="return confirm('A reminder was already generated for this job. Generate another reminder?');"
+          {% endif %}>
+      <button class="btn action-blue wide" type="submit">
+        {% if reminder_event_count %}Generate Another Reminder Preview{% else %}Generate Reminder Preview{% endif %}
+      </button>
     </form>
     <div class="test-mode-note">Automatic email reminders are paused in free-beta Outbox Mode.</div>
     {% elif job['status'] == 'NO RESPONSE' and job['request_sent_at'] %}
-    <form method="post" action="{{ url_for('send_reminder', job_id=job['id']) }}">
-      <button class="btn action-blue wide" type="submit">Send Reminder Now</button>
+    <form method="post"
+          action="{{ url_for('send_reminder', job_id=job['id']) }}"
+          {% if reminder_event_count %}
+          onsubmit="return confirm('A reminder was already generated for this job. Send another reminder?');"
+          {% endif %}>
+      <button class="btn action-blue wide" type="submit">
+        {% if reminder_event_count %}Send Another Reminder{% else %}Send Reminder Now{% endif %}
+      </button>
     </form>
     {% elif job['status'] == 'NO RESPONSE' and request_event and request_event['status'] == 'OUTBOX' %}
     <div class="test-mode-note">Automatic reminders will begin after a real email is delivered.</div>

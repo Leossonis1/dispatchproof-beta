@@ -70,12 +70,27 @@
           {% if job['assigned_project_name'] %}<span>{{ job['assigned_project_name'] }}</span>{% endif %}
           <span>{{ job['contact_name'] }}</span>
         </div>
+        {% if job['reminder_event_count'] %}
+        <div class="attention-reminder-history">
+          {{ job['reminder_event_count'] }} reminder{{ '' if job['reminder_event_count'] == 1 else 's' }} generated
+          · last {{ job['last_reminder_event_at']|pretty_datetime }}
+          {% if job['last_reminder_event_status'] %}
+          · {{ job['last_reminder_event_status'] }}
+          {% endif %}
+        </div>
+        {% endif %}
       </div>
       <div class="attention-actions">
         {% if job['status'] == 'NO RESPONSE' %}
-        <form method="post" action="{{ url_for('send_reminder', job_id=job['id']) }}">
+        <form method="post"
+              action="{{ url_for('send_reminder', job_id=job['id']) }}"
+              {% if job['reminder_event_count'] %}
+              onsubmit="return confirm('A reminder was already generated for this job. Generate another reminder?');"
+              {% endif %}>
           <input type="hidden" name="return_to" value="dashboard">
-          <button class="btn action-blue small-btn" type="submit">Generate Reminder</button>
+          <button class="btn action-blue small-btn" type="submit">
+            {% if job['reminder_event_count'] %}Generate Another Reminder{% else %}Generate Reminder{% endif %}
+          </button>
         </form>
         {% endif %}
         <a class="attention-open-link" href="{{ url_for('job_detail', job_id=job['id']) }}">Open Job →</a>

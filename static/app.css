@@ -3081,3 +3081,13 @@ main{
     width:100%;
   }
 }
+
+
+/* DispatchProof V2.22 — Reminder History & Repeat Guard */
+.attention-reminder-history{
+  margin-top:6px;
+  color:#475467;
+  font-size:8px;
+  font-weight:800;
+  line-height:1.35;
+}
