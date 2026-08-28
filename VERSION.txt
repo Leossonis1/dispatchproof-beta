@@ -1,2 +1,2 @@
-DispatchProof Version 2.33 - Crew Directory
-Adds reusable crew records and directory-based job crew assignment.
+DispatchProof Version 2.33.2 - Crew Open Job Button Polish
+Forces linked Crew Directory Open Job actions to render as blue DispatchProof buttons.

@@ -1755,3 +1755,29 @@ The Backup & Restore page now shows Crew Member and Crew Assignment counts.
 ### Help Center
 
 Help & Tutorials now includes **Build and Use Crew Directory**.
+
+
+## V2.33.1 — Crew Directory Fix
+
+Small V2.33 correction and polish release.
+
+### Case-only crew rename sync
+
+Changing a Crew Directory display name only by capitalization now updates linked job crew text correctly.
+
+Example:
+
+- `mike davis` → `Mike Davis`
+
+V2.33 stored the directory rename correctly but skipped the linked-job sync because the comparison was case-insensitive.
+
+### Linked job action
+
+**Open Job →** on a Crew Member's Linked Installation Jobs section now uses the normal blue DispatchProof action-button style.
+
+
+## V2.33.2 — Crew Open Job Button Polish
+
+Small visual correction for the Crew Member detail page.
+
+The **Open Job →** action under **Linked Installation Jobs** is now explicitly styled by its location as a solid blue DispatchProof action button. This also covers deployments where an older cached/template copy omitted the normal button utility classes.

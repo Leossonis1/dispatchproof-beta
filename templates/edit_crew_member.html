@@ -73,7 +73,7 @@
         <span>{{ job['installation_date']|pretty_date }}</span>
         {% if job['is_lead'] %}<span class="status-pill crew-lead-pill">CREW LEAD</span>{% endif %}
         <span class="status-pill">{{ job['status'] }}</span>
-        <a href="{{ url_for('job_detail', job_id=job['id']) }}">Open Job →</a>
+        <a class="btn action-blue" href="{{ url_for('job_detail', job_id=job['id']) }}">Open Job →</a>
       </div>
     </div>
     {% endfor %}
