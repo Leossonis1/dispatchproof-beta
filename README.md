@@ -1144,3 +1144,23 @@ Backup file counts now use the actual files in DispatchProof storage as the sour
 This is intentionally a "trust but verify" check: if a document is visible/downloadable from a job, the backup screen should also account for the physical file that will be preserved.
 
 No database migration is required.
+
+
+## V2.19 — Always-Visible Sidebar Session
+
+V2.19 fixes a navigation usability issue on long pages.
+
+### Always-visible Sign Out
+
+On desktop:
+
+- the left sidebar stays fixed to the browser viewport while the main page scrolls
+- the signed-in user card stays at the bottom of the sidebar
+- **Sign Out** remains accessible without returning to Dashboard
+- the navigation area can scroll independently if the browser height is unusually short
+
+The existing mobile behavior is unchanged; the desktop sidebar is already hidden below the existing responsive breakpoint.
+
+### No workflow or database changes
+
+V2.19 is a UI/navigation polish release only. V2.18.1 backups remain fully compatible.

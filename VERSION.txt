@@ -1,2 +1,2 @@
-DispatchProof Version 2.18.1 - Job Document Backup Count Fix
-Fixes Backup & Restore file counters by verifying actual stored job-document files on disk.
+DispatchProof Version 2.19 - Always-Visible Sidebar Session
+Pins the desktop sidebar to the viewport so the signed-in user card and Sign Out stay accessible on every page.

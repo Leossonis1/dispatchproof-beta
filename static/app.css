@@ -2848,3 +2848,66 @@ main{
   }
   .job-document-actions{ width:100%; }
 }
+
+
+/* DispatchProof V2.19 — Always-Visible Sidebar Session
+   Keep the signed-in user card and Sign Out accessible on every desktop page. */
+@media(min-width:901px){
+  .sidebar{
+    position:sticky;
+    top:0;
+    align-self:start;
+    height:100vh;
+    max-height:100vh;
+    overflow:hidden;
+  }
+
+  .sidebar .brand{
+    flex:0 0 auto;
+  }
+
+  .sidebar nav{
+    flex:1 1 auto;
+    min-height:0;
+    overflow-y:auto;
+    overflow-x:hidden;
+    padding-right:4px;
+    scrollbar-width:thin;
+    scrollbar-color:rgba(255,255,255,.22) transparent;
+  }
+
+  .sidebar nav::-webkit-scrollbar{
+    width:5px;
+  }
+
+  .sidebar nav::-webkit-scrollbar-track{
+    background:transparent;
+  }
+
+  .sidebar nav::-webkit-scrollbar-thumb{
+    background:rgba(255,255,255,.22);
+    border-radius:999px;
+  }
+
+  .sidebar-bottom{
+    flex:0 0 auto;
+    margin-top:12px;
+    background:var(--navy);
+  }
+
+  .admin-session{
+    margin-bottom:8px;
+  }
+
+  .sidebar-note{
+    margin-top:0;
+    padding-top:8px;
+    padding-bottom:2px;
+  }
+
+  .sidebar-logout{
+    display:inline-flex;
+    align-items:center;
+    min-height:26px;
+  }
+}
