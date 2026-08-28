@@ -811,3 +811,28 @@ V2.11 does not add or change database tables. The latest V2.10 backup is fully c
 ### Help Center
 
 Help & Tutorials now includes **Edit Job Details** under Getting Started.
+
+
+## V2.12 — Completed Jobs Search & Filters
+
+V2.12 gives completed installation history the same find-fast behavior as the active Dashboard.
+
+### Search completed history
+
+Completed Jobs can now be searched by Job Name, Project / Site, Site Contact Name or Email, Client Name, Project Name, and Project Number.
+
+### Client and Project filters
+
+Completed history can be narrowed by Client and Project. When a Client is selected, the Project dropdown only shows projects belonging to that client.
+
+### Result count and organization context
+
+When filters are active, DispatchProof shows the number of matching completed jobs compared with the full history. Completed-job rows now also show Client / Project under the Job Name when assigned.
+
+### No database migration
+
+V2.12 does not change the database schema. The latest V2.11 backup remains fully compatible.
+
+### Help Center
+
+Help & Tutorials now includes **Find a Completed Job** under Everyday Workflows.

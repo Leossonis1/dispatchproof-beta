@@ -1,2 +1,2 @@
-DispatchProof Version 2.11 - Edit Job Details
-Adds an audited Edit Job Details workflow for job/site name, installation date, contact information, and reminder settings.
+DispatchProof Version 2.12 - Completed Jobs Search & Filters
+Adds search plus Client/Project filters to completed installation history.
