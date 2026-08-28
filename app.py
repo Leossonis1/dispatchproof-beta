@@ -54,6 +54,8 @@ PUBLIC_BASE_URL = os.getenv("DISPATCHPROOF_PUBLIC_BASE_URL", "").strip().rstrip(
 RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
 
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
+DOCUMENT_EXTENSIONS = {"pdf", "doc", "docx", "xls", "xlsx", "csv", "txt", "png", "jpg", "jpeg", "webp", "dwg", "dxf"}
+MAX_JOB_DOCUMENT_BYTES = 20 * 1024 * 1024
 
 # V1.4 company placeholders. Later these become company settings.
 COMPANY_NAME = os.getenv("DISPATCHPROOF_COMPANY_NAME", "DispatchProof")
@@ -221,6 +223,21 @@ def ensure_columns(db):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             job_id INTEGER NOT NULL,
             note_text TEXT NOT NULL,
+            actor_type TEXT NOT NULL,
+            actor_name TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(job_id) REFERENCES jobs(id) ON DELETE CASCADE
+        )
+    """)
+
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS job_documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id INTEGER NOT NULL,
+            stored_filename TEXT NOT NULL UNIQUE,
+            original_filename TEXT NOT NULL,
+            file_size INTEGER NOT NULL DEFAULT 0,
+            content_type TEXT,
             actor_type TEXT NOT NULL,
             actor_name TEXT NOT NULL,
             created_at TEXT NOT NULL,
@@ -530,6 +547,10 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_job_notes_job_id
             ON job_notes(job_id, created_at DESC, id DESC)
         """)
+        db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_job_documents_job_id
+            ON job_documents(job_id, created_at DESC, id DESC)
+        """)
 
         activity_migration = db.execute(
             "SELECT 1 FROM app_migrations WHERE migration_key = ?",
@@ -705,8 +726,25 @@ app.jinja_env.filters["pretty_date"] = format_date
 app.jinja_env.filters["pretty_datetime"] = format_datetime
 app.jinja_env.filters["pretty_number"] = pretty_number
 
+def pretty_bytes(value):
+    try:
+        size = int(value or 0)
+    except (TypeError, ValueError):
+        size = 0
+
+    if size < 1024:
+        return f"{size} B"
+    if size < 1024 * 1024:
+        return f"{size / 1024:.1f} KB"
+    return f"{size / (1024 * 1024):.1f} MB"
+
+app.jinja_env.filters["pretty_bytes"] = pretty_bytes
+
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def allowed_document(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in DOCUMENT_EXTENSIONS
 
 def save_photos(files, prefix):
     saved = []
@@ -1713,6 +1751,7 @@ def database_record_counts(db_path):
         "email_events": 0,
         "activity_log": 0,
         "job_notes": 0,
+        "job_documents": 0,
     }
 
     conn = sqlite3.connect(db_path)
@@ -1729,6 +1768,7 @@ def database_record_counts(db_path):
             ("email_events", "email_events"),
             ("activity_log", "activity_log"),
             ("job_notes", "job_notes"),
+            ("job_documents", "job_documents"),
             ("clients", "clients"),
             ("projects", "projects"),
         ):
@@ -1764,6 +1804,7 @@ def create_backup_archive():
         "email_events": 0,
         "activity_log": 0,
         "job_notes": 0,
+        "job_documents": 0,
         "uploaded_files": 0,
     }
 
@@ -1782,7 +1823,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.17",
+        "app_version": "2.18",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2012,7 +2053,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.17",
+        "app_version": "2.18",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2051,6 +2092,7 @@ def ensure_db():
         "edit_user",
         "activity_log",
         "reopen_job",
+        "delete_job_document",
     }
     if request.endpoint in admin_only_endpoints and user_authenticated() and not current_user_is_admin():
         flash("Administrator access is required for that page.")
@@ -2156,7 +2198,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.17",
+        "version": "2.18",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -2591,6 +2633,7 @@ def backup_restore():
         "outbox_messages": 0,
         "activity_events": 0,
         "job_notes": 0,
+        "job_documents": 0,
         "clients": 0,
         "projects": 0,
     }
@@ -2632,6 +2675,9 @@ def backup_restore():
             ).fetchone()["c"]
             counts["job_notes"] = db.execute(
                 "SELECT COUNT(*) AS c FROM job_notes"
+            ).fetchone()["c"]
+            counts["job_documents"] = db.execute(
+                "SELECT COUNT(*) AS c FROM job_documents"
             ).fetchone()["c"]
             counts["clients"] = db.execute(
                 "SELECT COUNT(*) AS c FROM clients"
@@ -4476,6 +4522,132 @@ def reopen_job(job_id):
     return redirect(url_for("job_detail", job_id=job_id))
 
 
+@app.post("/jobs/<int:job_id>/documents")
+def upload_job_document(job_id):
+    uploaded = request.files.get("job_document")
+    if not uploaded or not uploaded.filename:
+        flash("Choose a document before uploading.")
+        return redirect(url_for("job_detail", job_id=job_id) + "#job-documents")
+
+    with get_db() as db:
+        job = db.execute("SELECT id FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    if not job:
+        abort(404)
+
+    original_filename = secure_filename(uploaded.filename)
+    if not original_filename:
+        flash("That document filename could not be used.")
+        return redirect(url_for("job_detail", job_id=job_id) + "#job-documents")
+
+    if not allowed_document(original_filename):
+        flash("Unsupported document type. Use PDF, Word, Excel, CSV, TXT, image, DWG, or DXF files.")
+        return redirect(url_for("job_detail", job_id=job_id) + "#job-documents")
+
+    stored_filename = f"jobdoc_{job_id}_{secrets.token_hex(8)}_{original_filename}"
+    destination = UPLOAD_DIR / stored_filename
+    uploaded.save(destination)
+
+    try:
+        file_size = destination.stat().st_size
+    except OSError:
+        destination.unlink(missing_ok=True)
+        flash("The document could not be saved.")
+        return redirect(url_for("job_detail", job_id=job_id) + "#job-documents")
+
+    if file_size > MAX_JOB_DOCUMENT_BYTES:
+        destination.unlink(missing_ok=True)
+        flash("Job documents can be up to 20 MB each.")
+        return redirect(url_for("job_detail", job_id=job_id) + "#job-documents")
+
+    actor_type, actor_name = activity_actor()
+    try:
+        with get_db() as db:
+            db.execute("""
+                INSERT INTO job_documents (
+                    job_id, stored_filename, original_filename, file_size,
+                    content_type, actor_type, actor_name, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                job_id,
+                stored_filename,
+                original_filename,
+                file_size,
+                uploaded.mimetype or "",
+                actor_type,
+                actor_name,
+                now_iso(),
+            ))
+            record_activity(
+                db,
+                "Job Document Uploaded",
+                f"Uploaded internal job document: {original_filename}.",
+                job_id=job_id,
+            )
+            db.commit()
+    except Exception:
+        destination.unlink(missing_ok=True)
+        raise
+
+    flash("Internal job document uploaded.")
+    return redirect(url_for("job_detail", job_id=job_id) + "#job-documents")
+
+
+@app.get("/jobs/<int:job_id>/documents/<int:document_id>/download")
+def download_job_document(job_id, document_id):
+    with get_db() as db:
+        document = db.execute("""
+            SELECT *
+            FROM job_documents
+            WHERE id = ? AND job_id = ?
+        """, (document_id, job_id)).fetchone()
+
+    if not document:
+        abort(404)
+
+    path = UPLOAD_DIR / document["stored_filename"]
+    if not path.exists():
+        abort(404)
+
+    return send_file(
+        path,
+        as_attachment=True,
+        download_name=document["original_filename"],
+        mimetype=document["content_type"] or None,
+    )
+
+
+@app.post("/jobs/<int:job_id>/documents/<int:document_id>/delete")
+def delete_job_document(job_id, document_id):
+    with get_db() as db:
+        document = db.execute("""
+            SELECT *
+            FROM job_documents
+            WHERE id = ? AND job_id = ?
+        """, (document_id, job_id)).fetchone()
+        if not document:
+            abort(404)
+
+        db.execute(
+            "DELETE FROM job_documents WHERE id = ? AND job_id = ?",
+            (document_id, job_id),
+        )
+        record_activity(
+            db,
+            "Job Document Deleted",
+            f"Deleted internal job document: {document['original_filename']}.",
+            job_id=job_id,
+        )
+        db.commit()
+
+    try:
+        (UPLOAD_DIR / document["stored_filename"]).unlink(missing_ok=True)
+    except OSError:
+        pass
+
+    flash("Internal job document deleted.")
+    return redirect(url_for("job_detail", job_id=job_id) + "#job-documents")
+
+
 @app.post("/jobs/<int:job_id>/notes")
 def add_job_note(job_id):
     note_text = request.form.get("note_text", "").strip()
@@ -4673,6 +4845,13 @@ def job_detail(job_id):
             ORDER BY id DESC
             LIMIT 100
         """, (job_id,)).fetchall()
+        job_documents = db.execute("""
+            SELECT *
+            FROM job_documents
+            WHERE job_id = ?
+            ORDER BY id DESC
+            LIMIT 100
+        """, (job_id,)).fetchall()
 
     if not job:
         abort(404)
@@ -4747,6 +4926,7 @@ def job_detail(job_id):
         client_report_url=client_report_url,
         activity_events=activity_events,
         job_notes=job_notes,
+        job_documents=job_documents,
         assigned_client=assigned_client,
         assigned_project=assigned_project,
         assignment_clients=assignment_clients,
