@@ -1886,7 +1886,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.22",
+        "app_version": "2.23",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2116,7 +2116,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.22",
+        "app_version": "2.23",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2261,7 +2261,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.22",
+        "version": "2.23",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -4987,6 +4987,20 @@ def job_detail(job_id):
             ORDER BY id DESC
             LIMIT 100
         """, (job_id,)).fetchall()
+        communication_events = db.execute("""
+            SELECT *
+            FROM email_events
+            WHERE job_id = ?
+              AND event_type IN ('READINESS_REQUEST', 'REMINDER', 'CLIENT_REPORT')
+            ORDER BY id DESC
+            LIMIT 20
+        """, (job_id,)).fetchall()
+        communication_event_count = db.execute("""
+            SELECT COUNT(*) AS c
+            FROM email_events
+            WHERE job_id = ?
+              AND event_type IN ('READINESS_REQUEST', 'REMINDER', 'CLIENT_REPORT')
+        """, (job_id,)).fetchone()["c"]
 
     if not job:
         abort(404)
@@ -5062,6 +5076,8 @@ def job_detail(job_id):
         activity_events=activity_events,
         job_notes=job_notes,
         job_documents=job_documents,
+        communication_events=communication_events,
+        communication_event_count=communication_event_count,
         assigned_client=assigned_client,
         assigned_project=assigned_project,
         assignment_clients=assignment_clients,
