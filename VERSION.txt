@@ -1,2 +1,2 @@
-DispatchProof Version 2.18 - Job Documents
-Adds secure internal-only job document uploads, downloads, audit tracking, and backup coverage.
+DispatchProof Version 2.18.1 - Job Document Backup Count Fix
+Fixes Backup & Restore file counters by verifying actual stored job-document files on disk.

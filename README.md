@@ -1127,3 +1127,20 @@ Uploads and deletions write **Job Document Uploaded** / **Job Document Deleted**
 The existing backup ZIP automatically includes both the document database records and the physical uploaded files. Backup & Restore now shows a Job Documents count.
 
 Help & Tutorials includes **Attach Job Documents**.
+
+
+## V2.18.1 — Job Document Backup Count Fix
+
+V2.18.1 corrects the Backup & Restore counters discovered during V2.18 validation.
+
+### What changed
+
+Backup file counts now use the actual files in DispatchProof storage as the source of truth:
+
+- **Uploaded Files** counts every physical file that would be written into the backup ZIP.
+- **Job Documents** counts physical `jobdoc_...` files and reconciles that value with the database record count.
+- Backup manifest counts use the same storage verification.
+
+This is intentionally a "trust but verify" check: if a document is visible/downloadable from a job, the backup screen should also account for the physical file that will be preserved.
+
+No database migration is required.
