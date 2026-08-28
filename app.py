@@ -1743,6 +1743,21 @@ def clear_sqlite_sidecars(db_path):
         except OSError:
             pass
 
+def stored_upload_file_count():
+    if not UPLOAD_DIR.exists():
+        return 0
+    return sum(1 for p in UPLOAD_DIR.rglob("*") if p.is_file())
+
+def stored_job_document_file_count():
+    """Count the actual internal job-document files that a backup can preserve."""
+    if not UPLOAD_DIR.exists():
+        return 0
+    return sum(
+        1
+        for p in UPLOAD_DIR.rglob("*")
+        if p.is_file() and p.name.startswith("jobdoc_")
+    )
+
 def database_record_counts(db_path):
     counts = {
         "jobs": 0,
@@ -1814,16 +1829,18 @@ def create_backup_archive():
         except Exception:
             pass
 
-    if UPLOAD_DIR.exists():
-        backup_counts["uploaded_files"] = sum(
-            1 for p in UPLOAD_DIR.rglob("*") if p.is_file()
-        )
+    # File-based counts should reflect what will actually be written into the ZIP.
+    backup_counts["uploaded_files"] = stored_upload_file_count()
+    backup_counts["job_documents"] = max(
+        backup_counts.get("job_documents", 0),
+        stored_job_document_file_count(),
+    )
 
     metadata = {
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.18",
+        "app_version": "2.18.1",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2053,7 +2070,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.18",
+        "app_version": "2.18.1",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2198,7 +2215,7 @@ def logout():
 def health():
     return {
         "status": "ok",
-        "version": "2.18",
+        "version": "2.18.1",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -2620,9 +2637,8 @@ def company_settings():
 @app.route("/backup")
 def backup_restore():
     db_exists = DB_PATH.exists()
-    upload_count = 0
-    if UPLOAD_DIR.exists():
-        upload_count = sum(1 for p in UPLOAD_DIR.rglob("*") if p.is_file())
+    upload_count = stored_upload_file_count()
+    stored_document_count = stored_job_document_file_count()
 
     counts = {
         "jobs": 0,
@@ -2676,9 +2692,13 @@ def backup_restore():
             counts["job_notes"] = db.execute(
                 "SELECT COUNT(*) AS c FROM job_notes"
             ).fetchone()["c"]
-            counts["job_documents"] = db.execute(
+            database_document_count = db.execute(
                 "SELECT COUNT(*) AS c FROM job_documents"
             ).fetchone()["c"]
+            counts["job_documents"] = max(
+                database_document_count,
+                stored_document_count,
+            )
             counts["clients"] = db.execute(
                 "SELECT COUNT(*) AS c FROM clients"
             ).fetchone()["c"]
