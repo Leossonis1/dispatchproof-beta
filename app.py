@@ -370,6 +370,48 @@ def ensure_columns(db):
     """)
 
 
+    # V2.42: secure PM-to-field requests plus reusable daily progress evidence.
+    # These tables are intentionally independent from readiness/arrival evidence so
+    # field communication cannot rewrite or unlock proven mobilization records.
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS field_update_links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id INTEGER NOT NULL,
+            token TEXT UNIQUE NOT NULL,
+            crew_member_id INTEGER,
+            recipient_name TEXT NOT NULL,
+            recipient_email TEXT,
+            request_note TEXT NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_by TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            last_used_at TEXT,
+            revoked_at TEXT,
+            FOREIGN KEY(job_id) REFERENCES jobs(id) ON DELETE CASCADE,
+            FOREIGN KEY(crew_member_id) REFERENCES crew_members(id) ON DELETE SET NULL
+        )
+    """)
+
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS field_progress_entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id INTEGER NOT NULL,
+            field_link_id INTEGER,
+            entry_type TEXT NOT NULL,
+            submitted_by TEXT NOT NULL,
+            work_date TEXT NOT NULL,
+            work_completed TEXT,
+            notes TEXT,
+            crew_size INTEGER,
+            hours_worked REAL,
+            issues_delays TEXT,
+            photo_json TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(job_id) REFERENCES jobs(id) ON DELETE CASCADE,
+            FOREIGN KEY(field_link_id) REFERENCES field_update_links(id) ON DELETE SET NULL
+        )
+    """)
+
     # V2.14: remember the most recent successful backup creation.
     app_settings_columns = {
         row["name"]
@@ -1023,6 +1065,19 @@ def init_db():
         db.execute("""
             CREATE INDEX IF NOT EXISTS idx_job_documents_job_id
             ON job_documents(job_id, created_at DESC, id DESC)
+        """)
+
+        db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_field_update_links_job
+            ON field_update_links(job_id, is_active, created_at DESC, id DESC)
+        """)
+        db.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_field_update_links_token
+            ON field_update_links(token)
+        """)
+        db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_field_progress_entries_job_date
+            ON field_progress_entries(job_id, work_date DESC, created_at DESC, id DESC)
         """)
 
         db.execute("""
@@ -1817,6 +1872,29 @@ def public_client_report_url(job):
         return f"{base}/c/{job['client_report_token']}"
     return url_for("public_client_report", token=job["client_report_token"], _external=True)
 
+def public_field_update_url(field_link):
+    base = public_app_base_url()
+    token = field_link["token"]
+    if base:
+        return f"{base}/f/{token}"
+    return url_for("public_field_update", token=token, _external=True)
+
+def field_progress_data(job_id, newest_first=False):
+    order = "work_date DESC, created_at DESC, id DESC" if newest_first else "work_date ASC, created_at ASC, id ASC"
+    with get_db() as db:
+        rows = db.execute(f"""
+            SELECT *
+            FROM field_progress_entries
+            WHERE job_id = ?
+            ORDER BY {order}
+        """, (job_id,)).fetchall()
+    items = []
+    for row in rows:
+        item = dict(row)
+        item["photos"] = parse_json_list(row["photo_json"])
+        items.append(item)
+    return items
+
 def public_portfolio_report_url(scope_type, entity):
     token = entity["report_token"]
     base = public_app_base_url()
@@ -1873,6 +1951,13 @@ def client_report_data(job):
             ORDER BY attempt_number ASC
         """, (job["id"],)).fetchall()
 
+        progress_rows = db.execute("""
+            SELECT *
+            FROM field_progress_entries
+            WHERE job_id = ? AND entry_type = 'DAILY_PROGRESS'
+            ORDER BY work_date ASC, created_at ASC, id ASC
+        """, (job["id"],)).fetchall()
+
     checklist = parse_json_list(job["checklist_json"])
     answers = parse_json_dict(job["response_json"])
     photos = parse_json_list(job["photo_json"])
@@ -1901,6 +1986,12 @@ def client_report_data(job):
             "failed_report_number": row["failed_report_number"],
         })
 
+    progress_entries = []
+    for row in progress_rows:
+        item = dict(row)
+        item["photos"] = parse_json_list(row["photo_json"])
+        progress_entries.append(item)
+
     return {
         "checklist": checklist,
         "answers": answers,
@@ -1909,6 +2000,7 @@ def client_report_data(job):
         "arrival_photos": arrival_photos,
         "activity_events": activity_events,
         "mobilization_history": mobilization_history,
+        "progress_entries": progress_entries,
     }
 
 def job_evidence_filenames(job):
@@ -1927,12 +2019,19 @@ def job_evidence_filenames(job):
             FROM mobilization_attempts
             WHERE job_id = ?
         """, (job["id"],)).fetchall()
+        progress = db.execute("""
+            SELECT photo_json
+            FROM field_progress_entries
+            WHERE job_id = ? AND entry_type = 'DAILY_PROGRESS'
+        """, (job["id"],)).fetchall()
 
     for row in confirmations:
         allowed.update(parse_json_list(row["photo_json"]))
     for row in attempts:
         allowed.update(parse_json_list(row["photo_json"]))
         allowed.update(parse_json_list(row["arrival_photos_json"]))
+    for row in progress:
+        allowed.update(parse_json_list(row["photo_json"]))
 
     return {name for name in allowed if name}
 
@@ -2330,6 +2429,77 @@ def send_readiness_email_for_job(job, public_url, reminder=False):
 
         db.commit()
 
+    return status, error
+
+
+def build_field_update_email(job, field_link, public_url):
+    settings = get_app_settings()
+    brand_name = settings.get("company_name") or COMPANY_NAME
+    brand_tagline = settings.get("company_tagline") or PRODUCT_TAGLINE
+    brand_accent = normalize_hex_color(settings.get("accent_color"))
+    logo_url = company_logo_external_url(settings)
+
+    esc_brand = html_lib.escape(str(brand_name))
+    esc_tagline = html_lib.escape(str(brand_tagline))
+    esc_job = html_lib.escape(str(job["job_name"]))
+    esc_site = html_lib.escape(str(job["project_site"] or ""))
+    esc_name = html_lib.escape(str(field_link["recipient_name"] or "Field Crew"))
+    esc_note = html_lib.escape(str(field_link["request_note"] or ""))
+    esc_url = html_lib.escape(str(public_url), quote=True)
+
+    subject = f"Field Update Request: {job['job_name']}"
+    html = f"""
+    <html>
+      <body style="font-family:Arial,sans-serif;background:#f5f7fb;padding:28px;color:#152033;">
+        <div style="max-width:660px;margin:0 auto;background:#ffffff;border:1px solid #dfe5ee;border-radius:14px;padding:28px;">
+          {f'<img src="{logo_url}" alt="{esc_brand} logo" style="max-height:54px;max-width:180px;object-fit:contain;margin-bottom:10px;display:block;">' if logo_url else ''}
+          <div style="font-size:22px;font-weight:800;color:#0b2348;margin-bottom:4px;">{esc_brand}</div>
+          <div style="font-size:12px;color:#6b7280;margin-bottom:2px;">{esc_tagline}</div>
+          <div style="font-size:11px;color:#98a2b3;margin-bottom:24px;">Powered by DispatchProof</div>
+          <p>Hi {esc_name},</p>
+          <h2 style="margin-bottom:4px;">{esc_job}</h2>
+          {f'<div style="color:#667085;margin-bottom:18px;">{esc_site}</div>' if esc_site else ''}
+          <div style="background:#f8fafc;border-left:4px solid {brand_accent};padding:14px 16px;margin:18px 0;line-height:1.5;">
+            <strong>PM Request</strong><br>{esc_note}
+          </div>
+          <p style="line-height:1.55;">Open the secure field link to respond with a note or photos. You can also use the same link to submit daily progress photos while this job is active. No DispatchProof account is required.</p>
+          <div style="margin:26px 0;">
+            <a href="{esc_url}" style="display:inline-block;background:{brand_accent};color:white;text-decoration:none;font-weight:700;padding:13px 18px;border-radius:9px;">Open Field Update</a>
+          </div>
+          <p style="font-size:12px;color:#6b7280;line-height:1.5;">This secure link is tied only to this job and can be revoked by the project manager.</p>
+        </div>
+      </body>
+    </html>
+    """
+    return subject, html
+
+
+def send_field_update_email(job, field_link, public_url):
+    email = (field_link["recipient_email"] or "").strip()
+    if not email:
+        return None, None
+    subject, html = build_field_update_email(job, field_link, public_url)
+    sent, error = send_smtp_message(email, field_link["recipient_name"], subject, html)
+    if sent:
+        status = "SENT"
+    elif EMAIL_MODE == "outbox":
+        status = "OUTBOX"
+    else:
+        status = "FAILED"
+    with get_db() as db:
+        log_email_event(
+            db,
+            job["id"],
+            "FIELD_UPDATE_REQUEST",
+            email,
+            field_link["recipient_name"],
+            subject,
+            html,
+            public_url,
+            status,
+            error,
+        )
+        db.commit()
     return status, error
 
 
@@ -2742,6 +2912,8 @@ def database_record_counts(db_path):
         "activity_log": 0,
         "job_notes": 0,
         "job_documents": 0,
+        "field_update_links": 0,
+        "field_progress_entries": 0,
         "project_documents": 0,
         "client_documents": 0,
         "crew_members": 0,
@@ -2764,6 +2936,8 @@ def database_record_counts(db_path):
             ("activity_log", "activity_log"),
             ("job_notes", "job_notes"),
             ("job_documents", "job_documents"),
+            ("field_update_links", "field_update_links"),
+            ("field_progress_entries", "field_progress_entries"),
             ("project_documents", "project_documents"),
             ("client_documents", "client_documents"),
             ("clients", "clients"),
@@ -2805,6 +2979,8 @@ def create_backup_archive():
         "activity_log": 0,
         "job_notes": 0,
         "job_documents": 0,
+        "field_update_links": 0,
+        "field_progress_entries": 0,
         "project_documents": 0,
         "client_documents": 0,
         "crew_members": 0,
@@ -2839,7 +3015,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.41",
+        "app_version": "2.42",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2917,6 +3093,8 @@ def build_workspace_export_data(db):
     mobilizations = _select_for_job_ids(db, "mobilization_attempts", job_ids, "job_id ASC, attempt_number ASC, id ASC")
     notes = _select_for_job_ids(db, "job_notes", job_ids, "job_id ASC, created_at ASC, id ASC")
     documents = _select_for_job_ids(db, "job_documents", job_ids, "job_id ASC, created_at ASC, id ASC")
+    field_links = _select_for_job_ids(db, "field_update_links", job_ids, "job_id ASC, created_at ASC, id ASC")
+    field_progress = _select_for_job_ids(db, "field_progress_entries", job_ids, "job_id ASC, work_date ASC, created_at ASC, id ASC")
     emails = _select_for_job_ids(db, "email_events", job_ids, "job_id ASC, created_at ASC, id ASC")
     activity = _select_for_job_ids(db, "activity_log", job_ids, "job_id ASC, created_at ASC, id ASC")
     crew_assignments = _select_for_job_ids(db, "job_crew_assignments", job_ids, "job_id ASC, sort_order ASC, id ASC")
@@ -2951,6 +3129,8 @@ def build_workspace_export_data(db):
         "mobilization_attempts": mobilizations,
         "job_notes": notes,
         "job_documents": documents,
+        "field_update_links": field_links,
+        "field_progress_entries": field_progress,
         "client_documents": client_documents,
         "project_documents": project_documents,
         "email_events": emails,
@@ -2972,6 +3152,8 @@ def workspace_export_stats(db):
     for row in data["mobilization_attempts"]:
         evidence.update(parse_json_list(row.get("photo_json")))
         evidence.update(parse_json_list(row.get("arrival_photos_json")))
+    for row in data.get("field_progress_entries") or []:
+        evidence.update(parse_json_list(row.get("photo_json")))
     return {
         "jobs": len(data["jobs"]),
         "job_documents": len(data["job_documents"]),
@@ -3038,7 +3220,7 @@ def create_workspace_export_archive():
         "export_format": 2,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.41",
+        "app_version": "2.42",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -3106,6 +3288,8 @@ def create_workspace_export_archive():
         for row in data["mobilization_attempts"]:
             evidence_by_job.setdefault(row["job_id"], set()).update(parse_json_list(row.get("photo_json")))
             evidence_by_job.setdefault(row["job_id"], set()).update(parse_json_list(row.get("arrival_photos_json")))
+        for row in data.get("field_progress_entries") or []:
+            evidence_by_job.setdefault(row["job_id"], set()).update(parse_json_list(row.get("photo_json")))
 
         for job_id, filenames in evidence_by_job.items():
             for filename in sorted(name for name in filenames if name):
@@ -3505,6 +3689,40 @@ def restore_workspace_archive(zip_path):
                 if job.get("team_id"):
                     stats["team_copies"] += 1
 
+            field_link_map = {}
+            for row in data.get("field_update_links") or []:
+                old_job_id = row.get("job_id")
+                if old_job_id not in job_map:
+                    continue
+                restored = dict(row)
+                old_link_id = row.get("id")
+                new_link_id = _restore_insert_row(
+                    db, "field_update_links", restored,
+                    exclude={"id", "job_id", "token", "crew_member_id"},
+                    overrides={
+                        "job_id": job_map[old_job_id],
+                        "token": secrets.token_urlsafe(24),
+                        "crew_member_id": crew_map.get(row.get("crew_member_id")),
+                    },
+                )
+                if old_link_id is not None:
+                    field_link_map[old_link_id] = new_link_id
+
+            for row in data.get("field_progress_entries") or []:
+                old_job_id = row.get("job_id")
+                if old_job_id not in job_map:
+                    continue
+                restored = dict(row)
+                restored["photo_json"] = _rewrite_filename_json(restored.get("photo_json"), file_map)
+                _restore_insert_row(
+                    db, "field_progress_entries", restored,
+                    exclude={"id", "job_id", "field_link_id"},
+                    overrides={
+                        "job_id": job_map[old_job_id],
+                        "field_link_id": field_link_map.get(row.get("field_link_id")),
+                    },
+                )
+
             for table in ("readiness_confirmations", "mobilization_attempts", "job_notes"):
                 for row in data.get(table) or []:
                     old_job_id = row.get("job_id")
@@ -3760,6 +3978,7 @@ PAGE_HELP_ANCHORS = {
     "new_job": "help-create-job",
     "edit_job": "help-edit-job",
     "job_detail": "everyday-workflows",
+    "field_updates": "help-field-updates",
     "readiness_request": "help-readiness-request",
     "arrival": "help-arrival",
     "completed_jobs": "help-completed-jobs",
@@ -3798,7 +4017,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.41",
+        "app_version": "2.42",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -3817,6 +4036,7 @@ def ensure_db():
 
     public_endpoints = {
         "login", "health", "static", "public_readiness", "public_arrival",
+        "public_field_update", "public_field_update_submitted",
         "public_client_report", "client_report_asset",
         "public_client_portfolio_report", "public_project_portfolio_report",
         "client_portfolio_asset", "project_portfolio_asset",
@@ -3879,6 +4099,7 @@ def ensure_db():
     # Do not make static/public requests responsible for sending reminders.
     if request.endpoint in {
         "static", "health", "public_readiness", "public_arrival",
+        "public_field_update", "public_field_update_submitted",
         "public_client_report", "client_report_asset",
         "public_client_portfolio_report", "public_project_portfolio_report",
         "client_portfolio_asset", "project_portfolio_asset",
@@ -5064,6 +5285,8 @@ def backup_restore():
         "activity_events": 0,
         "job_notes": 0,
         "job_documents": 0,
+        "field_update_links": 0,
+        "field_progress_entries": 0,
         "project_documents": 0,
         "client_documents": 0,
         "clients": 0,
@@ -5118,6 +5341,12 @@ def backup_restore():
                 database_document_count,
                 stored_document_count,
             )
+            counts["field_update_links"] = db.execute(
+                "SELECT COUNT(*) AS c FROM field_update_links"
+            ).fetchone()["c"]
+            counts["field_progress_entries"] = db.execute(
+                "SELECT COUNT(*) AS c FROM field_progress_entries"
+            ).fetchone()["c"]
             database_project_document_count = db.execute(
                 "SELECT COUNT(*) AS c FROM project_documents"
             ).fetchone()["c"]
@@ -7572,6 +7801,239 @@ def client_report_asset(token, filename):
     return send_from_directory(UPLOAD_DIR, filename)
 
 
+@app.route("/jobs/<int:job_id>/field-updates", methods=["GET", "POST"])
+def field_updates(job_id):
+    with get_db() as db:
+        job = db.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+        if not job:
+            abort(404)
+
+        if request.method == "POST":
+            if job["status"] == "COMPLETED":
+                flash("Completed jobs are locked. Existing field updates remain available as evidence.")
+                return redirect(url_for("field_updates", job_id=job_id))
+
+            crew_member_id = normalize_optional_id(request.form.get("crew_member_id"))
+            recipient_name = (request.form.get("recipient_name") or "").strip()
+            recipient_email = (request.form.get("recipient_email") or "").strip()
+            request_note = (request.form.get("request_note") or "").strip()
+
+            selected_member = None
+            if crew_member_id:
+                selected_member = db.execute("""
+                    SELECT cm.*
+                    FROM crew_members cm
+                    JOIN job_crew_assignments jca ON jca.crew_member_id = cm.id
+                    WHERE cm.id = ? AND jca.job_id = ?
+                """, (crew_member_id, job_id)).fetchone()
+                if not selected_member:
+                    flash("That installer/subcontractor is not assigned to this job.")
+                    return redirect(url_for("field_updates", job_id=job_id))
+                recipient_name = recipient_name or selected_member["name"]
+                recipient_email = recipient_email or (selected_member["email"] or "").strip()
+
+            if not recipient_name:
+                flash("Recipient Name is required.")
+                return redirect(url_for("field_updates", job_id=job_id))
+            if not request_note:
+                flash("Type a PM request or field note before generating the link.")
+                return redirect(url_for("field_updates", job_id=job_id))
+
+            while True:
+                token = secrets.token_urlsafe(24)
+                if not db.execute("SELECT 1 FROM field_update_links WHERE token = ?", (token,)).fetchone():
+                    break
+
+            cur = db.execute("""
+                INSERT INTO field_update_links (
+                    job_id, token, crew_member_id, recipient_name, recipient_email,
+                    request_note, is_active, created_by, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+            """, (
+                job_id, token, crew_member_id, recipient_name, recipient_email or None,
+                request_note, current_display_name() or current_username() or "Internal User", now_iso(),
+            ))
+            link_id = cur.lastrowid
+            field_link = db.execute("SELECT * FROM field_update_links WHERE id = ?", (link_id,)).fetchone()
+            record_activity(
+                db,
+                "Field Update Requested",
+                f"Created a secure field-update request for {recipient_name}.",
+                job_id=job_id,
+            )
+            db.commit()
+
+            public_url = public_field_update_url(field_link)
+            if recipient_email:
+                status, _error = send_field_update_email(job, field_link, public_url)
+                if status == "SENT":
+                    flash("Field update link sent and saved to Communication History.")
+                elif status == "OUTBOX":
+                    flash("Field update email preview generated in Email Outbox. Copy or open the secure link below for testing.")
+                else:
+                    flash("Field update link created, but email delivery failed. You can still copy the secure link below.")
+            else:
+                flash("Field update link created. No email was supplied, so copy the secure link and send it directly.")
+            return redirect(url_for("field_updates", job_id=job_id, created=link_id) + f"#field-link-{link_id}")
+
+        assigned_crew = db.execute("""
+            SELECT cm.*, jca.is_lead, jca.sort_order
+            FROM job_crew_assignments jca
+            JOIN crew_members cm ON cm.id = jca.crew_member_id
+            WHERE jca.job_id = ?
+            ORDER BY jca.sort_order, LOWER(cm.name), cm.id
+        """, (job_id,)).fetchall()
+        links = db.execute("""
+            SELECT ful.*, cm.member_type, cm.company_name
+            FROM field_update_links ful
+            LEFT JOIN crew_members cm ON cm.id = ful.crew_member_id
+            WHERE ful.job_id = ?
+            ORDER BY ful.id DESC
+        """, (job_id,)).fetchall()
+        entries = db.execute("""
+            SELECT fpe.*, ful.recipient_name AS link_recipient
+            FROM field_progress_entries fpe
+            LEFT JOIN field_update_links ful ON ful.id = fpe.field_link_id
+            WHERE fpe.job_id = ?
+            ORDER BY fpe.work_date DESC, fpe.created_at DESC, fpe.id DESC
+        """, (job_id,)).fetchall()
+
+    progress_entries = []
+    for row in entries:
+        item = dict(row)
+        item["photos"] = parse_json_list(row["photo_json"])
+        progress_entries.append(item)
+    progress_days = len({item["work_date"] for item in progress_entries if item["entry_type"] == "DAILY_PROGRESS"})
+    link_items = []
+    for row in links:
+        item = dict(row)
+        item["public_url"] = public_field_update_url(row)
+        link_items.append(item)
+
+    return render_template(
+        "field_updates.html",
+        job=job,
+        assigned_crew=assigned_crew,
+        field_links=link_items,
+        progress_entries=progress_entries,
+        progress_days=progress_days,
+        created_link_id=normalize_optional_id(request.args.get("created")),
+    )
+
+
+@app.post("/jobs/<int:job_id>/field-updates/<int:link_id>/revoke")
+def revoke_field_update_link(job_id, link_id):
+    with get_db() as db:
+        link = db.execute("SELECT * FROM field_update_links WHERE id = ? AND job_id = ?", (link_id, job_id)).fetchone()
+        if not link:
+            abort(404)
+        if link["is_active"]:
+            db.execute("UPDATE field_update_links SET is_active = 0, revoked_at = ? WHERE id = ?", (now_iso(), link_id))
+            record_activity(db, "Field Link Revoked", f"Revoked field update link for {link['recipient_name']}.", job_id=job_id)
+            db.commit()
+            flash("Field update link revoked. The old URL can no longer accept submissions.")
+    return redirect(url_for("field_updates", job_id=job_id) + f"#field-link-{link_id}")
+
+
+@app.route("/f/<token>", methods=["GET", "POST"])
+def public_field_update(token):
+    with get_db() as db:
+        row = db.execute("""
+            SELECT ful.*, j.job_name, j.project_site, j.installation_date, j.status AS job_status
+            FROM field_update_links ful
+            JOIN jobs j ON j.id = ful.job_id
+            WHERE ful.token = ?
+        """, (token,)).fetchone()
+    if not row:
+        abort(404)
+    field_link = dict(row)
+    if not field_link["is_active"]:
+        return render_template("public_field_update_unavailable.html", field_link=field_link, reason="This field update link has been revoked."), 410
+    if field_link["job_status"] == "COMPLETED":
+        return render_template("public_field_update_unavailable.html", field_link=field_link, reason="This job has been completed and field submissions are closed."), 410
+
+    if request.method == "POST":
+        entry_type = (request.form.get("entry_type") or "").strip().upper()
+        if entry_type not in {"RESPONSE", "DAILY_PROGRESS"}:
+            flash("Choose a valid field update type.")
+            return redirect(url_for("public_field_update", token=token))
+        submitted_by = (request.form.get("submitted_by") or field_link["recipient_name"] or "Field Crew").strip()[:160]
+        work_date = (request.form.get("work_date") or local_today().isoformat()).strip()
+        try:
+            date.fromisoformat(work_date)
+        except Exception:
+            work_date = local_today().isoformat()
+        work_completed = (request.form.get("work_completed") or "").strip()[:4000]
+        notes = (request.form.get("notes") or "").strip()[:4000]
+        issues_delays = (request.form.get("issues_delays") or "").strip()[:4000]
+        crew_size_raw = (request.form.get("crew_size") or "").strip()
+        hours_raw = (request.form.get("hours_worked") or "").strip()
+        try:
+            crew_size = max(0, min(999, int(crew_size_raw))) if crew_size_raw else None
+        except ValueError:
+            crew_size = None
+        try:
+            hours_worked = max(0.0, min(24.0, float(hours_raw))) if hours_raw else None
+        except ValueError:
+            hours_worked = None
+
+        files = request.files.getlist("photos")
+        valid_uploads = [f for f in files if f and f.filename and allowed_file(f.filename)]
+        if len(valid_uploads) > 30:
+            flash("Please upload no more than 30 photos in one update.")
+            return redirect(url_for("public_field_update", token=token))
+        if entry_type == "DAILY_PROGRESS":
+            if not work_completed:
+                flash("Please describe the work completed today.")
+                return redirect(url_for("public_field_update", token=token))
+            if not valid_uploads:
+                flash("Please upload at least 1 daily progress photo.")
+                return redirect(url_for("public_field_update", token=token))
+        elif not notes and not valid_uploads:
+            flash("Add a response note or at least one photo before submitting.")
+            return redirect(url_for("public_field_update", token=token))
+
+        saved = save_photos(valid_uploads, f"field_{field_link['job_id']}")
+        with get_db() as db:
+            db.execute("""
+                INSERT INTO field_progress_entries (
+                    job_id, field_link_id, entry_type, submitted_by, work_date,
+                    work_completed, notes, crew_size, hours_worked, issues_delays,
+                    photo_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                field_link["job_id"], field_link["id"], entry_type, submitted_by,
+                work_date, work_completed or None, notes or None, crew_size,
+                hours_worked, issues_delays or None, json.dumps(saved), now_iso(),
+            ))
+            db.execute("UPDATE field_update_links SET last_used_at = ? WHERE id = ?", (now_iso(), field_link["id"]))
+            action = "Daily Progress Submitted" if entry_type == "DAILY_PROGRESS" else "Field Response Submitted"
+            description = (
+                f"{submitted_by} submitted daily progress for {work_date} with {len(saved)} photo(s)."
+                if entry_type == "DAILY_PROGRESS"
+                else f"{submitted_by} responded to the PM field request with {len(saved)} photo(s)."
+            )
+            record_activity(db, action, description, job_id=field_link["job_id"], actor_type="FIELD", actor_name=submitted_by)
+            db.commit()
+        return redirect(url_for("public_field_update_submitted", token=token, kind=entry_type.lower()))
+
+    return render_template("public_field_update.html", field_link=field_link, today=local_today().isoformat())
+
+
+@app.route("/f/<token>/submitted")
+def public_field_update_submitted(token):
+    with get_db() as db:
+        field_link = db.execute("""
+            SELECT ful.*, j.job_name, j.project_site
+            FROM field_update_links ful
+            JOIN jobs j ON j.id = ful.job_id
+            WHERE ful.token = ?
+        """, (token,)).fetchone()
+    if not field_link:
+        abort(404)
+    return render_template("public_field_update_submitted.html", field_link=field_link, kind=(request.args.get("kind") or "update"))
+
+
 @app.route("/email-outbox")
 def email_outbox():
     with get_db() as db:
@@ -7872,15 +8334,20 @@ def complete_job(job_id):
                 arrival_token=?
             WHERE id=?
         """, (completed_at, closed_arrival_token, job_id))
+        db.execute("""
+            UPDATE field_update_links
+            SET is_active = 0, revoked_at = COALESCE(revoked_at, ?)
+            WHERE job_id = ? AND is_active = 1
+        """, (completed_at, job_id))
         record_activity(
             db,
             "Job Completed",
-            f"Marked {job['job_name']} complete and revoked the installer link.",
+            f"Marked {job['job_name']} complete and revoked active installer/field links.",
             job_id=job_id,
         )
         db.commit()
 
-    flash("Job marked complete. All readiness and arrival evidence remains preserved.")
+    flash("Job marked complete. Readiness, arrival, and field-progress evidence remains preserved; active field links were closed.")
     return redirect(url_for("job_detail", job_id=job_id))
 
 
@@ -7913,13 +8380,13 @@ def reopen_job(job_id):
             "Job Reopened",
             (
                 f"Reopened {job['job_name']} from COMPLETED to ON SITE. "
-                "Readiness, arrival evidence, reports, Office Notes, and prior activity were preserved."
+                "Readiness, arrival evidence, reports, Office Notes, field progress, and prior activity were preserved. Prior field links remain revoked."
             ),
             job_id=job_id,
         )
         db.commit()
 
-    flash("Job reopened and returned to On Site. Existing evidence and history were preserved.")
+    flash("Job reopened and returned to On Site. Existing evidence/history was preserved. Create a new Field Update link if field access is needed again.")
     return redirect(url_for("job_detail", job_id=job_id))
 
 
@@ -8656,7 +9123,7 @@ def job_detail(job_id):
             SELECT *
             FROM email_events
             WHERE job_id = ?
-              AND event_type IN ('READINESS_REQUEST', 'REMINDER', 'CLIENT_REPORT')
+              AND event_type IN ('READINESS_REQUEST', 'REMINDER', 'CLIENT_REPORT', 'FIELD_UPDATE_REQUEST')
             ORDER BY id DESC
             LIMIT 20
         """, (job_id,)).fetchall()
@@ -8664,8 +9131,10 @@ def job_detail(job_id):
             SELECT COUNT(*) AS c
             FROM email_events
             WHERE job_id = ?
-              AND event_type IN ('READINESS_REQUEST', 'REMINDER', 'CLIENT_REPORT')
+              AND event_type IN ('READINESS_REQUEST', 'REMINDER', 'CLIENT_REPORT', 'FIELD_UPDATE_REQUEST')
         """, (job_id,)).fetchone()["c"]
+        field_progress_count = db.execute("SELECT COUNT(*) AS c FROM field_progress_entries WHERE job_id = ?", (job_id,)).fetchone()["c"]
+        field_progress_day_count = db.execute("SELECT COUNT(DISTINCT work_date) AS c FROM field_progress_entries WHERE job_id = ? AND entry_type = 'DAILY_PROGRESS'", (job_id,)).fetchone()["c"]
         project_documents = []
         if job["project_id"]:
             project_documents = db.execute("""
@@ -8773,6 +9242,8 @@ def job_detail(job_id):
         job_documents=job_documents,
         communication_events=communication_events,
         communication_event_count=communication_event_count,
+        field_progress_count=field_progress_count,
+        field_progress_day_count=field_progress_day_count,
         project_documents=project_documents,
         client_documents=client_documents,
         assigned_client=assigned_client,
