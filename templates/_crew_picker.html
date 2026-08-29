@@ -1,21 +1,21 @@
 <div class="crew-directory-picker">
   <div class="crew-picker-heading">
     <div>
-      <strong>Pick from Crew Directory</strong>
-      <span>Choose reusable crew records instead of retyping names.</span>
+      <strong>Pick from Crew & Subcontractors</strong>
+      <span>Assign reusable internal crew or subcontractor records without retyping names.</span>
     </div>
-    <a href="{{ url_for('crew_directory') }}" target="_blank" rel="noopener">Open Crew Directory →</a>
+    <a href="{{ url_for('crew_directory') }}" target="_blank" rel="noopener">Open Directory →</a>
   </div>
 
   {% if crew_members %}
   <div class="form-grid two crew-picker-top">
-    <label>Crew Lead <span class="muted">(optional)</span>
+    <label>Crew / Field Lead <span class="muted">(optional)</span>
       <select name="crew_lead_member_id" id="crew_lead_member_id">
         <option value="">No directory lead selected</option>
         {% for member in crew_members %}
         <option value="{{ member['id'] }}"
                 {% if selected_lead_id == member['id'] %}selected{% endif %}>
-          {{ member['name'] }}{% if member['role_trade'] %} · {{ member['role_trade'] }}{% endif %}{% if not member['is_active'] %} · Inactive{% endif %}
+          {{ member['name'] }}{% if member['member_type'] == 'SUBCONTRACTOR' %} · Subcontractor{% if member['company_name'] %} · {{ member['company_name'] }}{% endif %}{% elif member['role_trade'] %} · {{ member['role_trade'] }}{% endif %}{% if not member['is_active'] %} · Inactive{% endif %}
         </option>
         {% endfor %}
       </select>
@@ -27,10 +27,10 @@
     </label>
   </div>
 
-  <div class="crew-picker-label">Crew / Installers <span class="muted">(select all who are planned)</span></div>
+  <div class="crew-picker-label">Crew / Installers / Subcontractors <span class="muted">(select everyone planned for this job)</span></div>
   <div class="crew-picker-grid">
     {% for member in crew_members %}
-    <label class="crew-picker-option {% if not member['is_active'] %}crew-picker-inactive{% endif %}">
+    <label class="crew-picker-option {% if not member['is_active'] %}crew-picker-inactive{% endif %} {% if member['member_type'] == 'SUBCONTRACTOR' %}crew-picker-subcontractor{% endif %}">
       <input type="checkbox"
              name="crew_member_ids"
              value="{{ member['id'] }}"
@@ -39,7 +39,11 @@
       <span>
         <strong>{{ member['name'] }}</strong>
         <small>
-          {{ member['role_trade'] or 'Crew member' }}
+          {% if member['member_type'] == 'SUBCONTRACTOR' %}
+            Subcontractor{% if member['company_name'] %} · {{ member['company_name'] }}{% endif %}{% if member['role_trade'] %} · {{ member['role_trade'] }}{% endif %}
+          {% else %}
+            Internal Crew{% if member['role_trade'] %} · {{ member['role_trade'] }}{% endif %}
+          {% endif %}
           {% if not member['is_active'] %} · Inactive — retained because this job uses them{% endif %}
         </small>
       </span>
@@ -48,8 +52,8 @@
   </div>
   {% else %}
   <div class="empty-state crew-picker-empty">
-    No active crew members yet.
-    <a href="{{ url_for('crew_directory') }}" target="_blank" rel="noopener">Add your first crew member →</a>
+    No active crew or subcontractors yet.
+    <a href="{{ url_for('crew_directory') }}" target="_blank" rel="noopener">Add your first directory record →</a>
   </div>
   <label>Planned Crew Size <span class="muted">(optional)</span>
     <input type="number" min="1" step="1" name="planned_crew_size"
@@ -58,9 +62,9 @@
   {% endif %}
 
   <details class="crew-custom-details" {% if custom_crew_lead or custom_crew_names %}open{% endif %}>
-    <summary>Need someone who is not in Crew Directory?</summary>
+    <summary>Need someone who is not in the directory?</summary>
     <div class="form-grid two">
-      <label>Custom Crew Lead <span class="muted">(optional)</span>
+      <label>Custom Crew / Field Lead <span class="muted">(optional)</span>
         <input name="custom_crew_lead"
                value="{{ custom_crew_lead|e }}"
                placeholder="Temporary foreman or subcontractor">
@@ -71,7 +75,7 @@
                   placeholder="Temporary installer, subcontractor">{{ custom_crew_names|e }}</textarea>
       </label>
     </div>
-    <small class="field-help">Custom names stay on this job only. Add them to Crew Directory if you want to reuse them later.</small>
+    <small class="field-help">Custom names stay on this job only. Add them to Crew & Subcontractors if you want to reuse and schedule them later.</small>
   </details>
 </div>
 

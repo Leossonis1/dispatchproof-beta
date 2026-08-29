@@ -1,32 +1,49 @@
 {% extends "base.html" %}
-{% block title %}{{ member['name'] }} · Crew · DispatchProof{% endblock %}
+{% block title %}{{ member['name'] }} · Crew & Subcontractors · DispatchProof{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <a class="back-link" href="{{ url_for('crew_directory', status='all') }}">← Back to Crew Directory</a>
-    <div class="eyebrow">Internal Dispatch</div>
+    <a class="back-link" href="{{ url_for('crew_directory', status='all') }}">← Back to Crew & Subcontractors</a>
+    <div class="eyebrow">{{ 'Subcontractor' if member['member_type'] == 'SUBCONTRACTOR' else 'Internal Crew' }}</div>
     <h1>{{ member['name'] }}</h1>
-    <p>Reusable crew details and the jobs currently linked to this person.</p>
+    <p>
+      {% if member['member_type'] == 'SUBCONTRACTOR' and member['company_name'] %}{{ member['company_name'] }} · {% endif %}
+      Reusable contact, scheduling, and job assignment details.
+    </p>
   </div>
-  <span class="status-pill {% if member['is_active'] %}crew-active{% else %}crew-inactive{% endif %}">
-    {{ 'ACTIVE' if member['is_active'] else 'INACTIVE' }}
-  </span>
+  <div class="crew-heading-badges">
+    <span class="status-pill crew-type-badge {% if member['member_type'] == 'SUBCONTRACTOR' %}crew-type-sub{% endif %}">
+      {{ 'SUBCONTRACTOR' if member['member_type'] == 'SUBCONTRACTOR' else 'INTERNAL CREW' }}
+    </span>
+    <span class="status-pill {% if member['is_active'] %}crew-active{% else %}crew-inactive{% endif %}">
+      {{ 'ACTIVE' if member['is_active'] else 'INACTIVE' }}
+    </span>
+  </div>
 </div>
 
 <section class="panel">
   <div class="section-heading-row">
     <div>
-      <div class="eyebrow">Crew Record</div>
-      <h2>Crew Member Details</h2>
-      <p>Changing the name updates linked job crew text automatically.</p>
+      <div class="eyebrow">Directory Record</div>
+      <h2>Crew / Subcontractor Details</h2>
+      <p>Changing the name updates linked job crew text automatically. Changing the type does not disturb past assignments.</p>
     </div>
     <span class="internal-badge">Internal Only</span>
   </div>
 
   <form method="post" action="{{ url_for('edit_crew_member', crew_member_id=member['id']) }}">
     <div class="form-grid two">
+      <label>Type
+        <select name="member_type" id="member_type">
+          <option value="INTERNAL" {% if member['member_type'] != 'SUBCONTRACTOR' %}selected{% endif %}>Internal Crew</option>
+          <option value="SUBCONTRACTOR" {% if member['member_type'] == 'SUBCONTRACTOR' %}selected{% endif %}>Subcontractor</option>
+        </select>
+      </label>
       <label>Name
         <input name="name" required value="{{ member['name']|e }}">
+      </label>
+      <label data-subcontractor-company>Company Name <span class="muted">(subcontractors, optional)</span>
+        <input name="company_name" value="{{ (member['company_name'] or '')|e }}" placeholder="ABC Installations">
       </label>
       <label>Role / Trade <span class="muted">(optional)</span>
         <input name="role_trade" value="{{ (member['role_trade'] or '')|e }}">
@@ -43,13 +60,13 @@
     </div>
     <div class="form-actions">
       <a class="btn ghost" href="{{ url_for('crew_directory', status='all') }}">Cancel</a>
-      <button class="btn primary" type="submit">Save Crew Member</button>
+      <button class="btn primary" type="submit">Save Directory Record</button>
     </div>
   </form>
   <div class="form-actions" style="margin-top:14px; justify-content:flex-end;">
     <form method="post" action="{{ url_for('delete_crew_member', crew_member_id=member['id']) }}"
-          onsubmit="return confirm('Permanently delete {{ member['name']|e }}? This cannot be undone. If this crew member has any job history, DispatchProof will preserve the record and ask you to deactivate it instead.');">
-      <button class="btn danger" type="submit">Delete Crew Member</button>
+          onsubmit="return confirm('Permanently delete {{ member['name']|e }}? This cannot be undone. If this record has any job history, DispatchProof will preserve it and ask you to deactivate it instead.');">
+      <button class="btn danger" type="submit">Delete Directory Record</button>
     </form>
   </div>
 </section>
@@ -58,8 +75,8 @@
   <div class="section-heading-row">
     <div>
       <div class="eyebrow">Scheduling</div>
-      <h2>Crew Availability</h2>
-      <p>Add PTO, vacation, personal days, or any date range when this crew member should not be scheduled.</p>
+      <h2>Availability</h2>
+      <p>Add any date range when this {{ 'subcontractor' if member['member_type'] == 'SUBCONTRACTOR' else 'crew member' }} should not be scheduled.</p>
     </div>
     <span class="internal-badge">Internal Only</span>
   </div>
@@ -74,10 +91,10 @@
       </label>
       <label>Reason
         <select name="reason">
+          <option value="Unavailable">Unavailable</option>
           <option value="PTO">PTO</option>
           <option value="Vacation">Vacation</option>
           <option value="Personal">Personal</option>
-          <option value="Unavailable">Unavailable</option>
           <option value="Training">Training</option>
           <option value="Other">Other</option>
         </select>
@@ -109,7 +126,7 @@
     {% endfor %}
   </div>
   {% else %}
-  <div class="empty-state crew-availability-empty">No unavailable dates have been added for this crew member.</div>
+  <div class="empty-state crew-availability-empty">No unavailable dates have been added for this record.</div>
   {% endif %}
 </section>
 
@@ -118,7 +135,7 @@
     <div>
       <div class="eyebrow">Assignments</div>
       <h2>Linked Installation Jobs</h2>
-      <p>Existing assignments stay linked even if this crew member is later deactivated.</p>
+      <p>Existing assignments stay linked even if this record is later deactivated or its type changes.</p>
     </div>
   </div>
 
@@ -144,7 +161,20 @@
     {% endfor %}
   </div>
   {% else %}
-  <div class="empty-state">This crew member has not been assigned to an installation job yet.</div>
+  <div class="empty-state">This record has not been assigned to an installation job yet.</div>
   {% endif %}
 </section>
+
+<script>
+(function(){
+  const typeSelect = document.getElementById('member_type');
+  const companyWrap = document.querySelector('[data-subcontractor-company]');
+  if (!typeSelect || !companyWrap) return;
+  function syncCompanyField(){
+    companyWrap.hidden = typeSelect.value !== 'SUBCONTRACTOR';
+  }
+  typeSelect.addEventListener('change', syncCompanyField);
+  syncCompanyField();
+})();
+</script>
 {% endblock %}

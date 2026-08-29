@@ -16,7 +16,7 @@
     {% if job['status'] != 'COMPLETED' %}
     <a class="btn action-blue" href="{{ url_for('edit_job', job_id=job['id']) }}">Edit Job Details</a>
     {% endif %}
-    <a class="btn action-blue" href="{{ url_for('new_job', duplicate_from=job['id']) }}">Duplicate Job</a>
+    <a class="btn action-blue" href="{{ url_for('new_job', duplicate_from=job['id']) }}" title="Create a separate new job using this setup. For a return trip to this same installation, use Start Return Visit / Next Mobilization instead.">Duplicate as New Job</a>
     <span class="badge {{ job['status']|lower|replace(' ', '-') }}">{{ job['status'] }}</span>
   </div>
 </div>
@@ -143,8 +143,17 @@
       <strong>{{ job['planned_crew_size'] if job['planned_crew_size'] else '—' }}</strong>
     </div>
     <div class="crew-assignment-names">
-      <span>Crew / Installers</span>
+      <span>Crew / Installers / Subs</span>
       <strong>{{ job['assigned_crew'] or 'Not assigned yet' }}</strong>
+      {% if assigned_crew_records %}
+      <div class="crew-assignment-record-list">
+        {% for member in assigned_crew_records %}
+        <small class="crew-assignment-record {% if member['member_type'] == 'SUBCONTRACTOR' %}crew-assignment-record-sub{% endif %}">
+          {{ 'SUB' if member['member_type'] == 'SUBCONTRACTOR' else 'INTERNAL' }} · {{ member['name'] }}{% if member['member_type'] == 'SUBCONTRACTOR' and member['company_name'] %} · {{ member['company_name'] }}{% endif %}{% if member['role_trade'] %} · {{ member['role_trade'] }}{% endif %}{% if member['is_lead'] %} · LEAD{% endif %}
+        </small>
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
   </div>
 
@@ -186,7 +195,7 @@
   {% endif %}
 
   {% if job['status'] != 'COMPLETED' %}
-  <a class="text-link" href="{{ url_for('edit_job', job_id=job['id']) }}">Edit Crew Assignment →</a>
+  <a class="text-link" href="{{ url_for('edit_job', job_id=job['id']) }}">Edit Field Assignment →</a>
   {% endif %}
 </section>
 
@@ -312,9 +321,12 @@
     {% if job['response_at'] and job['status'] != 'COMPLETED' %}
     <div class="button-row">
       <form method="post" action="{{ url_for('reset_job', job_id=job['id']) }}" onsubmit="return confirm('{% if job['arrival_status'] %}Archive this entire mobilization attempt and start the next one? All readiness and arrival evidence will be preserved.{% else %}Archive this confirmation and request a new one? The current evidence will be preserved in Confirmation History.{% endif %}');">
-        <button class="btn action-blue" type="submit">{% if job['arrival_status'] %}Start Next Mobilization{% else %}Request New Confirmation{% endif %}</button>
+        <button class="btn action-blue" type="submit">{% if job['arrival_status'] %}Start Return Visit / Next Mobilization{% else %}Request New Confirmation{% endif %}</button>
       </form>
     </div>
+    {% if job['arrival_status'] %}
+    <p class="small muted" style="margin-top:10px;">Use this for a return trip to the same installation. The prior attempt stays locked in Mobilization History and the crew remains on one job record.</p>
+    {% endif %}
     {% endif %}
   </section>
 

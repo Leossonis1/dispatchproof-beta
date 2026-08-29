@@ -88,15 +88,15 @@
       <div class="tutorial-tip">Schedule is a date-focused view of the same jobs already in DispatchProof. It does not change job status or create a separate calendar record.</div>
     </article>
 
-    <article class="tutorial-card" data-help-card data-search="crew assignment lead installer installers planned crew size field assignment schedule">
+    <article class="tutorial-card" data-help-card data-search="crew assignment subcontractor sub lead installer installers planned crew size field assignment schedule">
       <div class="tutorial-number">03</div>
       <h3>Assign a Crew to an Install</h3>
       <ol>
         <li>Create a new job or open an active job and click <strong>Edit Job Details</strong>.</li>
         <li>Find <strong>Crew Assignment</strong>.</li>
-        <li>Enter an optional Crew Lead, Planned Crew Size, and Crew / Installer names.</li>
+        <li>Choose an optional Crew / Field Lead, Planned Crew Size, and the Internal Crew or Subcontractors planned for the install.</li>
         <li>Save the job. The assignment appears in the internal <strong>Field Assignment</strong> panel and on <strong>Schedule</strong>.</li>
-        <li>Search Schedule by a crew lead or installer name when you need to find their work.</li>
+        <li>Search Schedule by an assigned crew member or subcontractor name when you need to find their work.</li>
       </ol>
       <div class="tutorial-tip">Crew Assignment is internal DispatchProof planning information. It is included in backups and Schedule exports, but it is not shown on public readiness links or client-facing installation reports.</div>
     </article>
@@ -111,46 +111,46 @@
         <li>Upcoming installs without a named crew also surface in <strong>Needs Attention</strong>.</li>
         <li>Open the job and use <strong>Edit Crew Assignment</strong> to fill the gap.</li>
       </ol>
-      <div class="tutorial-tip">A job counts as assigned when it has a Crew Lead or Crew / Installer name. Planned Crew Size by itself does not count as a named crew assignment.</div>
+      <div class="tutorial-tip">A job counts as assigned when it has a named internal crew member or subcontractor. Planned Crew Size by itself does not count as a named assignment.</div>
     </article>
 
-    <article class="tutorial-card" data-help-card data-search="crew directory add crew member reusable crew assign picker deactivate reactivate" id="help-crew-directory">
+    <article class="tutorial-card" data-help-card data-search="crew directory subcontractor sub company add crew member reusable crew assign picker deactivate reactivate" id="help-crew-directory">
       <div class="tutorial-number">05</div>
-      <h3>Build and Use Crew Directory</h3>
+      <h3>Build and Use Crew & Subcontractors</h3>
       <ol>
         <li>Open <strong>Crew</strong> in the sidebar.</li>
-        <li>Add each reusable installer, lead, or trade contact once.</li>
-        <li>On <strong>New Job</strong> or <strong>Edit Job Details</strong>, pick the Crew Lead and Crew / Installers from Crew Directory.</li>
-        <li>Use <strong>Custom Crew</strong> only for temporary people you do not need to save.</li>
-        <li>Deactivate a crew member when they should stop appearing on new-job pickers. Existing job assignments stay preserved. Permanently delete a crew member only when they have no linked job history.</li>
+        <li>Add each reusable person once and choose <strong>Internal Crew</strong> or <strong>Subcontractor</strong>. Subcontractors can also have an optional Company Name.</li>
+        <li>On <strong>New Job</strong> or <strong>Edit Job Details</strong>, pick internal crew and subcontractors from the same field-assignment picker.</li>
+        <li>Use <strong>Custom Crew</strong> only for temporary people or subs you do not need to save and schedule again.</li>
+        <li>Deactivate a directory record when it should stop appearing on new-job pickers. Existing assignments stay preserved. Permanently delete only when there is no linked job history.</li>
       </ol>
-      <div class="tutorial-tip">V2.33 automatically turns existing named crew assignments into Crew Directory records the first time the upgraded database loads.</div>
+      <div class="tutorial-tip">V2.41 keeps all existing records as Internal Crew. Subcontractors use the same availability, conflict detection, job history, and scheduling rules as internal crew.</div>
     </article>
 
     <article class="tutorial-card" data-help-card data-search="crew conflict double booked double booking same date schedule needs attention">
       <div class="tutorial-number">06</div>
       <h3>Resolve a Crew Conflict</h3>
       <ol>
-        <li>DispatchProof checks active jobs for the same Crew Directory member assigned to more than one install on the same date.</li>
+        <li>DispatchProof checks active jobs for the same internal crew member or subcontractor assigned to more than one install on the same date.</li>
         <li>Open <strong>Schedule</strong> and use <strong>Crew Conflicts</strong> or <strong>Crew Coverage → Conflicts Only</strong>.</li>
         <li>The affected Schedule rows show the crew member and the other job creating the conflict.</li>
         <li>The same warning appears in <strong>Needs Attention</strong> and in the job's internal <strong>Field Assignment</strong> panel.</li>
         <li>Open one of the jobs and change the installation date or crew assignment to clear the conflict.</li>
       </ol>
-      <div class="tutorial-tip">Conflict detection uses reusable Crew Directory assignments on active jobs. Completed jobs do not create conflicts, and nothing about crew conflicts appears on client-facing or public reports.</div>
+      <div class="tutorial-tip">Conflict detection uses reusable Crew & Subcontractor assignments on active jobs. Completed jobs do not create conflicts, and nothing about crew conflicts appears on client-facing or public reports.</div>
     </article>
 
-    <article class="tutorial-card" data-help-card data-search="crew availability pto vacation unavailable time off scheduling warning">
+    <article class="tutorial-card" data-help-card data-search="crew subcontractor availability pto vacation unavailable time off scheduling warning">
       <div class="tutorial-number">07</div>
-      <h3>Manage Crew Availability</h3>
+      <h3>Manage Crew / Subcontractor Availability</h3>
       <ol>
-        <li>Open <strong>Crew</strong> and select a crew member.</li>
-        <li>In <strong>Crew Availability</strong>, enter the Start Date, End Date, and reason such as PTO or Vacation.</li>
+        <li>Open <strong>Crew</strong> and select an internal crew member or subcontractor.</li>
+        <li>In <strong>Availability</strong>, enter the Start Date, End Date, and reason.</li>
         <li>DispatchProof keeps those dates on the crew profile until you remove them.</li>
         <li>If that person is assigned to an active install during the unavailable range, Schedule, Job Detail, and Needs Attention show an internal warning.</li>
         <li>Use <strong>Schedule → Crew Unavailable</strong> to isolate affected jobs, then change the crew assignment or installation date.</li>
       </ol>
-      <div class="tutorial-tip">Completed jobs do not create availability warnings. Crew availability stays internal and never appears on public readiness, arrival, or client report pages.</div>
+      <div class="tutorial-tip">Completed jobs do not create availability warnings. Crew/subcontractor availability stays internal and never appears on public readiness, arrival, or client report pages.</div>
     </article>
 
     <article class="tutorial-card" data-help-card data-search="staffing gap planned crew size assigned crew headcount short staffed understaffed crew member needed">
@@ -158,7 +158,7 @@
       <h3>Check Staffing Gaps</h3>
       <ol>
         <li>Enter a <strong>Planned Crew Size</strong> when creating or editing an installation.</li>
-        <li>DispatchProof compares that target with the unique named people in <strong>Crew / Installers</strong>, including the Crew Lead when needed.</li>
+        <li>DispatchProof compares that target with the unique named people in <strong>Crew / Installers / Subcontractors</strong>, including the Crew Lead when needed.</li>
         <li>If fewer people are assigned than planned, the job shows <strong>Staffing Gap</strong> with Planned, Assigned, and Crew Members Needed.</li>
         <li>Open <strong>Schedule</strong> and use <strong>Staffing Gaps</strong> or <strong>Crew Coverage → Staffing Gaps Only</strong> to isolate short-staffed jobs.</li>
         <li>The same internal warning appears in <strong>Needs Attention</strong> and the job's <strong>Field Assignment</strong> panel.</li>

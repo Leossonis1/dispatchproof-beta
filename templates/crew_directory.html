@@ -1,45 +1,58 @@
 {% extends "base.html" %}
-{% block title %}Crew · DispatchProof{% endblock %}
+{% block title %}Crew & Subcontractors · DispatchProof{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
     <div class="eyebrow">Internal Dispatch</div>
-    <h1>Crew Directory</h1>
-    <p>Save crew once, then reuse the same names and contact details across installation jobs.</p>
+    <h1>Crew & Subcontractors</h1>
+    <p>Keep internal crew and reusable subcontractors in one company directory, then assign either one to installation jobs.</p>
   </div>
 </div>
 
 <section class="crew-directory-summary">
-  <a class="crew-directory-stat {% if status_filter == 'active' %}selected{% endif %}"
-     href="{{ url_for('crew_directory', status='active') }}">
-    <span>Active Crew</span><strong>{{ counts.active }}</strong>
+  <a class="crew-directory-stat {% if status_filter == 'active' and type_filter == 'internal' %}selected{% endif %}"
+     href="{{ url_for('crew_directory', status='active', type='internal') }}">
+    <span>Active Internal Crew</span><strong>{{ counts.active_internal }}</strong>
   </a>
-  <a class="crew-directory-stat {% if status_filter == 'inactive' %}selected{% endif %}"
-     href="{{ url_for('crew_directory', status='inactive') }}">
+  <a class="crew-directory-stat crew-sub-stat {% if status_filter == 'active' and type_filter == 'subcontractor' %}selected{% endif %}"
+     href="{{ url_for('crew_directory', status='active', type='subcontractor') }}">
+    <span>Active Subcontractors</span><strong>{{ counts.active_subcontractors }}</strong>
+  </a>
+  <a class="crew-directory-stat {% if status_filter == 'inactive' and type_filter == 'all' %}selected{% endif %}"
+     href="{{ url_for('crew_directory', status='inactive', type='all') }}">
     <span>Inactive</span><strong>{{ counts.inactive }}</strong>
   </a>
   <div class="crew-directory-stat">
-    <span>Active Jobs with Crew</span><strong>{{ counts.assigned_active_jobs }}</strong>
+    <span>Active Jobs with Crew / Subs</span><strong>{{ counts.assigned_active_jobs }}</strong>
   </div>
   <div class="crew-directory-stat crew-timeoff-stat">
-    <span>Upcoming Time Off</span><strong>{{ counts.upcoming_time_off }}</strong>
+    <span>Upcoming Unavailability</span><strong>{{ counts.upcoming_time_off }}</strong>
   </div>
 </section>
 
 <section class="panel crew-add-panel" id="add-crew">
   <div class="section-heading-row">
     <div>
-      <div class="eyebrow">Add Crew</div>
-      <h2>New Crew Member</h2>
-      <p>Create a reusable internal record. Nothing here appears in client-facing reports.</p>
+      <div class="eyebrow">Add to Directory</div>
+      <h2>New Crew Member or Subcontractor</h2>
+      <p>Create one reusable internal record. Subcontractors use the same scheduling, conflict, and availability tools as internal crew.</p>
     </div>
     <span class="internal-badge">Internal Only</span>
   </div>
 
-  <form method="post" action="{{ url_for('add_crew_member') }}" class="crew-add-form">
+  <form method="post" action="{{ url_for('add_crew_member') }}" class="crew-add-form" id="crew-record-form">
     <div class="form-grid two">
+      <label>Type
+        <select name="member_type" id="member_type">
+          <option value="INTERNAL">Internal Crew</option>
+          <option value="SUBCONTRACTOR">Subcontractor</option>
+        </select>
+      </label>
       <label>Name
-        <input name="name" required placeholder="Mike Davis">
+        <input name="name" required placeholder="Mike Davis or John Smith">
+      </label>
+      <label data-subcontractor-company>Company Name <span class="muted">(subcontractors, optional)</span>
+        <input name="company_name" id="company_name" placeholder="ABC Installations">
       </label>
       <label>Role / Trade <span class="muted">(optional)</span>
         <input name="role_trade" placeholder="Lead Installer, Carpenter, Electrician...">
@@ -55,27 +68,34 @@
       </label>
     </div>
     <div class="form-actions crew-add-actions">
-      <button class="btn primary" type="submit">Add Crew Member</button>
+      <button class="btn primary" type="submit">Add to Directory</button>
     </div>
   </form>
 </section>
 
 <section class="panel crew-search-panel">
-  <div class="eyebrow">Find Crew Fast</div>
+  <div class="eyebrow">Find People Fast</div>
   <h2>Search & Filter</h2>
   <form method="get" action="{{ url_for('crew_directory') }}" class="crew-filter-form">
     <label>Search
-      <input name="q" value="{{ search_query|e }}" placeholder="Name, role, trade, email, phone...">
+      <input name="q" value="{{ search_query|e }}" placeholder="Name, company, role, trade, email, phone...">
     </label>
     <label>Status
       <select name="status">
         <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Active</option>
         <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>Inactive</option>
-        <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All Crew</option>
+        <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All</option>
+      </select>
+    </label>
+    <label>Type
+      <select name="type">
+        <option value="all" {% if type_filter == 'all' %}selected{% endif %}>All Types</option>
+        <option value="internal" {% if type_filter == 'internal' %}selected{% endif %}>Internal Crew</option>
+        <option value="subcontractor" {% if type_filter == 'subcontractor' %}selected{% endif %}>Subcontractors</option>
       </select>
     </label>
     <button class="btn primary" type="submit">Apply Filters</button>
-    {% if search_query or status_filter != 'active' %}
+    {% if search_query or status_filter != 'active' or type_filter != 'all' %}
     <a class="btn ghost" href="{{ url_for('crew_directory') }}">Clear All</a>
     {% endif %}
   </form>
@@ -85,7 +105,7 @@
   <div class="section-heading-row">
     <div>
       <div class="eyebrow">Directory</div>
-      <h2>Crew Members</h2>
+      <h2>Crew & Subcontractors</h2>
       <p>{{ members|length }} record{{ '' if members|length == 1 else 's' }} shown.</p>
     </div>
   </div>
@@ -95,15 +115,21 @@
     {% for member in members %}
     <article class="crew-directory-row {% if not member['is_active'] %}crew-directory-row-inactive{% endif %}">
       <div class="crew-directory-person">
-        <div class="crew-avatar">{{ member['name'][:1]|upper }}</div>
+        <div class="crew-avatar {% if member['member_type'] == 'SUBCONTRACTOR' %}crew-avatar-sub{% endif %}">{{ member['name'][:1]|upper }}</div>
         <div>
           <div class="crew-name-line">
             <strong>{{ member['name'] }}</strong>
+            <span class="status-pill crew-type-badge {% if member['member_type'] == 'SUBCONTRACTOR' %}crew-type-sub{% endif %}">
+              {{ 'SUBCONTRACTOR' if member['member_type'] == 'SUBCONTRACTOR' else 'INTERNAL CREW' }}
+            </span>
             <span class="status-pill {% if member['is_active'] %}crew-active{% else %}crew-inactive{% endif %}">
               {{ 'ACTIVE' if member['is_active'] else 'INACTIVE' }}
             </span>
           </div>
-          <span>{{ member['role_trade'] or 'Crew member' }}</span>
+          {% if member['member_type'] == 'SUBCONTRACTOR' and member['company_name'] %}
+          <span class="crew-company-name">{{ member['company_name'] }}</span>
+          {% endif %}
+          <span>{{ member['role_trade'] or ('Subcontractor' if member['member_type'] == 'SUBCONTRACTOR' else 'Crew member') }}</span>
           {% if member['email'] or member['phone'] %}
           <small>
             {% if member['email'] %}{{ member['email'] }}{% endif %}
@@ -117,7 +143,7 @@
       <div class="crew-directory-work">
         <span><strong>{{ member['active_job_count'] }}</strong> active job{{ '' if member['active_job_count'] == 1 else 's' }}</span>
         <span><strong>{{ member['next7_job_count'] }}</strong> next 7 days</span>
-        <span><strong>{{ member['upcoming_time_off_count'] }}</strong> time off</span>
+        <span><strong>{{ member['upcoming_time_off_count'] }}</strong> unavailable</span>
       </div>
 
       <div class="crew-directory-actions">
@@ -129,7 +155,7 @@
           </button>
         </form>
         <form method="post" action="{{ url_for('delete_crew_member', crew_member_id=member['id']) }}"
-              onsubmit="return confirm('Permanently delete {{ member['name']|e }}? This cannot be undone. If this crew member has any job history, DispatchProof will preserve the record and ask you to deactivate it instead.');">
+              onsubmit="return confirm('Permanently delete {{ member['name']|e }}? This cannot be undone. If this record has any job history, DispatchProof will preserve it and ask you to deactivate it instead.');">
           <button class="btn danger" type="submit">Delete</button>
         </form>
       </div>
@@ -137,7 +163,21 @@
     {% endfor %}
   </div>
   {% else %}
-  <div class="empty-state">No crew members match the current search and status filter.</div>
+  <div class="empty-state">No crew or subcontractor records match the current filters.</div>
   {% endif %}
 </section>
+
+<script>
+(function(){
+  const typeSelect = document.getElementById('member_type');
+  const companyWrap = document.querySelector('[data-subcontractor-company]');
+  if (!typeSelect || !companyWrap) return;
+  function syncCompanyField(){
+    const isSub = typeSelect.value === 'SUBCONTRACTOR';
+    companyWrap.hidden = !isSub;
+  }
+  typeSelect.addEventListener('change', syncCompanyField);
+  syncCompanyField();
+})();
+</script>
 {% endblock %}

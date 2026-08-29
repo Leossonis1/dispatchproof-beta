@@ -4560,3 +4560,81 @@ main{
 .custom-checklist-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center}
 .custom-checklist-row input{width:100%}
 @media(max-width:700px){.project-specific-head{display:block}.project-specific-head .btn{margin-top:12px}.custom-checklist-row{grid-template-columns:1fr}.page-context-help{justify-content:flex-start}}
+
+/* DispatchProof V2.41 — Subcontractor Support */
+.crew-directory-summary{
+  grid-template-columns:repeat(5,minmax(0,1fr));
+}
+.crew-sub-stat{
+  border-top-color:#079455;
+}
+.crew-type-badge{
+  background:#f2f4f7;
+  color:#344054;
+}
+.crew-type-badge.crew-type-sub{
+  background:#ecfdf3;
+  color:#027a48;
+}
+.crew-avatar.crew-avatar-sub{
+  background:#ecfdf3;
+  color:#027a48;
+}
+.crew-company-name{
+  color:#344054 !important;
+  font-weight:800;
+}
+.crew-heading-badges{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  flex-wrap:wrap;
+  gap:7px;
+}
+.crew-picker-option.crew-picker-subcontractor{
+  border-style:dashed;
+}
+.crew-filter-form{
+  grid-template-columns:minmax(220px,1fr) 150px 170px auto auto;
+}
+@media(max-width:1050px){
+  .crew-directory-summary{
+    grid-template-columns:repeat(3,minmax(0,1fr));
+  }
+  .crew-filter-form{
+    grid-template-columns:repeat(3,minmax(0,1fr));
+  }
+}
+@media(max-width:700px){
+  .crew-directory-summary,
+  .crew-filter-form{
+    grid-template-columns:1fr;
+  }
+  .crew-heading-badges{
+    justify-content:flex-start;
+  }
+}
+.crew-assignment-record-list{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  margin-top:3px;
+}
+.crew-assignment-record{
+  display:inline-flex;
+  width:max-content;
+  max-width:100%;
+  padding:4px 7px;
+  border:1px solid #d0d5dd;
+  border-radius:999px;
+  background:#fff;
+  color:#475467;
+  font-size:8px;
+  font-weight:800;
+  line-height:1.2;
+}
+.crew-assignment-record.crew-assignment-record-sub{
+  border-color:#abefc6;
+  background:#ecfdf3;
+  color:#027a48;
+}

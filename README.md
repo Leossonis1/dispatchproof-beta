@@ -1,11 +1,7 @@
-# DispatchProof V2.40.9.2 Patch Only
+# DispatchProof V2.41 Patch Only
 
-Apply this patch over V2.40.9.1.
+Apply this patch on top of **V2.40.9.2**.
 
-Changed files:
-- `app.py`
-- `VERSION.txt`
-- `templates/base.html`
-- `templates/help.html`
+V2.41 adds reusable **Subcontractor** records to the existing Crew workflow, including optional company name, type filters/badges, assignment picker support, availability/conflicts, and job-detail identification.
 
-This fixes context-help routing for Documents and document-specific anchors. No database migration or reset is required.
+The database migration is automatic and additive. Existing Crew Directory records remain **Internal Crew** and existing job assignments are preserved.
