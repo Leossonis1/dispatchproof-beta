@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}Training & Simulation · DispatchProof{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">Practice Workspace</div>
+    <h1>Training & Simulation</h1>
+    <p>Practice DispatchProof decisions with fake jobs and guided scenarios before touching live work.</p>
+  </div>
+</div>
+
+<section class="training-isolation-banner">
+  <div class="training-lock">✓</div>
+  <div>
+    <strong>TRAINING MODE IS ISOLATED</strong>
+    <p>No real jobs, clients, crew schedules, emails, field links, photos, routes, or reports are changed or sent from these simulations.</p>
+  </div>
+</section>
+
+{% if current_user_is_admin %}
+<section class="panel" id="training-manager">
+  <div class="panel-head">
+    <div>
+      <div class="eyebrow">Administrator</div>
+      <h2>Assign Training</h2>
+      <p>Assign one scenario or the complete starter track to an active office user.</p>
+    </div>
+    <span class="internal-only-badge">ADMIN ONLY</span>
+  </div>
+
+  {% if training_users %}
+  <form method="post" action="{{ url_for('assign_training') }}" class="training-assign-form">
+    <label>User
+      <select name="user_id" required>
+        <option value="">Choose a user…</option>
+        {% for user in training_users %}
+        <option value="{{ user['id'] }}">{{ user['full_name'] }} · {{ user['role'].title() }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Training
+      <select name="scenario_key" required>
+        <option value="__starter__">Complete Starter Track · {{ starter_track_count }} scenarios</option>
+        {% for scenario in scenario_library %}
+        <option value="{{ scenario['key'] }}">{{ scenario['title'] }} · {{ scenario['step_count'] }} steps</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button class="btn primary" type="submit">Assign Training</button>
+  </form>
+  {% else %}
+  <div class="empty-mini">No active database users are available. The permanent Owner account manages training but is not itself a trainee profile.</div>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Assigned Training</h2>
+      <p>Review progress without entering or changing the trainee's answers.</p>
+    </div>
+  </div>
+  {% if assignments %}
+  <div class="training-admin-list">
+    {% for item in assignments %}
+      {% if item['scenario'] %}
+      <article class="training-admin-row">
+        <div class="training-admin-person">
+          <strong>{{ item['user_full_name'] }}</strong>
+          <span>@{{ item['user_username'] }} · {{ item['user_role'].title() }}</span>
+        </div>
+        <div class="training-admin-scenario">
+          <strong>{{ item['scenario']['title'] }}</strong>
+          <span>{{ item['completed_steps'] }}/{{ item['total_steps'] }} steps · {{ item['progress_percent'] }}%{% if item['coaching_flags'] %} · {{ item['coaching_flags'] }} coaching moment{{ '' if item['coaching_flags'] == 1 else 's' }}{% endif %}</span>
+        </div>
+        <span class="training-status {{ item['status']|lower }}">{{ item['status'].replace('_', ' ') }}</span>
+        <div class="training-admin-actions">
+          <a class="btn small-btn" href="{{ url_for('training_scenario_page', assignment_id=item['id']) }}">Review</a>
+          <form method="post" action="{{ url_for('reset_training_assignment', assignment_id=item['id']) }}" onsubmit="return confirm('Reset this training scenario to the beginning?');">
+            <button class="btn small-btn" type="submit">Reset</button>
+          </form>
+          <form method="post" action="{{ url_for('remove_training_assignment', assignment_id=item['id']) }}" onsubmit="return confirm('Remove this training assignment?');">
+            <button class="btn danger small-btn" type="submit">Remove</button>
+          </form>
+        </div>
+      </article>
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty compact-empty">
+    <h3>No training assigned yet</h3>
+    <p>Use the form above to give a new PM a practice scenario or the complete starter track.</p>
+  </div>
+  {% endif %}
+</section>
+{% else %}
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="eyebrow">Your Practice</div>
+      <h2>Assigned Training</h2>
+      <p>Work through each situation at your own pace. A wrong choice gives coaching and lets you try again.</p>
+    </div>
+  </div>
+  {% if assignments %}
+  <div class="training-card-grid">
+    {% for item in assignments %}
+      {% if item['scenario'] %}
+      <article class="training-card">
+        <div class="training-card-top">
+          <span class="training-status {{ item['status']|lower }}">{{ item['status'].replace('_', ' ') }}</span>
+          <span>{{ item['scenario']['estimated_minutes'] }} min</span>
+        </div>
+        <h3>{{ item['scenario']['title'] }}</h3>
+        <p>{{ item['scenario']['summary'] }}</p>
+        <div class="training-progress-track"><span style="width:{{ item['progress_percent'] }}%"></span></div>
+        <div class="training-progress-meta"><span>{{ item['completed_steps'] }}/{{ item['total_steps'] }} steps</span><strong>{{ item['progress_percent'] }}%</strong></div>
+        <a class="btn primary wide" href="{{ url_for('training_scenario_page', assignment_id=item['id']) }}">{{ 'Review Completed Scenario' if item['status'] == 'COMPLETED' else ('Continue Training' if item['status'] == 'IN_PROGRESS' else 'Start Training') }}</a>
+      </article>
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty">
+    <div class="empty-icon">✓</div>
+    <h3>No training assigned</h3>
+    <p>An Administrator can assign practice scenarios when training is needed.</p>
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="eyebrow">Scenario Library</div>
+      <h2>What Training Covers</h2>
+      <p>These scenarios use fake data but follow the same operating decisions as the live app.</p>
+    </div>
+  </div>
+  <div class="training-library-grid">
+    {% for scenario in scenario_library %}
+    <article>
+      <strong>{{ scenario['title'] }}</strong>
+      <p>{{ scenario['summary'] }}</p>
+      <span>{{ scenario['step_count'] }} steps · about {{ scenario['estimated_minutes'] }} minutes</span>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
