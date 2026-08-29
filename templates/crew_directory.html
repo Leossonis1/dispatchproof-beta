@@ -128,6 +128,10 @@
             {{ 'Deactivate' if member['is_active'] else 'Reactivate' }}
           </button>
         </form>
+        <form method="post" action="{{ url_for('delete_crew_member', crew_member_id=member['id']) }}"
+              onsubmit="return confirm('Permanently delete {{ member['name']|e }}? This cannot be undone. If this crew member has any job history, DispatchProof will preserve the record and ask you to deactivate it instead.');">
+          <button class="btn danger" type="submit">Delete</button>
+        </form>
       </div>
     </article>
     {% endfor %}

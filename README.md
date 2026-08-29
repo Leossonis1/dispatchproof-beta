@@ -1,7 +1,10 @@
-# DispatchProof V2.40.1 Patch Only
+# DispatchProof V2.40.2 — Patch Only
 
-Apply these files over an existing V2.40 installation.
+Apply this patch over V2.40.1.
 
-Fixes Operator workspace backup/restore so setup progress is protected even before a job exists. New workspace ZIPs include shared Clients, Projects, Crew, crew unavailability, Client documents, and Project documents in addition to authorized jobs and job files. Restore is additive and does not overwrite existing records.
-
-Important: a zero-job ZIP that was already created by V2.40 cannot contain standalone setup records because V2.40 never wrote those records into that archive. Create a fresh workspace ZIP after deploying V2.40.1.
+Changes:
+- Adds permanent Delete to Crew Directory and Crew Member detail pages.
+- Permanent deletion is allowed only when the crew member has no linked job history.
+- If job history exists, DispatchProof blocks deletion and directs the user to Deactivate instead.
+- Availability/time-off records are removed automatically for successfully deleted unused crew.
+- No database migration or reset is required.

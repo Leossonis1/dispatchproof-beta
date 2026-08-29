@@ -46,6 +46,12 @@
       <button class="btn primary" type="submit">Save Crew Member</button>
     </div>
   </form>
+  <div class="form-actions" style="margin-top:14px; justify-content:flex-end;">
+    <form method="post" action="{{ url_for('delete_crew_member', crew_member_id=member['id']) }}"
+          onsubmit="return confirm('Permanently delete {{ member['name']|e }}? This cannot be undone. If this crew member has any job history, DispatchProof will preserve the record and ask you to deactivate it instead.');">
+      <button class="btn danger" type="submit">Delete Crew Member</button>
+    </form>
+  </div>
 </section>
 
 <section class="panel" id="availability">
