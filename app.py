@@ -675,7 +675,7 @@ def contractor_geocode(location, country="US"):
             "limit": 1,
             "countrycodes": str(country or "US").lower(),
         },
-        headers={"User-Agent": "DispatchProof/2.43 contractor-discovery"},
+        headers={"User-Agent": "DispatchProof/2.43.1 contractor-discovery"},
         timeout=20,
     )
     if not isinstance(data, list) or not data:
@@ -715,7 +715,7 @@ def contractor_provider_search(query, lat, lon, radius_value, limit=50, exclude_
             "Authorization": f"Bearer {CONTRACTOR_SEARCH_API_KEY}",
             "X-Places-Api-Version": "2025-06-17",
             "Accept": "application/json",
-            "User-Agent": "DispatchProof/2.43 contractor-discovery",
+            "User-Agent": "DispatchProof/2.43.1 contractor-discovery",
         },
         timeout=30,
     )
@@ -785,16 +785,86 @@ def contractor_place_country(place):
     return names.get(country, "")
 
 
+def contractor_obvious_non_service_business(place, trade):
+    """Reject obvious stores/showrooms/suppliers without hiding real installers.
+
+    Foursquare sometimes gives a retail cabinet showroom a Carpenter category, so
+    category matching alone is not enough. We use strong retail name phrases as a
+    second guard, but allow names that clearly advertise installation/contracting.
+    """
+    name = contractor_place_name(place).lower()
+    categories = " | ".join(contractor_place_categories(place)).lower()
+
+    service_category_cues = [
+        "carpenter", "contractor", "construction", "installer", "installation",
+        "repair service", "maintenance", "home service", "home improvement",
+        "plumber", "electrician", "roofer", "landscaper", "janitorial service",
+        "cleaning service", "mason",
+    ]
+    retail_category_cues = [
+        "retail store", "miscellaneous store", "furniture store", "hardware store",
+        "home improvement store", "building supply", "supply store", "wholesaler",
+        "showroom", "interior design", "kitchen supply", "bathroom supply",
+        "lighting store", "electronics store", "computer store", "garden center",
+        "nursery", "florist", "appliance store",
+    ]
+    if any(word in categories for word in retail_category_cues) and not any(
+        word in categories for word in service_category_cues
+    ):
+        return True
+
+    service_name_cues = [
+        "install", "contract", "carpenter", "millwork", "casework", "construction",
+        "service", "repair", "remodel", "maintenance",
+    ]
+    trade_retail_name_cues = {
+        "millwork": [
+            "cabinet sales", "cabinet gallery", "cabinet showroom", "cabinet outlet",
+            "cabinet liquidator", "cabinet liquidators", "cabinet warehouse",
+            "warehouse cabinet", "cabinet distributor", "cabinet distributors",
+            "kitchen showroom", "kitchen gallery", "kitchen cabinet sales",
+        ],
+        "plumbing": ["plumbing supply", "plumbing showroom"],
+        "electrical": ["electrical supply", "lighting showroom", "lighting gallery"],
+        "hvac": ["hvac supply", "heating supply", "air conditioning supply"],
+        "flooring": ["flooring store", "flooring showroom", "carpet store", "tile store"],
+        "painting": ["paint store", "paint supply"],
+        "drywall": ["drywall supply", "building supply"],
+        "fixtures": ["fixture showroom", "fixture supply", "display showroom"],
+        "handyman": ["hardware store", "home improvement store"],
+        "roofing": ["roofing supply", "building supply"],
+        "concrete_masonry": ["concrete supply", "stone supplier", "masonry supply"],
+        "cleaning": ["cleaning supply", "janitorial supply", "laundromat", "dry cleaner"],
+        "low_voltage": ["electronics store", "computer store", "electrical supply"],
+        "landscaping": ["landscape supply", "garden center", "plant nursery"],
+    }
+    if any(word in name for word in trade_retail_name_cues.get(trade, [])) and not any(
+        word in name for word in service_name_cues
+    ):
+        return True
+
+    # Cabinet-design-only businesses are usually showrooms/designers rather than
+    # field installers. Keep them only when the name also signals field service.
+    if trade == "millwork" and (
+        "cabinet & design" in name
+        or "cabinet and design" in name
+        or "cabinet design" in name
+    ) and not any(word in name for word in service_name_cues):
+        return True
+
+    # Global non-contractor business types that should never surface as subs.
+    global_non_service = [
+        "loan", "bank", "finance", "property management", "real estate",
+        "insurance agency", "employment agency",
+    ]
+    return any(word in (name + " | " + categories) for word in global_non_service)
+
+
 def contractor_trade_match_strength(place, trade):
     name = contractor_place_name(place).lower()
     categories = " | ".join(contractor_place_categories(place)).lower()
     blob = name + " | " + categories
-    global_bad = [
-        "store", "supply", "supplies", "wholesaler", "retail", "showroom", "loan",
-        "bank", "finance", "property management", "real estate", "office", "agency",
-        "miscellaneous store", "furniture", "interior design",
-    ]
-    if any(word in blob for word in global_bad):
+    if contractor_obvious_non_service_business(place, trade):
         return 0
     explicit = {
         "millwork": ["carpenter", "cabinet maker", "millwork", "casework", "woodworker", "cabinet installer"],
@@ -3452,7 +3522,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.43",
+        "app_version": "2.43.1",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -3657,7 +3727,7 @@ def create_workspace_export_archive():
         "export_format": 2,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.43",
+        "app_version": "2.43.1",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -4455,7 +4525,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.43",
+        "app_version": "2.43.1",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
