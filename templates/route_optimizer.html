@@ -35,11 +35,13 @@
   <form method="post" class="route-builder-form">
     <input type="hidden" name="action" value="optimize">
     <div class="route-start-grid">
-      <label>Starting Location <span class="required-star">*</span>
-        <input name="start_address" required
+      <div class="route-start-field">
+        <label for="routeStartAddress">Crew Starting Location <span class="muted">(required)</span></label>
+        <span class="route-start-help">Where the crew begins this route — hotel, office, home base, or another address.</span>
+        <input id="routeStartAddress" name="start_address" required
                value="{{ route_plan['start_address'] if route_plan else (project['location'] or '') }}"
-               placeholder="Street address, city, state">
-      </label>
+               placeholder="Example: Massillon, OH or a full street address">
+      </div>
       <label class="route-return-option">
         <input type="checkbox" name="return_to_start" value="1" {% if route_plan and route_plan['return_to_start'] %}checked{% endif %}>
         <span><strong>Return to starting location</strong><small>Leave off when the crew should finish at the last job.</small></span>
@@ -90,10 +92,13 @@
       <h2>{{ route_stops|length }} Optimized Stop{{ '' if route_stops|length == 1 else 's' }}</h2>
       <p>Saved for your DispatchProof workspace · updated {{ route_plan['updated_at']|pretty_datetime }}</p>
     </div>
-    <form method="post" onsubmit="return confirm('Clear this saved route plan?');">
-      <input type="hidden" name="action" value="clear">
-      <button class="btn danger small-btn" type="submit">Clear Saved Route</button>
-    </form>
+    <div class="route-result-actions">
+      <a class="btn action-blue small-btn" href="{{ url_for('download_project_route_csv', project_id=project['id']) }}">Download Route CSV</a>
+      <form method="post" onsubmit="return confirm('Clear this saved route plan?');">
+        <input type="hidden" name="action" value="clear">
+        <button class="btn danger small-btn" type="submit">Clear Saved Route</button>
+      </form>
+    </div>
   </div>
 
   <div class="route-summary-grid">
@@ -153,6 +158,26 @@
   </form>
 </section>
 {% endif %}
+
+
+<script>
+(function(){
+  const form = document.querySelector('.route-builder-form');
+  const startInput = document.getElementById('routeStartAddress');
+  if (!form || !startInput) return;
+
+  function clearStartMessage(){ startInput.setCustomValidity(''); }
+  startInput.addEventListener('input', clearStartMessage);
+  startInput.addEventListener('invalid', function(){
+    if (!startInput.value.trim()) {
+      startInput.setCustomValidity('Starting location is required before optimizing the route.');
+    }
+  });
+  form.addEventListener('submit', function(){
+    if (startInput.value.trim()) clearStartMessage();
+  });
+})();
+</script>
 
 {% if route_geometry %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
