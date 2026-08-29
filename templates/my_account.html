@@ -119,6 +119,19 @@
     <div class="spacer"></div>
     <a class="btn primary" href="{{ url_for('export_my_workspace') }}">Download My Workspace ZIP</a>
     <p class="small muted workspace-security-note">Store the ZIP securely. It may contain customer contact details, job history, documents, and site photos.</p>
+
+    <div class="spacer"></div>
+    <div id="workspace-restore" class="account-permission-note">
+      <strong>Restore / Import My Workspace</strong>
+      <span>Upload one of your own workspace ZIPs to preview what will be restored. Existing jobs are never overwritten. Team jobs are restored as private personal copies so collaborators' live work cannot be changed.</span>
+    </div>
+    <form method="post" action="{{ url_for('preview_my_workspace_restore') }}" enctype="multipart/form-data" class="form-stack" style="margin-top:14px">
+      <label>Workspace ZIP *
+        <input required type="file" name="workspace_file" accept=".zip,application/zip">
+      </label>
+      <button class="btn secondary" type="submit">Preview Workspace Restore</button>
+    </form>
+    <p class="small muted">Restore creates new personal job copies and safely reuses existing Clients, Projects, and Crew by name. It does not restore old email-delivery logs or overwrite the shared company database.</p>
   {% endif %}
 </section>
 
