@@ -2736,7 +2736,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.38",
+        "app_version": "2.39",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2909,7 +2909,7 @@ def create_workspace_export_archive():
         "export_format": 1,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.38",
+        "app_version": "2.39",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -3168,6 +3168,38 @@ def company_logo_external_url(settings=None):
 
     return url_for("company_logo", _external=True)
 
+PAGE_HELP_ANCHORS = {
+    "dashboard": "help-dashboard",
+    "schedule_board": "help-schedule",
+    "crew_directory": "help-crew-directory",
+    "edit_crew_member": "help-crew-directory",
+    "new_job": "help-create-job",
+    "edit_job": "help-edit-job",
+    "job_detail": "everyday-workflows",
+    "readiness_request": "help-readiness-request",
+    "arrival": "help-arrival",
+    "completed_jobs": "help-completed-jobs",
+    "email_outbox": "help-email-outbox",
+    "email_outbox_detail": "help-email-outbox",
+    "clients": "clients-projects",
+    "new_client": "help-create-client",
+    "client_detail": "clients-projects",
+    "new_project": "help-create-project",
+    "project_detail": "clients-projects",
+    "document_center": "help-document-center",
+    "my_account": "account-access",
+    "company_settings": "help-company-settings",
+    "users_access": "help-users-access",
+    "edit_user": "help-users-access",
+    "activity_log": "help-activity-log",
+    "backup_restore": "backup-restore",
+}
+
+def page_help_anchor_for_request():
+    endpoint = request.endpoint or ""
+    return PAGE_HELP_ANCHORS.get(endpoint)
+
+
 @app.context_processor
 def inject_brand():
     settings = get_app_settings()
@@ -3182,7 +3214,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.38",
+        "app_version": "2.39",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -3191,6 +3223,7 @@ def inject_brand():
         "current_display_name": current_display_name(),
         "current_user_role": current_user_role(),
         "current_user_is_admin": current_user_is_admin(),
+        "page_help_anchor": page_help_anchor_for_request(),
     }
 
 @app.before_request
@@ -3353,7 +3386,7 @@ def not_found(error):
 def health():
     return {
         "status": "ok",
-        "version": "2.38",
+        "version": "2.39",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -3945,22 +3978,22 @@ def add_user():
 
     if not full_name or not username or not password:
         flash("Full Name, Username, and Temporary Password are required.")
-        return redirect(url_for("users_access"))
+        return redirect(url_for("users_access") + "#users-access")
 
     if role not in {"ADMIN", "OPERATIONS"}:
         role = "OPERATIONS"
 
     if len(username) < 3:
         flash("Username must be at least 3 characters.")
-        return redirect(url_for("users_access"))
+        return redirect(url_for("users_access") + "#users-access")
 
     if len(password) < 8:
         flash("Temporary Password must be at least 8 characters.")
-        return redirect(url_for("users_access"))
+        return redirect(url_for("users_access") + "#users-access")
 
     if username.lower() == ADMIN_USERNAME.lower():
         flash("That username belongs to the permanent Owner account.")
-        return redirect(url_for("users_access"))
+        return redirect(url_for("users_access") + "#users-access")
 
     try:
         with get_db() as db:
@@ -3985,10 +4018,10 @@ def add_user():
             db.commit()
     except sqlite3.IntegrityError:
         flash("That username is already in use.")
-        return redirect(url_for("users_access"))
+        return redirect(url_for("users_access") + "#users-access")
 
     flash(f"User {username} added.")
-    return redirect(url_for("users_access"))
+    return redirect(url_for("users_access") + "#users-access")
 
 
 @app.post("/settings/users/<int:user_id>/toggle-access")
@@ -4001,7 +4034,7 @@ def toggle_user_access(user_id):
         # Prevent an admin from disabling the account currently being used.
         if session.get("dispatchproof_user_id") == user_id:
             flash("You cannot disable the account you are currently signed in with.")
-            return redirect(url_for("users_access"))
+            return redirect(url_for("users_access") + "#users-access")
 
         new_active = 0 if user["is_active"] else 1
 
@@ -4019,7 +4052,7 @@ def toggle_user_access(user_id):
         db.commit()
 
     flash(f"{user['username']} access {'enabled' if new_active else 'disabled'}.")
-    return redirect(url_for("users_access"))
+    return redirect(url_for("users_access") + "#users-access")
 
 
 @app.post("/settings/users/<int:user_id>/reset-password")
@@ -4028,7 +4061,7 @@ def reset_user_password(user_id):
 
     if len(new_password) < 8:
         flash("New password must be at least 8 characters.")
-        return redirect(url_for("users_access"))
+        return redirect(url_for("users_access") + "#users-access")
 
     with get_db() as db:
         user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
@@ -4047,7 +4080,7 @@ def reset_user_password(user_id):
         db.commit()
 
     flash(f"Password reset for {user['username']}.")
-    return redirect(url_for("users_access"))
+    return redirect(url_for("users_access") + "#users-access")
 
 
 @app.post("/settings/users/<int:user_id>/role")
@@ -4055,7 +4088,7 @@ def change_user_role(user_id):
     role = request.form.get("role", "OPERATIONS").strip().upper()
     if role not in {"ADMIN", "OPERATIONS"}:
         flash("Invalid role.")
-        return redirect(url_for("users_access"))
+        return redirect(url_for("users_access") + "#users-access")
 
     with get_db() as db:
         user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
@@ -4064,7 +4097,7 @@ def change_user_role(user_id):
 
         if session.get("dispatchproof_user_id") == user_id and role != "ADMIN":
             flash("You cannot remove administrator access from the account you are currently using.")
-            return redirect(url_for("users_access"))
+            return redirect(url_for("users_access") + "#users-access")
 
         db.execute(
             "UPDATE users SET role = ?, updated_at = ? WHERE id = ?",
@@ -4078,7 +4111,7 @@ def change_user_role(user_id):
         db.commit()
 
     flash(f"{user['username']} role updated.")
-    return redirect(url_for("users_access"))
+    return redirect(url_for("users_access") + "#users-access")
 
 
 
@@ -6201,7 +6234,9 @@ def export_completed_csv():
 @app.route("/jobs/new", methods=["GET", "POST"])
 def new_job():
     if request.method == "POST":
-        checklist = [x.strip() for x in request.form.getlist("checklist") if x.strip()]
+        standard_checklist = [x.strip() for x in request.form.getlist("checklist") if x.strip()]
+        custom_checklist = [x.strip() for x in request.form.getlist("checklist_custom") if x.strip()]
+        checklist = standard_checklist + custom_checklist
         if not checklist:
             checklist = DEFAULT_CHECKLIST
 
