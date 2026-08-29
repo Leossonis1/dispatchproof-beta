@@ -69,6 +69,16 @@ CONTRACTOR_SEARCH_CACHE_TTL_SECONDS = max(0, int(os.getenv("CONTRACTOR_SEARCH_CA
 CONTRACTOR_SEARCH_FALLBACK_MIN_RESULTS = max(1, int(os.getenv("CONTRACTOR_SEARCH_FALLBACK_MIN_RESULTS", "8")))
 _CONTRACTOR_SEARCH_CACHE = {}
 
+# V2.44 rollout route optimization. This uses the HeiGIT/openrouteservice
+# optimization + directions services. A separate free API key is used so
+# contractor-search credits remain completely independent.
+ROUTE_OPTIMIZATION_API_KEY = (
+    os.getenv("DISPATCHPROOF_ORS_API_KEY", "").strip()
+    or os.getenv("OPENROUTESERVICE_API_KEY", "").strip()
+)
+ROUTE_OPTIMIZER_MAX_JOBS = max(2, min(40, int(os.getenv("ROUTE_OPTIMIZER_MAX_JOBS", "40"))))
+ROUTE_GEOCODE_CACHE_TTL_DAYS = max(1, int(os.getenv("ROUTE_GEOCODE_CACHE_TTL_DAYS", "90")))
+
 
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
 DOCUMENT_EXTENSIONS = {"pdf", "doc", "docx", "xls", "xlsx", "csv", "txt", "png", "jpg", "jpeg", "webp", "dwg", "dxf"}
@@ -432,6 +442,57 @@ def ensure_columns(db):
         )
     """)
 
+    # V2.44: saved route plans are private to the creator (Owner/Admin may still
+    # view all underlying jobs normally). This prevents one PM's private rollout
+    # sequence from exposing job names to another PM.
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS project_route_plans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            owner_key TEXT NOT NULL,
+            start_address TEXT NOT NULL,
+            start_lat REAL NOT NULL,
+            start_lon REAL NOT NULL,
+            return_to_start INTEGER NOT NULL DEFAULT 0,
+            total_distance_m REAL NOT NULL DEFAULT 0,
+            total_duration_s REAL NOT NULL DEFAULT 0,
+            route_geometry_json TEXT,
+            provider_name TEXT NOT NULL DEFAULT 'openrouteservice',
+            created_by TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(project_id, owner_key),
+            FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+        )
+    """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS project_route_stops (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            route_plan_id INTEGER NOT NULL,
+            job_id INTEGER NOT NULL,
+            stop_order INTEGER NOT NULL,
+            route_address TEXT NOT NULL,
+            lat REAL NOT NULL,
+            lon REAL NOT NULL,
+            leg_distance_m REAL NOT NULL DEFAULT 0,
+            leg_duration_s REAL NOT NULL DEFAULT 0,
+            UNIQUE(route_plan_id, job_id),
+            UNIQUE(route_plan_id, stop_order),
+            FOREIGN KEY(route_plan_id) REFERENCES project_route_plans(id) ON DELETE CASCADE,
+            FOREIGN KEY(job_id) REFERENCES jobs(id) ON DELETE CASCADE
+        )
+    """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS route_geocode_cache (
+            address_key TEXT PRIMARY KEY,
+            original_address TEXT NOT NULL,
+            formatted_address TEXT,
+            lat REAL NOT NULL,
+            lon REAL NOT NULL,
+            cached_at TEXT NOT NULL
+        )
+    """)
+
     # V2.14: remember the most recent successful backup creation.
     app_settings_columns = {
         row["name"]
@@ -675,7 +736,7 @@ def contractor_geocode(location, country="US"):
             "limit": 1,
             "countrycodes": str(country or "US").lower(),
         },
-        headers={"User-Agent": "DispatchProof/2.43.2 contractor-discovery"},
+        headers={"User-Agent": "DispatchProof/2.44 contractor-discovery"},
         timeout=20,
     )
     if not isinstance(data, list) or not data:
@@ -715,7 +776,7 @@ def contractor_provider_search(query, lat, lon, radius_value, limit=50, exclude_
             "Authorization": f"Bearer {CONTRACTOR_SEARCH_API_KEY}",
             "X-Places-Api-Version": "2025-06-17",
             "Accept": "application/json",
-            "User-Agent": "DispatchProof/2.43.2 contractor-discovery",
+            "User-Agent": "DispatchProof/2.44 contractor-discovery",
         },
         timeout=30,
     )
@@ -1046,6 +1107,263 @@ def run_contractor_search(location, country, trade, radius, tolerance, max_resul
         "radius": radius,
         "unit": unit,
     }
+
+
+class RouteOptimizationError(Exception):
+    pass
+
+
+def route_plan_owner_key():
+    if session.get("dispatchproof_owner"):
+        return "OWNER"
+    user_id = current_user_id()
+    return f"USER:{user_id}" if user_id else ""
+
+
+def normalize_route_address(value):
+    return re.sub(r"\s+", " ", str(value or "").strip())
+
+
+def route_address_key(value):
+    return normalize_route_address(value).lower()
+
+
+def route_http_json(url, params=None, payload=None, timeout=35):
+    if not ROUTE_OPTIMIZATION_API_KEY:
+        raise RouteOptimizationError(
+            "Route Optimization is not configured yet. Add an openrouteservice API key in Render first."
+        )
+    if params:
+        url = f"{url}?{urlencode(params)}"
+    headers = {
+        "Authorization": ROUTE_OPTIMIZATION_API_KEY,
+        "Accept": "application/json, application/geo+json",
+        "User-Agent": "DispatchProof/2.44 route-optimization",
+    }
+    data = None
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    req = URLRequest(url, data=data, headers=headers, method="POST" if data is not None else "GET")
+    try:
+        with urlopen(req, timeout=timeout) as response:
+            body = response.read().decode("utf-8", errors="replace")
+            return json.loads(body or "null")
+    except HTTPError as exc:
+        try:
+            body = exc.read().decode("utf-8", errors="replace")[:1000]
+        except Exception:
+            body = ""
+        lower = body.lower()
+        if exc.code in (401, 403):
+            raise RouteOptimizationError("The routing service rejected the API key. Check the key in Render and try again.")
+        if exc.code == 429 or "quota" in lower or "rate limit" in lower:
+            raise RouteOptimizationError("The routing service quota is temporarily exhausted. Try again after the quota resets.")
+        if exc.code == 400:
+            raise RouteOptimizationError("The routing service could not calculate this route. Check the selected addresses and try again.")
+        print(f"Route API HTTP {exc.code}: {body}")
+        raise RouteOptimizationError("The routing service returned an error. Please try again.")
+    except (URLError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
+        print(f"Route optimization request failed: {exc}")
+        raise RouteOptimizationError("DispatchProof could not reach the routing service. Please try again.")
+
+
+def route_geocode(db, address):
+    address = normalize_route_address(address)
+    if not address:
+        raise RouteOptimizationError("Every selected stop needs a location/address.")
+    key = route_address_key(address)
+    cached = db.execute(
+        "SELECT * FROM route_geocode_cache WHERE address_key = ?", (key,)
+    ).fetchone()
+    if cached:
+        try:
+            cached_day = datetime.fromisoformat(cached["cached_at"]).date()
+            if (local_today() - cached_day).days <= ROUTE_GEOCODE_CACHE_TTL_DAYS:
+                return float(cached["lat"]), float(cached["lon"]), cached["formatted_address"] or address, True
+        except Exception:
+            pass
+
+    data = route_http_json(
+        "https://api.heigit.org/pelias/v1/search",
+        params={"text": address, "size": 1},
+        timeout=25,
+    )
+    features = (data or {}).get("features") or []
+    if not features:
+        raise RouteOptimizationError(f'Could not locate "{address}". Enter a more complete street/city/state address.')
+    feature = features[0]
+    coords = ((feature.get("geometry") or {}).get("coordinates") or [])
+    if len(coords) < 2:
+        raise RouteOptimizationError(f'Could not locate "{address}". Enter a more complete address.')
+    props = feature.get("properties") or {}
+    formatted = props.get("label") or props.get("name") or address
+    lon, lat = float(coords[0]), float(coords[1])
+    db.execute("""
+        INSERT INTO route_geocode_cache (address_key, original_address, formatted_address, lat, lon, cached_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(address_key) DO UPDATE SET
+            original_address = excluded.original_address,
+            formatted_address = excluded.formatted_address,
+            lat = excluded.lat,
+            lon = excluded.lon,
+            cached_at = excluded.cached_at
+    """, (key, address, formatted, lat, lon, now_iso()))
+    return lat, lon, formatted, False
+
+
+def route_optimize_order(start_coord, stops, return_to_start=False):
+    jobs_payload = [
+        {"id": int(stop["job_id"]), "location": [float(stop["lon"]), float(stop["lat"])], "description": stop["job_name"]}
+        for stop in stops
+    ]
+    vehicle = {
+        "id": 1,
+        "profile": "driving-car",
+        "start": [float(start_coord[1]), float(start_coord[0])],
+    }
+    if return_to_start:
+        vehicle["end"] = [float(start_coord[1]), float(start_coord[0])]
+    data = route_http_json(
+        "https://api.heigit.org/vroom/v0/",
+        payload={"jobs": jobs_payload, "vehicles": [vehicle]},
+        timeout=45,
+    )
+    routes = (data or {}).get("routes") or []
+    unassigned = (data or {}).get("unassigned") or []
+    if not routes:
+        raise RouteOptimizationError("The routing service could not produce an optimized route for those stops.")
+    if unassigned:
+        raise RouteOptimizationError("One or more selected jobs could not be included in the optimized route. Check their addresses and try again.")
+    order = [int(step["id"]) for step in routes[0].get("steps", []) if step.get("type") == "job" and step.get("id") is not None]
+    expected = {int(stop["job_id"]) for stop in stops}
+    if set(order) != expected:
+        raise RouteOptimizationError("The routing service returned an incomplete stop order. Please try again.")
+    return order
+
+
+def route_directions(start_coord, ordered_stops, return_to_start=False):
+    coords = [[float(start_coord[1]), float(start_coord[0])]]
+    coords.extend([[float(stop["lon"]), float(stop["lat"])] for stop in ordered_stops])
+    if return_to_start:
+        coords.append([float(start_coord[1]), float(start_coord[0])])
+    data = route_http_json(
+        "https://api.heigit.org/openrouteservice/v2/directions/driving-car/geojson",
+        payload={"coordinates": coords, "instructions": False, "units": "m"},
+        timeout=45,
+    )
+    features = (data or {}).get("features") or []
+    if not features:
+        raise RouteOptimizationError("The routing service optimized the stops but could not build the driving route.")
+    feature = features[0]
+    props = feature.get("properties") or {}
+    summary = props.get("summary") or {}
+    segments = props.get("segments") or []
+    leg_values = []
+    # Segment 0 is Start -> Stop 1, segment 1 is Stop 1 -> Stop 2, etc.
+    for index in range(len(ordered_stops)):
+        segment = segments[index] if index < len(segments) else {}
+        leg_values.append((float(segment.get("distance") or 0), float(segment.get("duration") or 0)))
+    return {
+        "distance": float(summary.get("distance") or sum(x[0] for x in leg_values)),
+        "duration": float(summary.get("duration") or sum(x[1] for x in leg_values)),
+        "geometry": feature.get("geometry") or None,
+        "legs": leg_values,
+    }
+
+
+def save_project_route_plan(db, project_id, start_address, start_coord, return_to_start, ordered_stops, route_data):
+    owner_key = route_plan_owner_key()
+    if not owner_key:
+        raise RouteOptimizationError("A signed-in user is required to save a route plan.")
+    existing = db.execute(
+        "SELECT id FROM project_route_plans WHERE project_id = ? AND owner_key = ?",
+        (project_id, owner_key),
+    ).fetchone()
+    actor = current_display_name() or current_username() or "DispatchProof User"
+    geometry_json = json.dumps(route_data.get("geometry")) if route_data.get("geometry") else None
+    if existing:
+        plan_id = existing["id"]
+        db.execute("""
+            UPDATE project_route_plans
+            SET start_address = ?, start_lat = ?, start_lon = ?, return_to_start = ?,
+                total_distance_m = ?, total_duration_s = ?, route_geometry_json = ?,
+                provider_name = 'openrouteservice', created_by = ?, updated_at = ?
+            WHERE id = ?
+        """, (
+            start_address, start_coord[0], start_coord[1], 1 if return_to_start else 0,
+            route_data["distance"], route_data["duration"], geometry_json, actor, now_iso(), plan_id,
+        ))
+        db.execute("DELETE FROM project_route_stops WHERE route_plan_id = ?", (plan_id,))
+    else:
+        cur = db.execute("""
+            INSERT INTO project_route_plans (
+                project_id, owner_key, start_address, start_lat, start_lon, return_to_start,
+                total_distance_m, total_duration_s, route_geometry_json, provider_name,
+                created_by, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'openrouteservice', ?, ?, ?)
+        """, (
+            project_id, owner_key, start_address, start_coord[0], start_coord[1], 1 if return_to_start else 0,
+            route_data["distance"], route_data["duration"], geometry_json, actor, now_iso(), now_iso(),
+        ))
+        plan_id = cur.lastrowid
+
+    legs = route_data.get("legs") or []
+    for index, stop in enumerate(ordered_stops, start=1):
+        leg_distance, leg_duration = legs[index - 1] if index - 1 < len(legs) else (0, 0)
+        db.execute("""
+            INSERT INTO project_route_stops (
+                route_plan_id, job_id, stop_order, route_address, lat, lon,
+                leg_distance_m, leg_duration_s
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            plan_id, stop["job_id"], index, stop["address"], stop["lat"], stop["lon"],
+            leg_distance, leg_duration,
+        ))
+    return plan_id
+
+
+def load_project_route_plan(db, project_id):
+    owner_key = route_plan_owner_key()
+    if not owner_key:
+        return None, []
+    plan = db.execute(
+        "SELECT * FROM project_route_plans WHERE project_id = ? AND owner_key = ?",
+        (project_id, owner_key),
+    ).fetchone()
+    if not plan:
+        return None, []
+    visibility_clause, visibility_params = job_visibility_sql("j")
+    stops = db.execute(f"""
+        SELECT prs.*, j.job_name, j.project_site, j.installation_date, j.status
+        FROM project_route_stops prs
+        JOIN jobs j ON j.id = prs.job_id
+        WHERE prs.route_plan_id = ? AND ({visibility_clause})
+        ORDER BY prs.stop_order, prs.id
+    """, (plan["id"], *visibility_params)).fetchall()
+    total_stops = db.execute(
+        "SELECT COUNT(*) AS n FROM project_route_stops WHERE route_plan_id = ?",
+        (plan["id"],),
+    ).fetchone()["n"]
+    # If access to a Team job was later removed, do not render an old route
+    # geometry/totals that could reveal a private location indirectly.
+    if len(stops) != total_stops and not current_user_is_admin():
+        return None, []
+    return plan, stops
+
+
+def route_miles(meters):
+    return float(meters or 0) / 1609.344
+
+
+def route_duration_label(seconds):
+    total_minutes = max(0, int(round(float(seconds or 0) / 60)))
+    hours, minutes = divmod(total_minutes, 60)
+    if hours and minutes:
+        return f"{hours} hr {minutes} min"
+    if hours:
+        return f"{hours} hr"
+    return f"{minutes} min"
 
 
 def append_crew_member_to_job(db, job_id, crew_member_id):
@@ -1598,6 +1916,14 @@ def init_db():
         db.execute("""
             CREATE INDEX IF NOT EXISTS idx_field_progress_entries_job_date
             ON field_progress_entries(job_id, work_date DESC, created_at DESC, id DESC)
+        """)
+        db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_project_route_plans_project_owner
+            ON project_route_plans(project_id, owner_key, updated_at DESC)
+        """)
+        db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_project_route_stops_plan_order
+            ON project_route_stops(route_plan_id, stop_order, job_id)
         """)
 
         db.execute("""
@@ -3434,6 +3760,8 @@ def database_record_counts(db_path):
         "job_documents": 0,
         "field_update_links": 0,
         "field_progress_entries": 0,
+        "project_route_plans": 0,
+        "project_route_stops": 0,
         "project_documents": 0,
         "client_documents": 0,
         "crew_members": 0,
@@ -3458,6 +3786,8 @@ def database_record_counts(db_path):
             ("job_documents", "job_documents"),
             ("field_update_links", "field_update_links"),
             ("field_progress_entries", "field_progress_entries"),
+            ("project_route_plans", "project_route_plans"),
+            ("project_route_stops", "project_route_stops"),
             ("project_documents", "project_documents"),
             ("client_documents", "client_documents"),
             ("clients", "clients"),
@@ -3501,6 +3831,8 @@ def create_backup_archive():
         "job_documents": 0,
         "field_update_links": 0,
         "field_progress_entries": 0,
+        "project_route_plans": 0,
+        "project_route_stops": 0,
         "project_documents": 0,
         "client_documents": 0,
         "crew_members": 0,
@@ -3535,7 +3867,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.43.2",
+        "app_version": "2.44",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -3740,7 +4072,7 @@ def create_workspace_export_archive():
         "export_format": 2,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.43.2",
+        "app_version": "2.44",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -4510,6 +4842,7 @@ PAGE_HELP_ANCHORS = {
     "client_detail": "clients-projects",
     "new_project": "help-create-project",
     "project_detail": "clients-projects",
+    "project_route_optimizer": "help-route-optimization",
     "document_center": "documents",
     "my_account": "account-access",
     "company_settings": "help-company-settings",
@@ -4538,7 +4871,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.43.2",
+        "app_version": "2.44",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -6011,6 +6344,8 @@ def backup_restore():
         "job_documents": 0,
         "field_update_links": 0,
         "field_progress_entries": 0,
+        "project_route_plans": 0,
+        "project_route_stops": 0,
         "project_documents": 0,
         "client_documents": 0,
         "clients": 0,
@@ -6070,6 +6405,12 @@ def backup_restore():
             ).fetchone()["c"]
             counts["field_progress_entries"] = db.execute(
                 "SELECT COUNT(*) AS c FROM field_progress_entries"
+            ).fetchone()["c"]
+            counts["project_route_plans"] = db.execute(
+                "SELECT COUNT(*) AS c FROM project_route_plans"
+            ).fetchone()["c"]
+            counts["project_route_stops"] = db.execute(
+                "SELECT COUNT(*) AS c FROM project_route_stops"
             ).fetchone()["c"]
             database_project_document_count = db.execute(
                 "SELECT COUNT(*) AS c FROM project_documents"
@@ -6740,6 +7081,144 @@ def project_detail(project_id):
         jobs=jobs,
         project_documents=project_documents,
         client_documents=client_documents,
+    )
+
+
+@app.route("/projects/<int:project_id>/route-optimization", methods=["GET", "POST"])
+def project_route_optimizer(project_id):
+    with get_db() as db:
+        visibility_clause, visibility_params = job_visibility_sql("j")
+        project = db.execute("""
+            SELECT p.*, c.name AS client_name
+            FROM projects p
+            JOIN clients c ON c.id = p.client_id
+            WHERE p.id = ?
+        """, (project_id,)).fetchone()
+        if not project:
+            abort(404)
+
+        jobs = db.execute(f"""
+            SELECT j.*
+            FROM jobs j
+            WHERE j.project_id = ?
+              AND j.status != 'COMPLETED'
+              AND ({visibility_clause})
+            ORDER BY j.installation_date, LOWER(j.job_name), j.id
+        """, (project_id, *visibility_params)).fetchall()
+        visible_job_ids = {int(job["id"]) for job in jobs}
+
+        if request.method == "POST":
+            action = request.form.get("action", "optimize").strip().lower()
+            owner_key = route_plan_owner_key()
+            if action == "clear":
+                plan = db.execute(
+                    "SELECT id FROM project_route_plans WHERE project_id = ? AND owner_key = ?",
+                    (project_id, owner_key),
+                ).fetchone()
+                if plan:
+                    db.execute("DELETE FROM project_route_plans WHERE id = ?", (plan["id"],))
+                    record_activity(db, "Route Plan Cleared", f"Cleared saved route for project {project['name']}.")
+                    db.commit()
+                flash("Saved route cleared.")
+                return redirect(url_for("project_route_optimizer", project_id=project_id))
+
+            if not ROUTE_OPTIMIZATION_API_KEY:
+                flash("Route Optimization needs an openrouteservice API key before it can calculate routes.")
+                return redirect(url_for("project_route_optimizer", project_id=project_id))
+
+            start_address = normalize_route_address(request.form.get("start_address"))
+            return_to_start = request.form.get("return_to_start") == "1"
+            if not start_address:
+                flash("Enter the crew's starting location before optimizing the route.")
+                return redirect(url_for("project_route_optimizer", project_id=project_id))
+
+            try:
+                start_lat, start_lon, _, _ = route_geocode(db, start_address)
+                start_coord = (start_lat, start_lon)
+
+                if action == "manual":
+                    raw_order = [x for x in (request.form.get("manual_order") or "").split(",") if x.strip().isdigit()]
+                    job_ids = [int(x) for x in raw_order]
+                    if not job_ids or len(job_ids) != len(set(job_ids)) or any(job_id not in visible_job_ids for job_id in job_ids):
+                        raise RouteOptimizationError("The manual stop order is invalid. Reload the page and try again.")
+                    address_map = {}
+                    plan, prior_stops = load_project_route_plan(db, project_id)
+                    for stop in prior_stops:
+                        address_map[int(stop["job_id"])] = stop["route_address"]
+                    selected_jobs = [next(job for job in jobs if int(job["id"]) == job_id) for job_id in job_ids]
+                else:
+                    selected_ids = []
+                    for raw in request.form.getlist("job_ids"):
+                        if str(raw).isdigit() and int(raw) in visible_job_ids:
+                            selected_ids.append(int(raw))
+                    selected_ids = list(dict.fromkeys(selected_ids))
+                    if len(selected_ids) < 2:
+                        raise RouteOptimizationError("Select at least two active jobs to optimize a route.")
+                    if len(selected_ids) > ROUTE_OPTIMIZER_MAX_JOBS:
+                        raise RouteOptimizationError(f"Select no more than {ROUTE_OPTIMIZER_MAX_JOBS} jobs in one route plan.")
+                    selected_jobs = [job for job in jobs if int(job["id"]) in set(selected_ids)]
+                    address_map = {
+                        int(job["id"]): normalize_route_address(request.form.get(f"address_{job['id']}") or job["project_site"])
+                        for job in selected_jobs
+                    }
+
+                stops = []
+                for job in selected_jobs:
+                    address = address_map.get(int(job["id"])) or normalize_route_address(job["project_site"])
+                    if not address:
+                        raise RouteOptimizationError(f"{job['job_name']} does not have a route address. Enter one before optimizing.")
+                    lat, lon, _, _ = route_geocode(db, address)
+                    stops.append({
+                        "job_id": int(job["id"]), "job_name": job["job_name"], "address": address,
+                        "lat": lat, "lon": lon,
+                    })
+
+                if action == "manual":
+                    ordered_stops = stops
+                else:
+                    order = route_optimize_order(start_coord, stops, return_to_start)
+                    by_id = {int(stop["job_id"]): stop for stop in stops}
+                    ordered_stops = [by_id[job_id] for job_id in order]
+
+                route_data = route_directions(start_coord, ordered_stops, return_to_start)
+                save_project_route_plan(
+                    db, project_id, start_address, start_coord, return_to_start,
+                    ordered_stops, route_data,
+                )
+                action_text = "manually reordered" if action == "manual" else "optimized"
+                record_activity(
+                    db,
+                    "Project Route Updated",
+                    f"{action_text.capitalize()} {len(ordered_stops)} stops for project {project['name']} ({route_miles(route_data['distance']):.1f} mi, {route_duration_label(route_data['duration'])}).",
+                )
+                db.commit()
+                flash(f"Route {action_text}: {len(ordered_stops)} stops · {route_miles(route_data['distance']):.1f} mi · {route_duration_label(route_data['duration'])} drive time.")
+            except RouteOptimizationError as exc:
+                db.rollback()
+                flash(str(exc))
+            return redirect(url_for("project_route_optimizer", project_id=project_id))
+
+        plan, plan_stops = load_project_route_plan(db, project_id)
+        geometry = None
+        if plan and plan["route_geometry_json"]:
+            try:
+                geometry = json.loads(plan["route_geometry_json"])
+            except Exception:
+                geometry = None
+
+    return render_template(
+        "route_optimizer.html",
+        project=project,
+        jobs=jobs,
+        route_plan=plan,
+        route_stops=plan_stops,
+        route_job_ids={int(stop["job_id"]) for stop in plan_stops},
+        route_address_by_job={int(stop["job_id"]): stop["route_address"] for stop in plan_stops},
+        route_geometry=geometry,
+        route_configured=bool(ROUTE_OPTIMIZATION_API_KEY),
+        route_max_jobs=ROUTE_OPTIMIZER_MAX_JOBS,
+        route_miles=route_miles,
+        route_duration_label=route_duration_label,
     )
 
 
