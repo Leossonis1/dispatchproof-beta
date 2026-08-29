@@ -62,7 +62,7 @@
   <main class="main">
     {% if page_help_anchor %}
     <div class="page-context-help">
-      <a href="{{ url_for('help_center') }}#{{ page_help_anchor }}" title="Open the tutorial for this page">
+      <a id="page-context-help-link" href="{{ url_for('help_center') }}#{{ page_help_anchor }}" data-help-base="{{ url_for('help_center') }}" data-default-help-anchor="{{ page_help_anchor }}" title="Open the tutorial for this page">
         <span class="page-context-help-icon">?</span> Help me understand this page
       </a>
     </div>
@@ -76,6 +76,24 @@
   </main>
 </div>
 <script>
+function dispatchProofUpdateContextHelp() {
+  const link = document.getElementById('page-context-help-link');
+  if (!link) return;
+
+  const base = link.dataset.helpBase || '/help';
+  const fallback = link.dataset.defaultHelpAnchor || '';
+  const hashHelpMap = {
+    '#job-documents': 'help-job-documents',
+    '#project-documents': 'help-project-documents',
+    '#client-documents': 'help-client-documents'
+  };
+  const anchor = hashHelpMap[window.location.hash] || fallback;
+  link.href = anchor ? `${base}#${anchor}` : base;
+}
+
+window.addEventListener('hashchange', dispatchProofUpdateContextHelp);
+window.addEventListener('DOMContentLoaded', dispatchProofUpdateContextHelp);
+
 function dispatchProofLegacyCopyText(text) {
   const area = document.createElement('textarea');
   area.value = text;

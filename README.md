@@ -1,11 +1,11 @@
-# DispatchProof V2.40.9.1 Patch Only
+# DispatchProof V2.40.9.2 Patch Only
 
-Deploy these files over V2.40.9.
+Apply this patch over V2.40.9.1.
 
-Changes:
-- Groups Job Documents with Client Documents and Project Documents in Help & Tutorials.
-- Adds a Documents jump link at the top of Help.
-- Clarifies Job Documents use, permissions, and Personal/Team access.
-- Renumbers Help tutorial cards sequentially.
+Changed files:
+- `app.py`
+- `VERSION.txt`
+- `templates/base.html`
+- `templates/help.html`
 
-No database migration or reset is required.
+This fixes context-help routing for Documents and document-specific anchors. No database migration or reset is required.
