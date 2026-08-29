@@ -18,20 +18,24 @@
   </a>
   <a class="document-summary-card {% if scope_filter == 'CLIENT' %}selected{% endif %}"
      href="{{ url_for('document_center', scope='CLIENT') }}">
-    <span>Client</span>
+    <span>Client Documents</span>
     <strong>{{ scope_counts.CLIENT }}</strong>
   </a>
   <a class="document-summary-card {% if scope_filter == 'PROJECT' %}selected{% endif %}"
      href="{{ url_for('document_center', scope='PROJECT') }}">
-    <span>Project</span>
+    <span>Project Documents</span>
     <strong>{{ scope_counts.PROJECT }}</strong>
   </a>
   <a class="document-summary-card {% if scope_filter == 'JOB' %}selected{% endif %}"
      href="{{ url_for('document_center', scope='JOB') }}">
-    <span>Job</span>
+    <span>Job Documents</span>
     <strong>{{ scope_counts.JOB }}</strong>
   </a>
 </section>
+
+<div class="inline-note">
+  <strong>Document hierarchy:</strong> Client Documents apply to the client, Project Documents stay with one project, and Job Documents stay with one specific installation/job.
+</div>
 
 <section class="panel document-quick-upload" id="quick-upload">
   <div class="panel-head">

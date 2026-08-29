@@ -12,6 +12,7 @@
     </p>
   </div>
   <div class="page-head-actions">
+    <a class="btn action-blue" href="#job-documents">Job Documents</a>
     {% if job['status'] != 'COMPLETED' %}
     <a class="btn action-blue" href="{{ url_for('edit_job', job_id=job['id']) }}">Edit Job Details</a>
     {% endif %}

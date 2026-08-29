@@ -28,5 +28,12 @@ Operator Workspace Restore button reliability fix.
 Use the patch-only ZIP when upgrading an existing V2.40.2 installation. No database reset is required.
 
 
+## V2.40.8 — Document Hierarchy Clarity
+
+- Makes the existing three-level document hierarchy obvious in Document Center: **Client Documents**, **Project Documents**, and **Job Documents**.
+- Adds a direct **Job Documents** shortcut at the top of every Job page.
+- Clarifies that Job Documents remain attached to one specific installation/job and continue to follow existing PM/team job-access rules.
+- No database migration or reset is required.
+
 ## V2.40.7 — Client Report Mobilization Clarity
 Client Installation Reports now clearly separate the current mobilization cycle from preserved prior attempts and show fuller archived readiness/arrival evidence.
