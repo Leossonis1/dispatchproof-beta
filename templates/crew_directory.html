@@ -7,6 +7,9 @@
     <h1>Crew & Subcontractors</h1>
     <p>Keep internal crew and reusable subcontractors in one company directory, then assign either one to installation jobs.</p>
   </div>
+  <div class="page-head-actions">
+    <a class="btn action-blue" href="{{ url_for('find_subcontractor') }}">Find a Subcontractor</a>
+  </div>
 </div>
 
 <section class="crew-directory-summary">
@@ -137,6 +140,7 @@
             {% if member['phone'] %}{{ member['phone'] }}{% endif %}
           </small>
           {% endif %}
+          {% if member['source_address'] %}<small class="crew-source-location">{{ member['source_address'] }}</small>{% endif %}
         </div>
       </div>
 

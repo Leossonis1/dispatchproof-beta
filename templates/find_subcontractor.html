@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}Find a Subcontractor · DispatchProof{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    {% if job %}
+      <a class="back-link" href="{{ url_for('job_detail', job_id=job['id']) }}#field-assignment">← Back to {{ job['job_name'] }}</a>
+    {% else %}
+      <a class="back-link" href="{{ url_for('crew_directory') }}">← Back to Crew & Subcontractors</a>
+    {% endif %}
+    <div class="eyebrow">Subcontractor Discovery</div>
+    <h1>Find a Subcontractor</h1>
+    <p>Search nearby trade businesses, then save the useful ones into your existing DispatchProof Subcontractor Directory.</p>
+  </div>
+  {% if job %}
+  <div class="page-head-actions">
+    <span class="status-pill">JOB · {{ job['job_name'] }}</span>
+  </div>
+  {% endif %}
+</div>
+
+{% if not search_configured %}
+<section class="panel contractor-search-config-warning">
+  <div class="panel-head">
+    <div>
+      <div class="eyebrow">One-Time Setup</div>
+      <h2>Search Service Key Needed</h2>
+      <p>Add <code>FOURSQUARE_SERVICE_API_KEY</code> to this DispatchProof Render service. You can reuse the same service key from Leosson Contractor Finder.</p>
+    </div>
+    <span class="status-pill blocked">NOT CONFIGURED</span>
+  </div>
+</section>
+{% endif %}
+
+<section class="panel contractor-search-panel">
+  <div class="panel-head">
+    <div>
+      <div class="eyebrow">Local Search</div>
+      <h2>{% if job %}Search Near This Job{% else %}Search by Trade & Location{% endif %}</h2>
+      <p>{% if job %}The location is prefilled from the assigned Project when available; change it anytime before searching.{% else %}Use this when you want to build the company subcontractor network before assigning a specific job.{% endif %}</p>
+    </div>
+    <span class="internal-only-badge">INTERNAL ONLY</span>
+  </div>
+
+  <form method="post" class="contractor-search-form">
+    <div class="form-grid two">
+      <label>Trade
+        <select name="trade" required>
+          {% for key, info in trade_config.items() %}
+          <option value="{{ key }}" {% if trade == key %}selected{% endif %}>{{ info['label'] }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Country
+        <select name="country" id="contractor-country" required>
+          {% for code, info in country_config.items() %}
+          <option value="{{ code }}" data-unit="{{ info['unit'] }}" {% if country == code %}selected{% endif %}>{{ info['name'] }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="contractor-location-field">Location
+        <input name="location" value="{{ location|e }}" required placeholder="City, state/province or postal code">
+      </label>
+      <label>Radius <span class="muted">(<span id="contractor-radius-unit">{{ distance_unit }}</span>)</span>
+        <input type="number" name="radius" value="{{ radius }}" min="1" max="{{ 60 if distance_unit == 'mi' else 100 }}" required>
+      </label>
+      <label>Match Tolerance
+        <select name="tolerance">
+          <option value="strict" {% if tolerance == 'strict' %}selected{% endif %}>Strict — narrowest trade match</option>
+          <option value="balanced" {% if tolerance == 'balanced' %}selected{% endif %}>Balanced — recommended</option>
+          <option value="broad" {% if tolerance == 'broad' %}selected{% endif %}>Broad — use when local results are limited</option>
+        </select>
+      </label>
+    </div>
+    <div class="form-actions">
+      <button class="btn primary" type="submit" {% if not search_configured %}disabled title="Add the Foursquare service API key first"{% endif %}>Search Nearby Subcontractors</button>
+    </div>
+  </form>
+  <div class="contractor-search-note">
+    <strong>Discovery only:</strong> DispatchProof does not qualify, certify, or guarantee these businesses. Confirm scope fit, availability, pricing, insurance, and credentials before hiring.
+  </div>
+</section>
+
+{% if search_error %}
+<div class="flash contractor-search-error">{{ search_error }}</div>
+{% endif %}
+
+{% if search_performed and not search_error %}
+<section class="panel contractor-results-panel">
+  <div class="section-heading-row">
+    <div>
+      <div class="eyebrow">Search Results</div>
+      <h2>{{ results|length }} Possible Match{{ '' if results|length == 1 else 'es' }}</h2>
+      <p>{{ trade_config[trade]['label'] }} near {{ location }} · {{ radius }} {{ distance_unit }} · {{ tolerance|title }} tolerance.</p>
+    </div>
+    {% if search_meta %}
+    <span class="contractor-search-usage">Provider calls: {{ search_meta['provider_calls'] }}{% if search_meta['cache_hits'] %} · Cache hits: {{ search_meta['cache_hits'] }}{% endif %}</span>
+    {% endif %}
+  </div>
+
+  {% if results %}
+  <div class="contractor-result-list">
+    {% for result in results %}
+    <article class="contractor-result-card">
+      <div class="contractor-result-main">
+        <div class="contractor-result-title-row">
+          <div>
+            <h3>{{ result['name'] }}</h3>
+            <span>{{ result['specialty'] }}</span>
+          </div>
+          <div class="contractor-fit-score" title="Search match only — not a quality or qualification score">
+            <strong>{{ result['fit_score']|int }}</strong><span>SEARCH MATCH</span>
+          </div>
+        </div>
+        {% if result['address'] %}<p class="contractor-result-address">{{ result['address'] }}</p>{% endif %}
+        <div class="contractor-result-contact">
+          {% if result['phone'] %}<span>☎ {{ result['phone'] }}</span>{% endif %}
+          {% if result['external_rating'] is not none %}<span>★ {{ result['external_rating'] }} online rating</span>{% endif %}
+          {% if result['website'] %}<a class="text-link" target="_blank" rel="noopener" href="{{ result['website'] }}">Website ↗</a>{% endif %}
+        </div>
+      </div>
+
+      <div class="contractor-result-actions">
+        {% if result['existing_member'] %}
+          <span class="status-pill crew-type-sub">SAVED</span>
+          <a class="btn ghost" href="{{ url_for('edit_crew_member', crew_member_id=result['existing_member']['id']) }}">View Directory Record</a>
+        {% endif %}
+        <form method="post" action="{{ url_for('save_found_subcontractor') }}">
+          <input type="hidden" name="job_id" value="{{ job['id'] if job else '' }}">
+          <input type="hidden" name="place_id" value="{{ result['place_id']|e }}">
+          <input type="hidden" name="name" value="{{ result['name']|e }}">
+          <input type="hidden" name="phone" value="{{ result['phone']|e }}">
+          <input type="hidden" name="address" value="{{ result['address']|e }}">
+          <input type="hidden" name="website" value="{{ result['website']|e }}">
+          <input type="hidden" name="trade" value="{{ trade|e }}">
+          {% if job and job['status'] != 'COMPLETED' %}
+            {% if result['already_assigned'] %}
+              <button class="btn locked-btn" type="button" disabled>✓ Already Assigned</button>
+            {% else %}
+              <button class="btn primary" type="submit" name="action" value="save_assign">Save & Assign to This Job</button>
+            {% endif %}
+          {% endif %}
+          {% if not result['existing_member'] %}
+            <button class="btn action-blue" type="submit" name="action" value="save">Save to Directory Only</button>
+          {% endif %}
+        </form>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    No useful trade matches were returned. Try a larger radius, verify the location, or switch Match Tolerance from Strict/Balanced to Broad.
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
+<script>
+(function(){
+  const country = document.getElementById('contractor-country');
+  const unit = document.getElementById('contractor-radius-unit');
+  const radius = document.querySelector('input[name="radius"]');
+  if (!country || !unit || !radius) return;
+  function syncUnit(){
+    const option = country.options[country.selectedIndex];
+    const currentUnit = option ? (option.dataset.unit || 'mi') : 'mi';
+    unit.textContent = currentUnit;
+    radius.max = currentUnit === 'mi' ? '60' : '100';
+    if (Number(radius.value) > Number(radius.max)) radius.value = radius.max;
+  }
+  country.addEventListener('change', syncUnit);
+  syncUnit();
+})();
+</script>
+{% endblock %}

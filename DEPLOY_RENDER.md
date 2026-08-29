@@ -1,3 +1,15 @@
+# V2.43 Render note
+
+For **Find a Subcontractor**, add this environment variable to the DispatchProof Render service:
+
+`FOURSQUARE_SERVICE_API_KEY=<your existing Foursquare service API key>`
+
+You may reuse the same key already used by Leosson Contractor Finder. The feature remains disabled with a clear setup message when no key is configured.
+
+No database reset is required.
+
+---
+
 
 # DispatchProof V1.5 — Render Beta Deployment
 

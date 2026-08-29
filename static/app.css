@@ -4695,3 +4695,42 @@ main{
   .field-link-card .button-row{align-items:stretch;}
   .field-link-card .button-row .btn,.field-link-card .button-row form,.field-link-card .button-row form .btn{width:100%;}
 }
+
+
+/* V2.43 Find a Subcontractor */
+.field-assignment-head-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end;}
+.contractor-search-panel .form-grid{align-items:end;}
+.contractor-location-field{grid-column:span 1;}
+.contractor-search-note{margin-top:14px;padding:12px 14px;border:1px solid #d0d5dd;border-radius:10px;background:#f8fafc;color:#475467;font-size:12px;line-height:1.5;}
+.contractor-search-config-warning{border-color:#fedf89;background:#fffaeb;}
+.contractor-search-config-warning code{font-weight:800;}
+.contractor-search-error{border-color:#fda29b;background:#fef3f2;color:#b42318;}
+.contractor-results-panel .section-heading-row{align-items:flex-start;}
+.contractor-search-usage{font-size:11px;color:var(--muted);font-weight:700;white-space:nowrap;}
+.contractor-result-list{display:grid;gap:14px;}
+.contractor-result-card{border:1px solid var(--border);border-radius:12px;background:#fff;padding:16px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:center;}
+.contractor-result-main{min-width:0;display:grid;gap:8px;}
+.contractor-result-title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;}
+.contractor-result-title-row h3{margin:0;font-size:17px;}
+.contractor-result-title-row>div:first-child{min-width:0;display:grid;gap:3px;}
+.contractor-result-title-row>div:first-child span{font-size:12px;color:var(--muted);}
+.contractor-result-address{margin:0;color:#475467;font-size:12px;}
+.contractor-result-contact{display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-size:12px;color:#475467;}
+.contractor-fit-score{flex:0 0 auto;min-width:78px;padding:8px 10px;border:1px solid #d0d5dd;border-radius:10px;background:#f8fafc;text-align:center;display:grid;gap:2px;}
+.contractor-fit-score strong{font-size:22px;line-height:1;color:var(--text);}
+.contractor-fit-score span{font-size:8px!important;font-weight:900;letter-spacing:.05em;color:#667085!important;}
+.contractor-result-actions{display:grid;gap:8px;justify-items:stretch;min-width:220px;}
+.contractor-result-actions>form{display:grid;gap:8px;}
+.contractor-result-actions .status-pill{justify-self:end;}
+.contractor-source-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+.contractor-source-grid>div{border:1px solid var(--border);border-radius:10px;padding:12px;display:grid;gap:4px;min-width:0;}
+.contractor-source-grid span{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:800;}
+.contractor-source-grid strong{font-size:12px;overflow-wrap:anywhere;}
+.crew-source-location{display:block;color:#667085;margin-top:2px;max-width:460px;}
+@media(max-width:780px){
+  .contractor-result-card{grid-template-columns:1fr;}
+  .contractor-result-actions{min-width:0;}
+  .contractor-result-actions .status-pill{justify-self:start;}
+  .contractor-source-grid{grid-template-columns:1fr;}
+  .field-assignment-head-actions{justify-content:flex-start;}
+}

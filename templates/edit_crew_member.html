@@ -71,6 +71,24 @@
   </div>
 </section>
 
+{% if member['source_place_id'] or member['source_address'] or member['source_website'] %}
+<section class="panel contractor-source-panel">
+  <div class="section-heading-row">
+    <div>
+      <div class="eyebrow">Found Online</div>
+      <h2>Discovery Source</h2>
+      <p>Reference details captured when this subcontractor was saved from Find a Subcontractor. These do not mean the business has been qualified or verified by DispatchProof.</p>
+    </div>
+    <span class="status-pill crew-type-sub">SEARCHED SUB</span>
+  </div>
+  <div class="contractor-source-grid">
+    {% if member['source_address'] %}<div><span>Address</span><strong>{{ member['source_address'] }}</strong></div>{% endif %}
+    {% if member['source_website'] %}<div><span>Website</span><strong><a class="text-link" target="_blank" rel="noopener" href="{{ member['source_website'] }}">Open website ↗</a></strong></div>{% endif %}
+    {% if member['source_provider'] %}<div><span>Discovery Source</span><strong>{{ member['source_provider']|title }}</strong></div>{% endif %}
+  </div>
+</section>
+{% endif %}
+
 <section class="panel" id="availability">
   <div class="section-heading-row">
     <div>
