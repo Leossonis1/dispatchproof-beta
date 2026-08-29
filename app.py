@@ -18,6 +18,7 @@ import csv
 import io
 import hashlib
 import time
+import requests
 from email.message import EmailMessage
 from urllib.parse import urlencode, urlparse
 from urllib.request import Request as URLRequest, urlopen
@@ -1133,39 +1134,76 @@ def route_http_json(url, params=None, payload=None, timeout=35):
         raise RouteOptimizationError(
             "Route Optimization is not configured yet. Add an openrouteservice API key in Render first."
         )
-    if params:
-        url = f"{url}?{urlencode(params)}"
+
+    # V2.44.1: use requests/urllib3 for HeiGIT routing calls instead of
+    # urllib.request. On Render/Python 3.14 the HeiGIT edge occasionally
+    # produced http.client.BadStatusLine before urllib could parse a response,
+    # which escaped the route error handler and caused a 500 page. Requests is
+    # more tolerant here, and a short retry keeps transient edge disconnects
+    # from turning into a failed route calculation.
+    method = "POST" if payload is not None else "GET"
     headers = {
         "Authorization": ROUTE_OPTIMIZATION_API_KEY,
         "Accept": "application/json, application/geo+json",
-        "User-Agent": "DispatchProof/2.44 route-optimization",
+        "User-Agent": "DispatchProof/2.44.1 route-optimization",
+        "Connection": "close",
     }
-    data = None
-    if payload is not None:
-        data = json.dumps(payload).encode("utf-8")
-        headers["Content-Type"] = "application/json"
-    req = URLRequest(url, data=data, headers=headers, method="POST" if data is not None else "GET")
-    try:
-        with urlopen(req, timeout=timeout) as response:
-            body = response.read().decode("utf-8", errors="replace")
-            return json.loads(body or "null")
-    except HTTPError as exc:
+
+    last_error = None
+    for attempt in range(2):
         try:
-            body = exc.read().decode("utf-8", errors="replace")[:1000]
-        except Exception:
-            body = ""
+            response = requests.request(
+                method,
+                url,
+                params=params or None,
+                json=payload if payload is not None else None,
+                headers=headers,
+                timeout=timeout,
+            )
+        except requests.RequestException as exc:
+            last_error = exc
+            if attempt == 0:
+                time.sleep(0.35)
+                continue
+            print(f"Route optimization request failed after retry: {exc}")
+            raise RouteOptimizationError(
+                "DispatchProof could not reach the routing service. Please try again."
+            )
+
+        body = response.text or ""
         lower = body.lower()
-        if exc.code in (401, 403):
-            raise RouteOptimizationError("The routing service rejected the API key. Check the key in Render and try again.")
-        if exc.code == 429 or "quota" in lower or "rate limit" in lower:
-            raise RouteOptimizationError("The routing service quota is temporarily exhausted. Try again after the quota resets.")
-        if exc.code == 400:
-            raise RouteOptimizationError("The routing service could not calculate this route. Check the selected addresses and try again.")
-        print(f"Route API HTTP {exc.code}: {body}")
+        if 200 <= response.status_code < 300:
+            try:
+                return response.json() if body else None
+            except ValueError as exc:
+                print(f"Route API returned invalid JSON: {body[:500]}")
+                raise RouteOptimizationError(
+                    "The routing service returned an unreadable response. Please try again."
+                ) from exc
+
+        # Retry transient provider/gateway errors once before showing the user
+        # a friendly message. Do not retry authentication, quota, or bad input.
+        if response.status_code in (502, 503, 504) and attempt == 0:
+            last_error = RuntimeError(f"HTTP {response.status_code}")
+            time.sleep(0.35)
+            continue
+        if response.status_code in (401, 403):
+            raise RouteOptimizationError(
+                "The routing service rejected the API key. Check the key in Render and try again."
+            )
+        if response.status_code == 429 or "quota" in lower or "rate limit" in lower:
+            raise RouteOptimizationError(
+                "The routing service quota is temporarily exhausted. Try again after the quota resets."
+            )
+        if response.status_code == 400:
+            raise RouteOptimizationError(
+                "The routing service could not calculate this route. Check the selected addresses and try again."
+            )
+        print(f"Route API HTTP {response.status_code}: {body[:1000]}")
         raise RouteOptimizationError("The routing service returned an error. Please try again.")
-    except (URLError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
-        print(f"Route optimization request failed: {exc}")
-        raise RouteOptimizationError("DispatchProof could not reach the routing service. Please try again.")
+
+    print(f"Route optimization request failed: {last_error}")
+    raise RouteOptimizationError("DispatchProof could not reach the routing service. Please try again.")
 
 
 def route_geocode(db, address):
@@ -3867,7 +3905,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.44",
+        "app_version": "2.44.1",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -4072,7 +4110,7 @@ def create_workspace_export_archive():
         "export_format": 2,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.44",
+        "app_version": "2.44.1",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -4871,7 +4909,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.44",
+        "app_version": "2.44.1",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
