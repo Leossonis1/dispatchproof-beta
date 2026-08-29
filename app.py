@@ -2794,7 +2794,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.40.2",
+        "app_version": "2.40.3",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2993,7 +2993,7 @@ def create_workspace_export_archive():
         "export_format": 2,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.40.2",
+        "app_version": "2.40.3",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -3753,7 +3753,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.40.2",
+        "app_version": "2.40.3",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -4082,6 +4082,10 @@ def commit_my_workspace_restore():
         flash("Owner and Administrator accounts should use the full Backup & Restore page.")
         return redirect(url_for("backup_restore"))
     token = (request.form.get("restore_token") or "").strip()
+    app.logger.info("Workspace restore commit requested user_id=%r token_prefix=%s", current_user_id(), token[:8] if token else "")
+    if request.form.get("confirm_restore") != "yes":
+        flash("Confirm that you want to restore the previewed workspace before continuing.")
+        return redirect(url_for("my_account") + "#workspace-restore")
     if not re.fullmatch(r"[A-Za-z0-9_-]{20,80}", token):
         flash("That workspace restore preview is no longer valid. Please upload the ZIP again.")
         return redirect(url_for("my_account") + "#workspace-restore")
