@@ -62,8 +62,8 @@
 
     <div class="copy-box" id="clientReportLink">{{ report_url }}</div>
     <div class="button-row">
-      <button class="btn primary" type="button" id="copyClientReportButton" onclick="copyClientReportLink()">Copy Report Link</button>
-      <a class="btn action-blue" target="_blank" rel="noopener" href="{{ report_url }}">Open Client Report</a>
+      <button class="btn primary" type="button" id="copyClientReportButton" data-dispatch-copy data-copy-href-source="openClientReportLink">Copy Report Link</button>
+      <a class="btn action-blue" id="openClientReportLink" target="_blank" rel="noopener" href="{{ report_url }}">Open Client Report</a>
     </div>
 
     <div class="security-note-card">
@@ -76,20 +76,4 @@
   </section>
 </div>
 
-<script>
-async function copyClientReportLink() {
-  const link = document.getElementById('clientReportLink');
-  const button = document.getElementById('copyClientReportButton');
-  if (!link || !button) return;
-  const url = link.textContent.trim();
-
-  try {
-    await navigator.clipboard.writeText(url);
-    button.textContent = 'Copied!';
-    setTimeout(() => button.textContent = 'Copy Report Link', 1600);
-  } catch (e) {
-    window.prompt('Copy this report link:', url);
-  }
-}
-</script>
 {% endblock %}

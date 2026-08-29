@@ -76,6 +76,95 @@
   </main>
 </div>
 <script>
+function dispatchProofLegacyCopyText(text) {
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.setAttribute('readonly', '');
+  area.style.position = 'fixed';
+  area.style.left = '-9999px';
+  area.style.top = '0';
+  document.body.appendChild(area);
+  area.focus();
+  area.select();
+  area.setSelectionRange(0, area.value.length);
+
+  let copied = false;
+  try {
+    copied = document.execCommand('copy');
+  } catch (e) {
+    copied = false;
+  }
+
+  document.body.removeChild(area);
+  return copied;
+}
+
+async function dispatchProofCopyText(text) {
+  const value = (text || '').trim();
+  if (!value) return false;
+
+  // Try the synchronous copy path first while the button click still has
+  // browser user-activation. This is more reliable when Clipboard API
+  // permissions are restricted by the browser or hosting environment.
+  if (dispatchProofLegacyCopyText(value)) return true;
+
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  return false;
+}
+
+function dispatchProofCopyValue(button) {
+  if (!button) return '';
+
+  const hrefSourceId = button.dataset.copyHrefSource;
+  if (hrefSourceId) {
+    const link = document.getElementById(hrefSourceId);
+    if (link && link.href) return link.href.trim();
+  }
+
+  const textSourceId = button.dataset.copyTextSource;
+  if (textSourceId) {
+    const source = document.getElementById(textSourceId);
+    if (source) return (source.textContent || '').trim();
+  }
+
+  return (button.dataset.copyValue || button.dataset.copyUrl || '').trim();
+}
+
+document.addEventListener('click', async function(event) {
+  const button = event.target.closest('[data-dispatch-copy]');
+  if (!button) return;
+
+  event.preventDefault();
+  const value = dispatchProofCopyValue(button);
+  if (!value) {
+    window.alert('No link is available to copy.');
+    return;
+  }
+
+  const copied = await dispatchProofCopyText(value);
+  if (copied) {
+    const original = button.dataset.copyOriginalLabel || button.textContent;
+    button.dataset.copyOriginalLabel = original;
+    button.textContent = 'Copied!';
+    button.disabled = true;
+    window.setTimeout(function() {
+      button.textContent = original;
+      button.disabled = false;
+    }, 1600);
+    return;
+  }
+
+  window.prompt('Copy this link:', value);
+});
+
 document.addEventListener('DOMContentLoaded', function(){
   document.querySelectorAll('label').forEach(function(label){
     const required = label.querySelector('input[required]:not([type="radio"]):not([type="checkbox"]), select[required], textarea[required]');
