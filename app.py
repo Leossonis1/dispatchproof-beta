@@ -2794,7 +2794,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.40",
+        "app_version": "2.40.1",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2851,7 +2851,14 @@ def _csv_text(rows):
 
 
 def build_workspace_export_data(db):
-    """Return only job data the current signed-in user can access right now."""
+    """Build an Operator-safe workspace snapshot.
+
+    Private job data remains limited by job_visibility_sql(). Shared setup masters
+    (Clients, Projects, Crew and their shared documents) are included because
+    Operators can already access and maintain those company-wide records in the UI.
+    This lets a workspace backup preserve useful setup progress even before a job
+    has successfully been created.
+    """
     visibility_clause, visibility_params = job_visibility_sql("j")
     jobs = _rows_as_dicts(db.execute(f"""
         SELECT j.*
@@ -2869,10 +2876,7 @@ def build_workspace_export_data(db):
     activity = _select_for_job_ids(db, "activity_log", job_ids, "job_id ASC, created_at ASC, id ASC")
     crew_assignments = _select_for_job_ids(db, "job_crew_assignments", job_ids, "job_id ASC, sort_order ASC, id ASC")
 
-    client_ids = sorted({row["client_id"] for row in jobs if row.get("client_id")})
-    project_ids = sorted({row["project_id"] for row in jobs if row.get("project_id")})
     team_ids = sorted({row["team_id"] for row in jobs if row.get("team_id")})
-    crew_ids = sorted({row["crew_member_id"] for row in crew_assignments if row.get("crew_member_id")})
 
     def select_ids(table, ids, columns="*"):
         if not ids:
@@ -2883,22 +2887,34 @@ def build_workspace_export_data(db):
             tuple(ids),
         ).fetchall())
 
+    # Clients, Projects and Crew are shared company setup records in DispatchProof.
+    # Including them does not expose another PM's private jobs, and it protects work
+    # done before the first job exists.
+    clients = _rows_as_dicts(db.execute("SELECT * FROM clients ORDER BY LOWER(name), id").fetchall())
+    projects = _rows_as_dicts(db.execute("SELECT * FROM projects ORDER BY client_id, LOWER(name), id").fetchall())
+    crew_members = _rows_as_dicts(db.execute("SELECT * FROM crew_members ORDER BY LOWER(name), id").fetchall())
+    crew_unavailability = _rows_as_dicts(db.execute("SELECT * FROM crew_unavailability ORDER BY crew_member_id, start_date, id").fetchall())
+    client_documents = _rows_as_dicts(db.execute("SELECT * FROM client_documents ORDER BY client_id, created_at, id").fetchall())
+    project_documents = _rows_as_dicts(db.execute("SELECT * FROM project_documents ORDER BY project_id, created_at, id").fetchall())
+
     data = {
         "jobs": jobs,
-        "clients": select_ids("clients", client_ids),
-        "projects": select_ids("projects", project_ids),
+        "clients": clients,
+        "projects": projects,
         "teams": select_ids("teams", team_ids, "id, name, share_jobs, created_at, updated_at"),
         "readiness_confirmations": readiness,
         "mobilization_attempts": mobilizations,
         "job_notes": notes,
         "job_documents": documents,
+        "client_documents": client_documents,
+        "project_documents": project_documents,
         "email_events": emails,
         "activity_log": activity,
         "job_crew_assignments": crew_assignments,
-        "crew_members": select_ids("crew_members", crew_ids),
+        "crew_members": crew_members,
+        "crew_unavailability": crew_unavailability,
     }
     return data
-
 
 def workspace_export_stats(db):
     data = build_workspace_export_data(db)
@@ -2916,8 +2932,11 @@ def workspace_export_stats(db):
         "job_documents": len(data["job_documents"]),
         "evidence_files": len({name for name in evidence if name}),
         "team_jobs": sum(1 for job in data["jobs"] if job.get("team_id")),
+        "clients": len(data["clients"]),
+        "projects": len(data["projects"]),
+        "crew_members": len(data["crew_members"]),
+        "shared_documents": len(data["client_documents"]) + len(data["project_documents"]),
     }
-
 
 def create_workspace_export_archive():
     """Create a non-destructive, user-scoped backup/export ZIP.
@@ -2937,7 +2956,7 @@ def create_workspace_export_archive():
     missing_files = []
     included_uploads = set()
 
-    def add_upload(z, stored_filename, archive_name, job_id, kind, original_filename=None):
+    def add_upload(z, stored_filename, archive_name, job_id, kind, original_filename=None, entity_type=None, entity_id=None, document_id=None):
         if not stored_filename:
             return
         stored_filename = str(stored_filename)
@@ -2954,26 +2973,33 @@ def create_workspace_export_archive():
             return
         z.write(source, archive_name)
         included_uploads.add(stored_filename)
-        file_index.append({
+        entry = {
             "job_id": job_id,
             "kind": kind,
             "stored_filename": stored_filename,
             "original_filename": original_filename or stored_filename,
             "archive_path": str(archive_name).replace("\\", "/"),
-        })
+        }
+        if entity_type:
+            entry["entity_type"] = entity_type
+        if entity_id is not None:
+            entry["entity_id"] = entity_id
+        if document_id is not None:
+            entry["document_id"] = document_id
+        file_index.append(entry)
 
     manifest = {
         "product": PRODUCT_NAME,
-        "export_format": 1,
+        "export_format": 2,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.40",
+        "app_version": "2.40.1",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
             "role": current_user_role(),
         },
-        "scope_note": "Contains only jobs and job-linked files this account could access at export time. Full-system restore remains Owner/Administrator-only.",
+        "scope_note": "Contains this account's authorized jobs plus shared Clients, Projects, Crew, and shared setup documents visible to Operators. It never includes another PM's private jobs. Full-system restore remains Owner/Administrator-only.",
         "counts": {key: len(rows) for key, rows in data.items()},
     }
 
@@ -2985,7 +3011,7 @@ def create_workspace_export_archive():
             "DispatchProof Workspace Export\n"
             "==============================\n\n"
             "This ZIP is a personal/team workspace backup for reference and file recovery.\n"
-            "It contains only jobs this account was authorized to access when the export was created.\n"
+            "It contains jobs this account was authorized to access plus shared Clients, Projects, Crew and setup documents visible to Operators.\n"
             "It does not contain other PMs' private jobs, user passwords, or the full company database.\n"
             "Only Owner/Administrator full-system backups can be restored over DispatchProof.\n\n"
             "Store this ZIP securely because it may contain customer contact information, job history, and site evidence.\n"
@@ -3005,6 +3031,24 @@ def create_workspace_export_archive():
                 doc["job_id"],
                 "job_document",
                 doc.get("original_filename"),
+            )
+
+        # Shared Client / Project documents. These records are already visible to
+        # Operators in the shared setup areas, and are restored additively only.
+        for doc in data.get("client_documents") or []:
+            safe_original = secure_filename(doc.get("original_filename") or "") or doc["stored_filename"]
+            archive_name = Path("files") / "shared" / "clients" / f"client_{doc['client_id']}" / f"{doc['id']}_{safe_original}"
+            add_upload(
+                z, doc["stored_filename"], archive_name, None, "client_document",
+                doc.get("original_filename"), entity_type="client", entity_id=doc.get("client_id"), document_id=doc.get("id"),
+            )
+
+        for doc in data.get("project_documents") or []:
+            safe_original = secure_filename(doc.get("original_filename") or "") or doc["stored_filename"]
+            archive_name = Path("files") / "shared" / "projects" / f"project_{doc['project_id']}" / f"{doc['id']}_{safe_original}"
+            add_upload(
+                z, doc["stored_filename"], archive_name, None, "project_document",
+                doc.get("original_filename"), entity_type="project", entity_id=doc.get("project_id"), document_id=doc.get("id"),
             )
 
         # Readiness / arrival evidence, including archived attempts.
@@ -3079,7 +3123,8 @@ def inspect_workspace_restore_zip(zip_path):
             file_index = json.loads(z.read("file_index.json").decode("utf-8"))
             if manifest.get("product") != PRODUCT_NAME or manifest.get("export_type") != "user_workspace":
                 return False, "This is not a DispatchProof user workspace backup.", None
-            if int(manifest.get("export_format") or 0) != 1:
+            export_format = int(manifest.get("export_format") or 0)
+            if export_format not in {1, 2}:
                 return False, "This workspace backup format is not supported by this version of DispatchProof.", None
             backup_user = ((manifest.get("exported_for") or {}).get("username") or "").strip()
             if backup_user.lower() != (current_username() or "").strip().lower():
@@ -3091,20 +3136,84 @@ def inspect_workspace_restore_zip(zip_path):
         return False, "The selected file is not a valid DispatchProof workspace ZIP.", None
 
     jobs = data.get("jobs") or []
+    clients = data.get("clients") or []
+    projects = data.get("projects") or []
+    crew_members = data.get("crew_members") or []
     user_id = current_user_id()
     source_ids = {job.get("id"): _workspace_source_identity(manifest, job) for job in jobs}
     already = set()
-    if user_id and source_ids:
-        with get_db() as db:
+
+    with get_db() as db:
+        if user_id and source_ids:
             placeholders = ",".join("?" for _ in source_ids.values())
             rows = db.execute(
                 f"SELECT source_identity FROM workspace_restore_items WHERE user_id = ? AND source_identity IN ({placeholders})",
                 (user_id, *source_ids.values()),
             ).fetchall()
             already = {row["source_identity"] for row in rows}
+
+        live_clients = {str(r["name"] or "").strip().lower(): r["id"] for r in db.execute("SELECT id, name FROM clients").fetchall()}
+        live_projects = {(r["client_id"], str(r["name"] or "").strip().lower()) for r in db.execute("SELECT client_id, name FROM projects").fetchall()}
+        live_crew = {str(r["name"] or "").strip().lower(): r["id"] for r in db.execute("SELECT id, name FROM crew_members").fetchall()}
+
+        backup_client_names = {r.get("id"): str(r.get("name") or "").strip().lower() for r in clients}
+        new_clients = [r for r in clients if backup_client_names.get(r.get("id")) and backup_client_names.get(r.get("id")) not in live_clients]
+
+        new_projects = []
+        for row in projects:
+            pname = str(row.get("name") or "").strip().lower()
+            cname = backup_client_names.get(row.get("client_id"))
+            live_client_id = live_clients.get(cname) if cname else None
+            if pname and (not live_client_id or (live_client_id, pname) not in live_projects):
+                new_projects.append(row)
+
+        new_crew = [r for r in crew_members if str(r.get("name") or "").strip().lower() and str(r.get("name") or "").strip().lower() not in live_crew]
+
+        # Preview shared documents as new only when an equivalent original filename + size
+        # is not already attached to the matched live entity.
+        new_client_docs = 0
+        for row in data.get("client_documents") or []:
+            cname = backup_client_names.get(row.get("client_id"))
+            live_client_id = live_clients.get(cname) if cname else None
+            if not live_client_id:
+                new_client_docs += 1
+                continue
+            exists = db.execute(
+                "SELECT 1 FROM client_documents WHERE client_id = ? AND original_filename = ? COLLATE NOCASE AND file_size = ? LIMIT 1",
+                (live_client_id, row.get("original_filename") or "", int(row.get("file_size") or 0)),
+            ).fetchone()
+            if not exists:
+                new_client_docs += 1
+
+        backup_projects = {r.get("id"): r for r in projects}
+        new_project_docs = 0
+        for row in data.get("project_documents") or []:
+            project = backup_projects.get(row.get("project_id"))
+            cname = backup_client_names.get(project.get("client_id")) if project else None
+            live_client_id = live_clients.get(cname) if cname else None
+            pname = str(project.get("name") or "").strip().lower() if project else ""
+            live_project = None
+            if live_client_id and pname:
+                live_project = db.execute(
+                    "SELECT id FROM projects WHERE client_id = ? AND name = ? COLLATE NOCASE",
+                    (live_client_id, project.get("name")),
+                ).fetchone()
+            if not live_project:
+                new_project_docs += 1
+                continue
+            exists = db.execute(
+                "SELECT 1 FROM project_documents WHERE project_id = ? AND original_filename = ? COLLATE NOCASE AND file_size = ? LIMIT 1",
+                (live_project["id"], row.get("original_filename") or "", int(row.get("file_size") or 0)),
+            ).fetchone()
+            if not exists:
+                new_project_docs += 1
+
     new_jobs = [job for job in jobs if source_ids.get(job.get("id")) not in already]
     new_ids = {job.get("id") for job in new_jobs}
-    available_files = [f for f in file_index if f.get("job_id") in new_ids and f.get("archive_path")]
+    available_job_files = [f for f in file_index if f.get("job_id") in new_ids and f.get("archive_path")]
+    shared_file_count = sum(1 for f in file_index if f.get("kind") in {"client_document", "project_document"} and f.get("archive_path"))
+    restorable_items = len(new_jobs) + len(new_clients) + len(new_projects) + len(new_crew) + new_client_docs + new_project_docs
+
     preview = {
         "manifest": manifest,
         "data": data,
@@ -3115,14 +3224,20 @@ def inspect_workspace_restore_zip(zip_path):
         "new_jobs": len(new_jobs),
         "already_restored": len(jobs) - len(new_jobs),
         "team_jobs_as_personal": sum(1 for job in new_jobs if job.get("team_id")),
-        "available_files": len(available_files),
+        "available_files": len(available_job_files) + shared_file_count,
         "job_documents": sum(1 for row in (data.get("job_documents") or []) if row.get("job_id") in new_ids),
         "crew_assignments": sum(1 for row in (data.get("job_crew_assignments") or []) if row.get("job_id") in new_ids),
+        "new_clients": len(new_clients),
+        "new_projects": len(new_projects),
+        "new_crew": len(new_crew),
+        "new_shared_documents": new_client_docs + new_project_docs,
+        "setup_records_in_zip": len(clients) + len(projects) + len(crew_members),
+        "restorable_items": restorable_items,
+        "export_format": export_format,
         "skipped_email_events": sum(1 for row in (data.get("email_events") or []) if row.get("job_id") in new_ids),
         "skipped_activity": sum(1 for row in (data.get("activity_log") or []) if row.get("job_id") in new_ids),
     }
     return True, None, preview
-
 
 def _restore_insert_row(db, table, row, exclude=None, overrides=None):
     exclude = set(exclude or ())
@@ -3158,15 +3273,16 @@ def restore_workspace_archive(zip_path):
         return False, "Workspace restore is available to Operator accounts only.", None
 
     data = preview["data"]
-    manifest = preview["manifest"]
     identities = preview["source_identities"]
     user_id = current_user_id()
     created_files = []
-    stats = {"jobs": 0, "files": 0, "already_restored": preview["already_restored"], "team_copies": 0}
+    stats = {
+        "jobs": 0, "files": 0, "already_restored": preview["already_restored"], "team_copies": 0,
+        "clients": 0, "projects": 0, "crew": 0, "shared_documents": 0, "unavailability": 0,
+    }
 
     with zipfile.ZipFile(zip_path, "r") as z, get_db() as db:
         try:
-            # Determine which source jobs are still new at commit time.
             import_jobs = []
             for job in data.get("jobs") or []:
                 identity = identities.get(job.get("id"))
@@ -3177,16 +3293,13 @@ def restore_workspace_archive(zip_path):
                 if not exists:
                     import_jobs.append(job)
             source_job_ids = {job.get("id") for job in import_jobs}
-            if not source_job_ids:
-                return True, None, stats
 
-            # Reuse company-wide client/project/crew masters by natural name; create missing only.
+            # Shared setup masters are restored additively by natural name. Existing
+            # records are reused and never overwritten.
             client_map = {}
             clients_by_id = {row.get("id"): row for row in (data.get("clients") or [])}
-            needed_client_ids = {job.get("client_id") for job in import_jobs if job.get("client_id")}
-            for old_id in needed_client_ids:
-                row = clients_by_id.get(old_id)
-                if not row or not row.get("name"):
+            for old_id, row in clients_by_id.items():
+                if not row.get("name"):
                     continue
                 existing = db.execute("SELECT id FROM clients WHERE name = ? COLLATE NOCASE", (row["name"],)).fetchone()
                 if existing:
@@ -3196,13 +3309,12 @@ def restore_workspace_archive(zip_path):
                         db, "clients", row, exclude={"id", "report_token"},
                         overrides={"report_token": secrets.token_urlsafe(24), "created_at": row.get("created_at") or now_iso(), "updated_at": now_iso()},
                     )
+                    stats["clients"] += 1
 
             project_map = {}
             projects_by_id = {row.get("id"): row for row in (data.get("projects") or [])}
-            needed_project_ids = {job.get("project_id") for job in import_jobs if job.get("project_id")}
-            for old_id in needed_project_ids:
-                row = projects_by_id.get(old_id)
-                if not row or not row.get("name"):
+            for old_id, row in projects_by_id.items():
+                if not row.get("name"):
                     continue
                 live_client_id = client_map.get(row.get("client_id"))
                 if not live_client_id:
@@ -3218,14 +3330,12 @@ def restore_workspace_archive(zip_path):
                         db, "projects", row, exclude={"id", "report_token", "client_id"},
                         overrides={"report_token": secrets.token_urlsafe(24), "client_id": live_client_id, "created_at": row.get("created_at") or now_iso(), "updated_at": now_iso()},
                     )
+                    stats["projects"] += 1
 
-            assignments = [r for r in (data.get("job_crew_assignments") or []) if r.get("job_id") in source_job_ids]
-            needed_crew_ids = {r.get("crew_member_id") for r in assignments if r.get("crew_member_id")}
-            crew_by_id = {row.get("id"): row for row in (data.get("crew_members") or [])}
             crew_map = {}
-            for old_id in needed_crew_ids:
-                row = crew_by_id.get(old_id)
-                if not row or not row.get("name"):
+            crew_by_id = {row.get("id"): row for row in (data.get("crew_members") or [])}
+            for old_id, row in crew_by_id.items():
+                if not row.get("name"):
                     continue
                 existing = db.execute("SELECT id FROM crew_members WHERE name = ? COLLATE NOCASE", (row["name"],)).fetchone()
                 if existing:
@@ -3235,26 +3345,91 @@ def restore_workspace_archive(zip_path):
                         db, "crew_members", row, exclude={"id"},
                         overrides={"created_at": row.get("created_at") or now_iso(), "updated_at": now_iso()},
                     )
+                    stats["crew"] += 1
 
-            # Restore linked files under fresh storage names before rewriting JSON references.
-            file_map = {}
-            file_index = [f for f in preview["file_index"] if f.get("job_id") in source_job_ids]
-            names = set(z.namelist())
-            for item in file_index:
-                archive_path = item.get("archive_path")
-                old_name = str(item.get("stored_filename") or "")
-                if not archive_path or not old_name or archive_path not in names:
+            for row in data.get("crew_unavailability") or []:
+                live_crew_id = crew_map.get(row.get("crew_member_id"))
+                if not live_crew_id:
                     continue
+                exists = db.execute(
+                    "SELECT 1 FROM crew_unavailability WHERE crew_member_id = ? AND start_date = ? AND end_date = ? AND COALESCE(reason,'') = COALESCE(?, '') LIMIT 1",
+                    (live_crew_id, row.get("start_date"), row.get("end_date"), row.get("reason")),
+                ).fetchone()
+                if not exists:
+                    _restore_insert_row(db, "crew_unavailability", row, exclude={"id", "crew_member_id"}, overrides={"crew_member_id": live_crew_id})
+                    stats["unavailability"] += 1
+
+            names = set(z.namelist())
+            file_index = preview["file_index"]
+
+            def restore_file(item, fallback_name="restored_file"):
+                archive_path = item.get("archive_path")
+                if not archive_path or archive_path not in names:
+                    return None
                 info = z.getinfo(archive_path)
                 if info.file_size > MAX_JOB_DOCUMENT_BYTES:
-                    continue
-                original = secure_filename(item.get("original_filename") or old_name) or "restored_file"
+                    return None
+                original = secure_filename(item.get("original_filename") or item.get("stored_filename") or fallback_name) or fallback_name
                 new_name = f"restore_{secrets.token_hex(10)}_{original}"
                 target = UPLOAD_DIR / new_name
                 target.write_bytes(z.read(archive_path))
                 created_files.append(target)
-                file_map[old_name] = new_name
                 stats["files"] += 1
+                return new_name
+
+            file_by_stored = {str(item.get("stored_filename") or ""): item for item in file_index if item.get("stored_filename")}
+
+            # Restore shared Client / Project documents additively.
+            for row in data.get("client_documents") or []:
+                live_client_id = client_map.get(row.get("client_id"))
+                if not live_client_id:
+                    continue
+                exists = db.execute(
+                    "SELECT 1 FROM client_documents WHERE client_id = ? AND original_filename = ? COLLATE NOCASE AND file_size = ? LIMIT 1",
+                    (live_client_id, row.get("original_filename") or "", int(row.get("file_size") or 0)),
+                ).fetchone()
+                if exists:
+                    continue
+                item = file_by_stored.get(str(row.get("stored_filename") or ""))
+                new_stored = restore_file(item) if item else None
+                if not new_stored:
+                    continue
+                restored = dict(row)
+                restored["stored_filename"] = new_stored
+                restored["file_size"] = (UPLOAD_DIR / new_stored).stat().st_size
+                _restore_insert_row(db, "client_documents", restored, exclude={"id", "client_id"}, overrides={"client_id": live_client_id})
+                stats["shared_documents"] += 1
+
+            for row in data.get("project_documents") or []:
+                live_project_id = project_map.get(row.get("project_id"))
+                if not live_project_id:
+                    continue
+                exists = db.execute(
+                    "SELECT 1 FROM project_documents WHERE project_id = ? AND original_filename = ? COLLATE NOCASE AND file_size = ? LIMIT 1",
+                    (live_project_id, row.get("original_filename") or "", int(row.get("file_size") or 0)),
+                ).fetchone()
+                if exists:
+                    continue
+                item = file_by_stored.get(str(row.get("stored_filename") or ""))
+                new_stored = restore_file(item) if item else None
+                if not new_stored:
+                    continue
+                restored = dict(row)
+                restored["stored_filename"] = new_stored
+                restored["file_size"] = (UPLOAD_DIR / new_stored).stat().st_size
+                _restore_insert_row(db, "project_documents", restored, exclude={"id", "project_id"}, overrides={"project_id": live_project_id})
+                stats["shared_documents"] += 1
+
+            # Restore job-linked files under fresh storage names before rewriting JSON references.
+            file_map = {}
+            job_file_index = [f for f in file_index if f.get("job_id") in source_job_ids]
+            for item in job_file_index:
+                old_name = str(item.get("stored_filename") or "")
+                if not old_name:
+                    continue
+                new_name = restore_file(item)
+                if new_name:
+                    file_map[old_name] = new_name
 
             job_map = {}
             job_by_old_id = {job.get("id"): job for job in import_jobs}
@@ -3296,6 +3471,7 @@ def restore_workspace_archive(zip_path):
                             restored[field] = _rewrite_filename_json(restored.get(field), file_map)
                     _restore_insert_row(db, table, restored, exclude={"id", "job_id"}, overrides={"job_id": job_map[old_job_id]})
 
+            assignments = [r for r in (data.get("job_crew_assignments") or []) if r.get("job_id") in source_job_ids]
             for row in assignments:
                 if row.get("job_id") not in job_map or row.get("crew_member_id") not in crew_map:
                     continue
@@ -3316,11 +3492,13 @@ def restore_workspace_archive(zip_path):
                 restored["file_size"] = target.stat().st_size if target.exists() else int(row.get("file_size") or 0)
                 _restore_insert_row(db, "job_documents", restored, exclude={"id", "job_id"}, overrides={"job_id": job_map[old_job_id]})
 
-            record_activity(
-                db,
-                "Workspace Restored",
-                f"Restored {stats['jobs']} personal job copy/copies and {stats['files']} linked file(s) from a workspace ZIP.",
-            )
+            total_changes = stats["jobs"] + stats["clients"] + stats["projects"] + stats["crew"] + stats["shared_documents"] + stats["unavailability"]
+            if total_changes:
+                record_activity(
+                    db,
+                    "Workspace Restored",
+                    f"Restored {stats['jobs']} job(s), {stats['clients']} client(s), {stats['projects']} project(s), {stats['crew']} crew record(s), and {stats['files']} linked file(s) from a workspace ZIP.",
+                )
             db.commit()
         except Exception:
             db.rollback()
@@ -3331,7 +3509,6 @@ def restore_workspace_archive(zip_path):
                     pass
             raise
     return True, None, stats
-
 
 def validate_backup_zip(zip_path):
     """Validate archive layout before any current data is touched."""
@@ -3576,7 +3753,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.40",
+        "app_version": "2.40.1",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -3759,7 +3936,7 @@ def not_found(error):
 def health():
     return {
         "status": "ok",
-        "version": "2.40",
+        "version": "2.40.1",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -3929,11 +4106,17 @@ def commit_my_workspace_restore():
         meta_path.unlink(missing_ok=True)
     if not ok:
         flash(error or "Workspace restore could not be completed.")
-    elif stats.get("jobs", 0) == 0:
-        flash("Nothing new was restored. The jobs in that backup were already imported into this account.")
     else:
-        extra = f" {stats['team_copies']} Team job(s) were restored as private personal copies." if stats.get("team_copies") else ""
-        flash(f"Workspace restored: {stats['jobs']} job(s) and {stats['files']} linked file(s).{extra}")
+        total_changes = sum(int(stats.get(key, 0) or 0) for key in ("jobs", "clients", "projects", "crew", "shared_documents", "unavailability"))
+        if total_changes == 0:
+            flash("Nothing new was restored. The records in that backup are already present in this workspace.")
+        else:
+            extra = f" {stats['team_copies']} Team job(s) were restored as private personal copies." if stats.get("team_copies") else ""
+            flash(
+                f"Workspace restored: {stats.get('jobs', 0)} job(s), {stats.get('clients', 0)} client(s), "
+                f"{stats.get('projects', 0)} project(s), {stats.get('crew', 0)} crew record(s), and "
+                f"{stats.get('files', 0)} linked file(s).{extra}"
+            )
     return redirect(url_for("my_account") + "#workspace-restore")
 
 
