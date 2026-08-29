@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}Route Optimization · {{ project['name'] }} · DispatchProof{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <a class="text-link" href="{{ url_for('project_detail', project_id=project['id']) }}">← Back to {{ project['name'] }}</a>
+    <div class="eyebrow">Rollout Planning</div>
+    <h1>Route Optimization</h1>
+    <p>{{ project['client_name'] }} · {{ project['name'] }}{% if project['location'] %} · {{ project['location'] }}{% endif %}</p>
+  </div>
+</div>
+
+{% if not route_configured %}
+<section class="route-setup-warning">
+  <div>
+    <div class="eyebrow">One-Time Setup</div>
+    <h2>Routing Service Key Needed</h2>
+    <p>Add <code>OPENROUTESERVICE_API_KEY</code> to this DispatchProof Render service. Route Optimization uses a separate routing key and does not consume Foursquare contractor-search credits.</p>
+  </div>
+  <strong>NOT<br>CONFIGURED</strong>
+</section>
+{% endif %}
+
+<section class="panel route-builder-panel">
+  <div class="panel-head">
+    <div>
+      <div class="eyebrow">Build the Route</div>
+      <h2>Select Rollout Stops</h2>
+      <p>Select 2–{{ route_max_jobs }} active jobs. Correct any location before optimizing; the route address does not change the job itself.</p>
+    </div>
+    <span class="internal-only-badge">INTERNAL ONLY</span>
+  </div>
+
+  {% if jobs %}
+  <form method="post" class="route-builder-form">
+    <input type="hidden" name="action" value="optimize">
+    <div class="route-start-grid">
+      <label>Starting Location <span class="required-star">*</span>
+        <input name="start_address" required
+               value="{{ route_plan['start_address'] if route_plan else (project['location'] or '') }}"
+               placeholder="Street address, city, state">
+      </label>
+      <label class="route-return-option">
+        <input type="checkbox" name="return_to_start" value="1" {% if route_plan and route_plan['return_to_start'] %}checked{% endif %}>
+        <span><strong>Return to starting location</strong><small>Leave off when the crew should finish at the last job.</small></span>
+      </label>
+    </div>
+
+    <div class="route-job-table">
+      <div class="route-job-head">
+        <span>Use</span><span>Job</span><span>Route Address</span>
+      </div>
+      {% for job in jobs %}
+      <div class="route-job-row">
+        <label class="route-check">
+          <input type="checkbox" name="job_ids" value="{{ job['id'] }}"
+                 {% if not route_plan or job['id'] in route_job_ids %}checked{% endif %}>
+        </label>
+        <div class="route-job-name">
+          <strong>{{ job['job_name'] }}</strong>
+          <span>{{ job['installation_date']|pretty_date }} · {{ job['status'] }}</span>
+        </div>
+        <label class="route-address-label">
+          <input aria-label="Route address for {{ job['job_name'] }}" name="address_{{ job['id'] }}"
+                 value="{{ route_address_by_job.get(job['id'], job['project_site'] or '') }}"
+                 placeholder="Street address, city, state">
+        </label>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="route-builder-footer">
+      <p>Optimization uses road travel time to determine the stop sequence. Completed jobs are excluded from the routing list.</p>
+      <button class="btn primary" type="submit" {% if not route_configured %}disabled title="Add the routing service key first"{% endif %}>Optimize Selected Jobs</button>
+    </div>
+  </form>
+  {% else %}
+  <div class="empty compact-empty">
+    <h3>No active jobs to route</h3>
+    <p>Add active installation jobs to this project before building a rollout route.</p>
+  </div>
+  {% endif %}
+</section>
+
+{% if route_plan and route_stops %}
+<section class="panel route-result-panel">
+  <div class="panel-head route-result-head">
+    <div>
+      <div class="eyebrow">Saved Route</div>
+      <h2>{{ route_stops|length }} Optimized Stop{{ '' if route_stops|length == 1 else 's' }}</h2>
+      <p>Saved for your DispatchProof workspace · updated {{ route_plan['updated_at']|pretty_datetime }}</p>
+    </div>
+    <form method="post" onsubmit="return confirm('Clear this saved route plan?');">
+      <input type="hidden" name="action" value="clear">
+      <button class="btn danger small-btn" type="submit">Clear Saved Route</button>
+    </form>
+  </div>
+
+  <div class="route-summary-grid">
+    <div><span>Total Driving</span><strong>{{ '%.1f'|format(route_miles(route_plan['total_distance_m'])) }} mi</strong></div>
+    <div><span>Drive Time</span><strong>{{ route_duration_label(route_plan['total_duration_s']) }}</strong></div>
+    <div><span>Start</span><strong>{{ route_plan['start_address'] }}</strong></div>
+    <div><span>Finish</span><strong>{{ 'Back at start' if route_plan['return_to_start'] else 'Last job' }}</strong></div>
+  </div>
+
+  {% if route_geometry %}
+  <div id="routeMap" class="route-map" aria-label="Optimized driving route map"></div>
+  <div class="route-map-note">Map route is based on the saved road-routing result. Drag/zoom the map for detail.</div>
+  {% endif %}
+
+  <form method="post" id="manualRouteForm" class="manual-route-form">
+    <input type="hidden" name="action" value="manual">
+    <input type="hidden" name="start_address" value="{{ route_plan['start_address'] }}">
+    {% if route_plan['return_to_start'] %}<input type="hidden" name="return_to_start" value="1">{% endif %}
+    <input type="hidden" name="manual_order" id="manualRouteOrder" value="{% for stop in route_stops %}{{ stop['job_id'] }}{% if not loop.last %},{% endif %}{% endfor %}">
+
+    <div class="route-stop-list" id="routeStopList">
+      <div class="route-origin-row">
+        <span class="route-stop-number">START</span>
+        <div><strong>{{ route_plan['start_address'] }}</strong><span>Crew starting location</span></div>
+      </div>
+      {% for stop in route_stops %}
+      <article class="route-stop-item" data-job-id="{{ stop['job_id'] }}">
+        <span class="route-stop-number" data-stop-number>{{ loop.index }}</span>
+        <div class="route-stop-main">
+          <strong>{{ stop['job_name'] }}</strong>
+          <span>{{ stop['route_address'] }}</span>
+          <small>{{ stop['installation_date']|pretty_date }} · {{ stop['status'] }}</small>
+        </div>
+        <div class="route-leg-meta">
+          <strong>{{ '%.1f'|format(route_miles(stop['leg_distance_m'])) }} mi</strong>
+          <span>{{ route_duration_label(stop['leg_duration_s']) }} from prior stop</span>
+        </div>
+        <div class="route-order-actions">
+          <button class="btn small-btn route-move-up" type="button" aria-label="Move {{ stop['job_name'] }} earlier">↑</button>
+          <button class="btn small-btn route-move-down" type="button" aria-label="Move {{ stop['job_name'] }} later">↓</button>
+          <a class="text-link" href="{{ url_for('job_detail', job_id=stop['job_id']) }}">Open Job →</a>
+        </div>
+      </article>
+      {% endfor %}
+      {% if route_plan['return_to_start'] %}
+      <div class="route-origin-row route-return-row">
+        <span class="route-stop-number">END</span>
+        <div><strong>{{ route_plan['start_address'] }}</strong><span>Return to starting location · included in total mileage/time</span></div>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="manual-route-footer">
+      <p>Use the arrows to make a real-world adjustment. Nothing is sent to the routing service until you click Save & Recalculate.</p>
+      <button class="btn action-blue" type="submit">Save Manual Order & Recalculate</button>
+    </div>
+  </form>
+</section>
+{% endif %}
+
+{% if route_geometry %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function(){
+  const geometry = {{ route_geometry|tojson }};
+  const stops = {{ route_stops|map(attribute='route_address')|list|tojson }};
+  const coords = {{ route_stops|map(attribute='lon')|list|tojson }};
+  const lats = {{ route_stops|map(attribute='lat')|list|tojson }};
+  const startLat = {{ route_plan['start_lat']|tojson }};
+  const startLon = {{ route_plan['start_lon']|tojson }};
+  const startAddress = {{ route_plan['start_address']|tojson }};
+  if (window.L && geometry && document.getElementById('routeMap')) {
+    const map = L.map('routeMap', {scrollWheelZoom:false});
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+    const routeLayer = L.geoJSON(geometry, {style:{weight:5, opacity:0.8}}).addTo(map);
+    L.marker([startLat,startLon]).addTo(map).bindPopup('<strong>START</strong><br>'+startAddress);
+    for (let i=0; i<lats.length; i++) {
+      L.marker([Number(lats[i]), Number(coords[i])]).addTo(map).bindPopup('<strong>Stop '+(i+1)+'</strong><br>'+String(stops[i] || ''));
+    }
+    map.fitBounds(routeLayer.getBounds(), {padding:[24,24]});
+  }
+})();
+</script>
+{% endif %}
+
+{% if route_plan and route_stops %}
+<script>
+(function(){
+  const list = document.getElementById('routeStopList');
+  const orderInput = document.getElementById('manualRouteOrder');
+  if (!list || !orderInput) return;
+  function items(){ return Array.from(list.querySelectorAll('.route-stop-item')); }
+  function refresh(){
+    const rows = items();
+    rows.forEach((row, index) => {
+      const number = row.querySelector('[data-stop-number]');
+      if (number) number.textContent = String(index + 1);
+      const up = row.querySelector('.route-move-up');
+      const down = row.querySelector('.route-move-down');
+      if (up) up.disabled = index === 0;
+      if (down) down.disabled = index === rows.length - 1;
+    });
+    orderInput.value = rows.map(row => row.dataset.jobId).join(',');
+  }
+  list.addEventListener('click', function(event){
+    const button = event.target.closest('.route-move-up, .route-move-down');
+    if (!button) return;
+    const row = button.closest('.route-stop-item');
+    if (!row) return;
+    if (button.classList.contains('route-move-up')) {
+      const prev = row.previousElementSibling;
+      if (prev && prev.classList.contains('route-stop-item')) list.insertBefore(row, prev);
+    } else {
+      const next = row.nextElementSibling;
+      if (next && next.classList.contains('route-stop-item')) list.insertBefore(next, row);
+    }
+    refresh();
+  });
+  refresh();
+})();
+</script>
+{% endif %}
+{% endblock %}
