@@ -2794,7 +2794,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.40.1",
+        "app_version": "2.40.2",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2993,7 +2993,7 @@ def create_workspace_export_archive():
         "export_format": 2,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.40.1",
+        "app_version": "2.40.2",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -3753,7 +3753,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.40.1",
+        "app_version": "2.40.2",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -3936,7 +3936,7 @@ def not_found(error):
 def health():
     return {
         "status": "ok",
-        "version": "2.40.1",
+        "version": "2.40.2",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -4433,6 +4433,54 @@ def delete_crew_unavailability(crew_member_id, availability_id):
 
     flash(f"Availability removed for {member['name']}.")
     return redirect(url_for("edit_crew_member", crew_member_id=crew_member_id) + "#availability")
+
+
+@app.post("/crew/<int:crew_member_id>/delete")
+def delete_crew_member(crew_member_id):
+    with get_db() as db:
+        member = db.execute(
+            "SELECT * FROM crew_members WHERE id = ?",
+            (crew_member_id,),
+        ).fetchone()
+        if not member:
+            abort(404)
+
+        assignment = db.execute(
+            "SELECT 1 FROM job_crew_assignments WHERE crew_member_id = ? LIMIT 1",
+            (crew_member_id,),
+        ).fetchone()
+        if assignment:
+            flash(
+                f"{member['name']} is linked to existing job history and cannot be permanently deleted. "
+                "Deactivate this crew member instead so past job records stay intact."
+            )
+            return redirect(url_for("crew_directory", status="all"))
+
+        try:
+            db.execute(
+                "DELETE FROM crew_unavailability WHERE crew_member_id = ?",
+                (crew_member_id,),
+            )
+            db.execute(
+                "DELETE FROM crew_members WHERE id = ?",
+                (crew_member_id,),
+            )
+            record_activity(
+                db,
+                "Crew Member Deleted",
+                f"Permanently deleted {member['name']} from Crew Directory. The crew member had no linked job history.",
+            )
+            db.commit()
+        except sqlite3.IntegrityError:
+            db.rollback()
+            flash(
+                f"{member['name']} could not be deleted because the crew member is linked to existing records. "
+                "Deactivate this crew member instead."
+            )
+            return redirect(url_for("crew_directory", status="all"))
+
+    flash(f"{member['name']} permanently deleted from Crew Directory.")
+    return redirect(url_for("crew_directory", status="all"))
 
 
 @app.post("/crew/<int:crew_member_id>/toggle")
