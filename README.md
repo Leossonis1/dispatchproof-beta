@@ -1,7 +1,7 @@
-# DispatchProof V2.43.1 Patch Only
+# DispatchProof V2.43.2 Patch Only
 
-Deploy this over V2.43.
+Apply this patch over V2.43.1.
 
-This patch only tightens Find a Subcontractor search quality. It filters obvious retail/showroom/supply false positives while preserving businesses that clearly advertise field installation or contracting.
+This is a search-precision update only. It makes Millwork / Carpentry installer/contractor-first and filters ambiguous cabinet/store/shop/manufacturer-style results unless the business name clearly advertises field service.
 
-No database migration or environment-variable changes are required.
+No database migration. Existing Foursquare key remains unchanged.

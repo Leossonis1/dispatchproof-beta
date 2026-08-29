@@ -1,5 +1,5 @@
-# V2.43.1 Render Deploy
+# V2.43.2 Render Deploy
 
-Apply these files over the current V2.43 repository, commit, and let Render redeploy normally.
+Deploy normally over V2.43.1.
 
-No database reset or new Render environment variables are required. Keep the existing `FOURSQUARE_SERVICE_API_KEY` unchanged.
+The existing `FOURSQUARE_SERVICE_API_KEY` is unchanged. No database reset or migration is required.
