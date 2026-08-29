@@ -17,7 +17,11 @@ import html as html_lib
 import csv
 import io
 import hashlib
+import time
 from email.message import EmailMessage
+from urllib.parse import urlencode, urlparse
+from urllib.request import Request as URLRequest, urlopen
+from urllib.error import HTTPError, URLError
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -53,6 +57,18 @@ except Exception:
 
 PUBLIC_BASE_URL = os.getenv("DISPATCHPROOF_PUBLIC_BASE_URL", "").strip().rstrip("/")
 RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
+
+# V2.43 lightweight contractor discovery. The same Foursquare service key used by
+# Leosson Contractor Finder can be reused here. DispatchProof keeps this as a
+# job/crew workflow feature rather than a separate contractor-management app.
+CONTRACTOR_SEARCH_API_KEY = (
+    os.getenv("DISPATCHPROOF_FOURSQUARE_API_KEY", "").strip()
+    or os.getenv("FOURSQUARE_SERVICE_API_KEY", "").strip()
+)
+CONTRACTOR_SEARCH_CACHE_TTL_SECONDS = max(0, int(os.getenv("CONTRACTOR_SEARCH_CACHE_TTL_SECONDS", "600")))
+CONTRACTOR_SEARCH_FALLBACK_MIN_RESULTS = max(1, int(os.getenv("CONTRACTOR_SEARCH_FALLBACK_MIN_RESULTS", "8")))
+_CONTRACTOR_SEARCH_CACHE = {}
+
 
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
 DOCUMENT_EXTENSIONS = {"pdf", "doc", "docx", "xls", "xlsx", "csv", "txt", "png", "jpg", "jpeg", "webp", "dwg", "dxf"}
@@ -189,6 +205,10 @@ def ensure_columns(db):
     crew_needed = {
         "member_type": "TEXT NOT NULL DEFAULT 'INTERNAL'",
         "company_name": "TEXT",
+        "source_provider": "TEXT",
+        "source_place_id": "TEXT",
+        "source_address": "TEXT",
+        "source_website": "TEXT",
     }
     for name, sql_type in crew_needed.items():
         if name not in crew_existing:
@@ -559,6 +579,414 @@ def ensure_columns(db):
 def normalize_crew_member_type(value):
     value = str(value or "").strip().upper()
     return value if value in {"INTERNAL", "SUBCONTRACTOR"} else "INTERNAL"
+
+
+# V2.43 contractor discovery intentionally reuses only the lightweight search
+# purpose of Leosson Contractor Finder. Saved results become normal DispatchProof
+# subcontractor directory records and then use the existing assignment/schedule logic.
+CONTRACTOR_COUNTRY_CONFIG = {
+    "US": {"name": "United States", "unit": "mi"},
+    "CA": {"name": "Canada", "unit": "km"},
+    "GB": {"name": "United Kingdom", "unit": "km"},
+    "AU": {"name": "Australia", "unit": "km"},
+    "IE": {"name": "Ireland", "unit": "km"},
+    "NZ": {"name": "New Zealand", "unit": "km"},
+}
+
+CONTRACTOR_TRADE_CONFIG = {
+    "millwork": {"label": "Millwork / Carpentry", "terms": ["cabinet installer", "finish carpenter" ]},
+    "plumbing": {"label": "Plumbing", "terms": ["commercial plumber", "plumbing contractor"]},
+    "electrical": {"label": "Electrical", "terms": ["commercial electrician", "electrical contractor"]},
+    "hvac": {"label": "HVAC", "terms": ["commercial hvac contractor", "hvac contractor"]},
+    "flooring": {"label": "Flooring", "terms": ["commercial flooring contractor", "flooring installer"]},
+    "painting": {"label": "Painting", "terms": ["commercial painter", "painting contractor"]},
+    "drywall": {"label": "Drywall", "terms": ["drywall contractor", "commercial drywall contractor"]},
+    "fixtures": {"label": "Fixtures / Displays", "terms": ["fixture installer", "retail fixture installer"]},
+    "handyman": {"label": "Handyman / Punch", "terms": ["handyman", "finish carpenter"]},
+    "roofing": {"label": "Roofing", "terms": ["commercial roofer", "roofing contractor"]},
+    "concrete_masonry": {"label": "Concrete / Masonry", "terms": ["commercial concrete contractor", "masonry contractor"]},
+    "cleaning": {"label": "Cleaning / Janitorial", "terms": ["commercial cleaning service", "janitorial service"]},
+    "low_voltage": {"label": "Data / Low Voltage", "terms": ["low voltage contractor", "data cabling contractor"]},
+    "landscaping": {"label": "Landscaping", "terms": ["commercial landscaper", "landscape contractor"]},
+}
+
+
+class ContractorSearchError(Exception):
+    pass
+
+
+def contractor_country_info(code):
+    return CONTRACTOR_COUNTRY_CONFIG.get(str(code or "US").upper(), CONTRACTOR_COUNTRY_CONFIG["US"])
+
+
+def contractor_search_cache_get(key):
+    if CONTRACTOR_SEARCH_CACHE_TTL_SECONDS <= 0:
+        return None
+    row = _CONTRACTOR_SEARCH_CACHE.get(key)
+    if not row:
+        return None
+    created, value = row
+    if time.monotonic() - created > CONTRACTOR_SEARCH_CACHE_TTL_SECONDS:
+        _CONTRACTOR_SEARCH_CACHE.pop(key, None)
+        return None
+    return value
+
+
+def contractor_search_cache_put(key, value, max_entries=300):
+    if len(_CONTRACTOR_SEARCH_CACHE) >= max_entries:
+        oldest = min(_CONTRACTOR_SEARCH_CACHE.items(), key=lambda item: item[1][0])[0]
+        _CONTRACTOR_SEARCH_CACHE.pop(oldest, None)
+    _CONTRACTOR_SEARCH_CACHE[key] = (time.monotonic(), value)
+
+
+def contractor_http_json(url, params=None, headers=None, timeout=20):
+    if params:
+        url = f"{url}?{urlencode(params)}"
+    req = URLRequest(url, headers=headers or {})
+    try:
+        with urlopen(req, timeout=timeout) as response:
+            body = response.read().decode("utf-8", errors="replace")
+            return json.loads(body or "null")
+    except HTTPError as exc:
+        try:
+            body = exc.read().decode("utf-8", errors="replace")[:500]
+        except Exception:
+            body = ""
+        lowered = body.lower()
+        if exc.code in (402, 403) or "credit" in lowered or "billing" in lowered:
+            raise ContractorSearchError("Contractor search is unavailable because the search service key or billing needs attention.")
+        if exc.code == 429:
+            raise ContractorSearchError("Contractor search is temporarily busy. Wait a moment and try again.")
+        raise ContractorSearchError("The contractor search service returned an error. Please try again.")
+    except (URLError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
+        print(f"Contractor search request failed: {exc}")
+        raise ContractorSearchError("Contractor search could not reach the search service. Please try again.")
+
+
+def contractor_geocode(location, country="US"):
+    location = str(location or "").strip()
+    if not location:
+        raise ContractorSearchError("Enter a city, state/province, or job location to search.")
+    data = contractor_http_json(
+        "https://nominatim.openstreetmap.org/search",
+        params={
+            "q": location,
+            "format": "jsonv2",
+            "limit": 1,
+            "countrycodes": str(country or "US").lower(),
+        },
+        headers={"User-Agent": "DispatchProof/2.43 contractor-discovery"},
+        timeout=20,
+    )
+    if not isinstance(data, list) or not data:
+        raise ContractorSearchError(f'Could not locate "{location}". Try a city plus state/province or postal code.')
+    return float(data[0]["lat"]), float(data[0]["lon"])
+
+
+def contractor_provider_search(query, lat, lon, radius_value, limit=50, exclude_chains=True, country="US"):
+    if not CONTRACTOR_SEARCH_API_KEY:
+        raise ContractorSearchError("Contractor search is not configured yet. Add the Foursquare service API key in Render first.")
+    info = contractor_country_info(country)
+    radius_meters = min(
+        int(float(radius_value) * (1609.344 if info["unit"] == "mi" else 1000)),
+        100000,
+    )
+    key = (
+        str(query or "").strip().lower(), round(float(lat), 4), round(float(lon), 4),
+        radius_meters, min(int(limit), 50), bool(exclude_chains), str(country or "US").upper(),
+    )
+    cached = contractor_search_cache_get(key)
+    if cached is not None:
+        return cached, True
+    params = {
+        "query": query,
+        "ll": f"{lat},{lon}",
+        "radius": radius_meters,
+        "limit": min(int(limit), 50),
+        "sort": "RELEVANCE",
+        "tel_format": "NATIONAL",
+    }
+    if exclude_chains:
+        params["exclude_all_chains"] = "true"
+    data = contractor_http_json(
+        "https://places-api.foursquare.com/places/search",
+        params=params,
+        headers={
+            "Authorization": f"Bearer {CONTRACTOR_SEARCH_API_KEY}",
+            "X-Places-Api-Version": "2025-06-17",
+            "Accept": "application/json",
+            "User-Agent": "DispatchProof/2.43 contractor-discovery",
+        },
+        timeout=30,
+    )
+    results = data if isinstance(data, list) else ((data or {}).get("results") or (data or {}).get("places") or [])
+    contractor_search_cache_put(key, results)
+    return results, False
+
+
+def contractor_place_name(place):
+    return place.get("name") or place.get("display_name") or "Unnamed contractor"
+
+
+def contractor_place_id(place):
+    return place.get("fsq_place_id") or place.get("fsq_id") or place.get("id") or contractor_place_name(place)
+
+
+def contractor_place_phone(place):
+    return place.get("tel") or place.get("telephone") or place.get("phone") or ""
+
+
+def contractor_place_website(place):
+    value = place.get("website") or place.get("website_url") or place.get("url") or ""
+    try:
+        parsed = urlparse(value)
+        return value if parsed.scheme in {"http", "https"} else ""
+    except Exception:
+        return ""
+
+
+def contractor_place_address(place):
+    loc = place.get("location") or {}
+    if not isinstance(loc, dict):
+        return str(loc or "")
+    return loc.get("formatted_address") or ", ".join(
+        str(x) for x in [loc.get("address"), loc.get("locality"), loc.get("region"), loc.get("postcode")] if x
+    )
+
+
+def contractor_place_categories(place):
+    out = []
+    for category in place.get("categories") or []:
+        if isinstance(category, dict):
+            name = category.get("name") or category.get("short_name") or ""
+        else:
+            name = str(category)
+        if name:
+            out.append(name)
+    if not out and place.get("category"):
+        out.append(str(place.get("category")))
+    return out
+
+
+def contractor_place_country(place):
+    loc = place.get("location") or {}
+    if not isinstance(loc, dict):
+        loc = {}
+    code = str(loc.get("country_code") or place.get("country_code") or "").upper().strip()
+    if code:
+        return "GB" if code == "UK" else code
+    country = str(loc.get("country") or place.get("country") or "").strip().lower()
+    names = {
+        "united states": "US", "united states of america": "US", "usa": "US", "us": "US",
+        "canada": "CA", "united kingdom": "GB", "uk": "GB", "great britain": "GB",
+        "england": "GB", "scotland": "GB", "wales": "GB", "northern ireland": "GB",
+        "australia": "AU", "ireland": "IE", "republic of ireland": "IE", "new zealand": "NZ",
+    }
+    return names.get(country, "")
+
+
+def contractor_trade_match_strength(place, trade):
+    name = contractor_place_name(place).lower()
+    categories = " | ".join(contractor_place_categories(place)).lower()
+    blob = name + " | " + categories
+    global_bad = [
+        "store", "supply", "supplies", "wholesaler", "retail", "showroom", "loan",
+        "bank", "finance", "property management", "real estate", "office", "agency",
+        "miscellaneous store", "furniture", "interior design",
+    ]
+    if any(word in blob for word in global_bad):
+        return 0
+    explicit = {
+        "millwork": ["carpenter", "cabinet maker", "millwork", "casework", "woodworker", "cabinet installer"],
+        "plumbing": ["plumber", "plumbing contractor", "plumbing service"],
+        "electrical": ["electrician", "electrical contractor", "electrical service"],
+        "hvac": ["hvac", "air conditioning contractor", "heating contractor", "mechanical contractor"],
+        "flooring": ["flooring contractor", "flooring installer", "tile contractor", "tile installer", "carpet installer"],
+        "painting": ["painter", "painting contractor", "commercial painter"],
+        "drywall": ["drywall contractor", "drywall installer", "sheetrock", "gypsum contractor"],
+        "fixtures": ["fixture installer", "fixture contractor", "retail fixture", "display installer"],
+        "handyman": ["handyman", "maintenance contractor", "property maintenance", "finish carpenter"],
+        "roofing": ["roofer", "roofing contractor", "roofing company", "commercial roofing"],
+        "concrete_masonry": ["concrete contractor", "masonry contractor", "mason", "brick mason", "concrete construction"],
+        "cleaning": ["commercial cleaning", "janitorial service", "cleaning service", "construction cleaning", "post construction cleaning"],
+        "low_voltage": ["low voltage contractor", "data cabling", "structured cabling", "network cabling", "telecommunications contractor", "security system installer"],
+        "landscaping": ["landscaper", "landscape contractor", "landscaping", "grounds maintenance", "landscape installation"],
+    }
+    name_terms = {
+        "millwork": ["millwork", "cabinet", "casework", "carpentry", "carpenter", "woodwork"],
+        "plumbing": ["plumb", "plumber"], "electrical": ["electric", "electrician"],
+        "hvac": ["hvac", "heating", "air conditioning", "mechanical"],
+        "flooring": ["floor", "flooring", "tile", "carpet"], "painting": ["paint", "painting", "painter"],
+        "drywall": ["drywall", "sheetrock", "gypsum"], "fixtures": ["fixture", "display", "store fixture"],
+        "handyman": ["handyman", "maintenance", "carpentry", "repair"], "roofing": ["roof", "roofing", "roofer"],
+        "concrete_masonry": ["concrete", "masonry", "mason", "brick", "block"],
+        "cleaning": ["cleaning", "janitorial", "cleaners", "clean"],
+        "low_voltage": ["low voltage", "data", "cabling", "structured cabling", "network cabling", "security", "access control"],
+        "landscaping": ["landscape", "landscaping", "lawn", "grounds", "irrigation"],
+    }
+    competing = {
+        "plumbing": ["electrician", "electrical contractor", "hvac", "roofing", "concrete", "flooring", "painting"],
+        "electrical": ["plumber", "plumbing contractor", "hvac", "roofing", "concrete", "flooring", "painting"],
+        "hvac": ["plumber", "electrician", "roofing", "concrete", "flooring", "painting"],
+        "flooring": ["plumber", "electrician", "hvac", "roofing", "painting contractor"],
+        "painting": ["plumber", "electrician", "hvac", "roofing", "flooring contractor"],
+        "drywall": ["plumber", "electrician", "hvac", "roofing", "flooring contractor"],
+        "millwork": ["plumber", "electrician", "hvac", "roofing", "concrete contractor"],
+        "fixtures": ["plumber", "electrician", "hvac", "roofing", "concrete contractor"],
+        "handyman": [],
+        "roofing": ["plumber", "electrician", "hvac", "flooring contractor", "painting contractor", "concrete contractor"],
+        "concrete_masonry": ["plumber", "electrician", "hvac", "roofing contractor", "flooring contractor"],
+        "cleaning": ["plumber", "electrician", "hvac", "roofing contractor", "concrete contractor"],
+        "low_voltage": ["plumber", "roofing contractor", "concrete contractor", "landscaper"],
+        "landscaping": ["plumber", "electrician", "hvac", "roofing contractor"],
+    }
+    if any(word in blob for word in competing.get(trade, [])):
+        return 0
+    if any(word in categories for word in explicit.get(trade, [])):
+        return 3
+    broad_service = any(word in categories for word in [
+        "general contractor", "contractor", "construction", "home service", "home improvement", "repair service", "maintenance"
+    ])
+    if any(word in name for word in name_terms.get(trade, [])) and broad_service:
+        return 2
+    if broad_service:
+        return 1
+    return 0
+
+
+def contractor_place_relevant(place, tolerance, trade):
+    strength = contractor_trade_match_strength(place, trade)
+    if tolerance == "strict":
+        return strength >= 3
+    if tolerance == "broad":
+        return strength >= 1
+    return strength >= 2
+
+
+def contractor_fit_score(place, trade):
+    strength = contractor_trade_match_strength(place, trade)
+    score = {0: 0, 1: 42, 2: 68, 3: 82}.get(strength, 0)
+    if contractor_place_phone(place):
+        score += 5
+    if contractor_place_website(place):
+        score += 2
+    name = contractor_place_name(place).lower()
+    if any(word in name for word in ["service", "services", "repair", "install", "contracting"]):
+        score += 3
+    return max(0, min(99, round(score, 1)))
+
+
+def run_contractor_search(location, country, trade, radius, tolerance, max_results=15):
+    country = str(country or "US").upper()
+    if country not in CONTRACTOR_COUNTRY_CONFIG:
+        country = "US"
+    trade = trade if trade in CONTRACTOR_TRADE_CONFIG else "handyman"
+    tolerance = tolerance if tolerance in {"strict", "balanced", "broad"} else "balanced"
+    unit = contractor_country_info(country)["unit"]
+    max_radius = 60 if unit == "mi" else 100
+    try:
+        radius = max(1, min(max_radius, int(radius)))
+    except (TypeError, ValueError):
+        radius = 30
+    lat, lon = contractor_geocode(location, country)
+    terms = CONTRACTOR_TRADE_CONFIG[trade]["terms"]
+    seen = {}
+    provider_calls = 0
+    cache_hits = 0
+
+    def add_results(rows):
+        for place in rows or []:
+            seen.setdefault(str(contractor_place_id(place)), place)
+
+    def usable_count():
+        total = 0
+        for place in seen.values():
+            place_country = contractor_place_country(place)
+            if place_country and place_country != country:
+                continue
+            if contractor_place_relevant(place, tolerance, trade):
+                total += 1
+        return total
+
+    rows, cached = contractor_provider_search(terms[0], lat, lon, radius, 50, True, country)
+    provider_calls += 0 if cached else 1
+    cache_hits += 1 if cached else 0
+    add_results(rows)
+    target = min(max(1, int(max_results)), CONTRACTOR_SEARCH_FALLBACK_MIN_RESULTS)
+    if usable_count() < target and len(terms) > 1:
+        rows, cached = contractor_provider_search(terms[1], lat, lon, radius, 50, True, country)
+        provider_calls += 0 if cached else 1
+        cache_hits += 1 if cached else 0
+        add_results(rows)
+    if tolerance == "broad" and usable_count() < target:
+        rows, cached = contractor_provider_search(terms[0], lat, lon, radius, 50, False, country)
+        provider_calls += 0 if cached else 1
+        cache_hits += 1 if cached else 0
+        add_results(rows)
+
+    results = []
+    rejected = 0
+    wrong_country = 0
+    for place in seen.values():
+        place_country = contractor_place_country(place)
+        if place_country and place_country != country:
+            wrong_country += 1
+            continue
+        if not contractor_place_relevant(place, tolerance, trade):
+            rejected += 1
+            continue
+        rating = place.get("rating")
+        try:
+            rating = round(float(rating), 1) if rating is not None else None
+        except Exception:
+            rating = None
+        categories = contractor_place_categories(place)
+        results.append({
+            "place_id": str(contractor_place_id(place)),
+            "name": contractor_place_name(place),
+            "phone": contractor_place_phone(place),
+            "address": contractor_place_address(place),
+            "website": contractor_place_website(place),
+            "specialty": " / ".join(categories[:2]) or CONTRACTOR_TRADE_CONFIG[trade]["label"],
+            "fit_score": contractor_fit_score(place, trade),
+            "external_rating": rating,
+        })
+    results.sort(key=lambda row: (row["fit_score"], bool(row["phone"]), bool(row["website"])), reverse=True)
+    return {
+        "results": results[:max_results],
+        "provider_calls": provider_calls,
+        "cache_hits": cache_hits,
+        "rejected_irrelevant": rejected,
+        "rejected_wrong_country": wrong_country,
+        "lat": lat,
+        "lon": lon,
+        "radius": radius,
+        "unit": unit,
+    }
+
+
+def append_crew_member_to_job(db, job_id, crew_member_id):
+    existing = db.execute(
+        "SELECT 1 FROM job_crew_assignments WHERE job_id = ? AND crew_member_id = ?",
+        (job_id, crew_member_id),
+    ).fetchone()
+    if existing:
+        return False
+    next_order = db.execute(
+        "SELECT COALESCE(MAX(sort_order), -1) + 1 AS n FROM job_crew_assignments WHERE job_id = ?",
+        (job_id,),
+    ).fetchone()["n"]
+    db.execute("""
+        INSERT INTO job_crew_assignments (job_id, crew_member_id, is_lead, sort_order, created_at)
+        VALUES (?, ?, 0, ?, ?)
+    """, (job_id, crew_member_id, next_order, now_iso()))
+    member = db.execute("SELECT name FROM crew_members WHERE id = ?", (crew_member_id,)).fetchone()
+    job = db.execute("SELECT assigned_crew FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    names = parse_crew_names(job["assigned_crew"] if job else "")
+    if member and member["name"].lower() not in {name.lower() for name in names}:
+        names.append(member["name"])
+        db.execute("UPDATE jobs SET assigned_crew = ? WHERE id = ?", (", ".join(names), job_id))
+    return True
 
 
 def parse_crew_names(value):
@@ -968,6 +1396,10 @@ def init_db():
             name TEXT UNIQUE NOT NULL COLLATE NOCASE,
             member_type TEXT NOT NULL DEFAULT 'INTERNAL',
             company_name TEXT,
+            source_provider TEXT,
+            source_place_id TEXT,
+            source_address TEXT,
+            source_website TEXT,
             email TEXT,
             phone TEXT,
             role_trade TEXT,
@@ -1028,6 +1460,11 @@ def init_db():
         db.execute("""
             CREATE INDEX IF NOT EXISTS idx_crew_members_type_active_name
             ON crew_members(member_type, is_active, name)
+        """)
+        db.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_crew_members_source_place_id
+            ON crew_members(source_place_id)
+            WHERE source_place_id IS NOT NULL AND TRIM(source_place_id) <> ''
         """)
         db.execute("""
             CREATE INDEX IF NOT EXISTS idx_job_crew_assignments_job
@@ -3015,7 +3452,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.42",
+        "app_version": "2.43",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -3220,7 +3657,7 @@ def create_workspace_export_archive():
         "export_format": 2,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.42",
+        "app_version": "2.43",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -3974,6 +4411,7 @@ PAGE_HELP_ANCHORS = {
     "dashboard": "help-dashboard",
     "schedule_board": "help-schedule",
     "crew_directory": "help-crew-directory",
+    "find_subcontractor": "help-find-subcontractor",
     "edit_crew_member": "help-crew-directory",
     "new_job": "help-create-job",
     "edit_job": "help-edit-job",
@@ -4017,7 +4455,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.42",
+        "app_version": "2.43",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -4391,6 +4829,207 @@ def commit_my_workspace_restore():
 
 
 
+@app.route("/crew/find-subcontractor", methods=["GET", "POST"])
+@app.route("/jobs/<int:job_id>/find-subcontractor", methods=["GET", "POST"])
+def find_subcontractor(job_id=None):
+    job = None
+    assigned_project = None
+    if job_id:
+        with get_db() as db:
+            job = db.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+            if not job:
+                abort(404)
+            if job["project_id"]:
+                assigned_project = db.execute("SELECT * FROM projects WHERE id = ?", (job["project_id"],)).fetchone()
+
+    default_location = ""
+    if assigned_project and (assigned_project["location"] or "").strip():
+        default_location = assigned_project["location"].strip()
+    elif job and (job["project_site"] or "").strip():
+        default_location = job["project_site"].strip()
+
+    location = (request.form.get("location") if request.method == "POST" else request.args.get("location")) or default_location
+    location = location.strip()
+    country = ((request.form.get("country") if request.method == "POST" else request.args.get("country")) or "US").upper().strip()
+    if country not in CONTRACTOR_COUNTRY_CONFIG:
+        country = "US"
+    trade = ((request.form.get("trade") if request.method == "POST" else request.args.get("trade")) or "handyman").strip()
+    if trade not in CONTRACTOR_TRADE_CONFIG:
+        trade = "handyman"
+    tolerance = ((request.form.get("tolerance") if request.method == "POST" else request.args.get("tolerance")) or "balanced").strip().lower()
+    if tolerance not in {"strict", "balanced", "broad"}:
+        tolerance = "balanced"
+    try:
+        radius = int((request.form.get("radius") if request.method == "POST" else request.args.get("radius")) or 30)
+    except ValueError:
+        radius = 30
+    max_radius = 60 if contractor_country_info(country)["unit"] == "mi" else 100
+    radius = max(1, min(max_radius, radius))
+
+    results = []
+    search_meta = None
+    search_error = None
+    search_performed = request.method == "POST"
+    if search_performed:
+        try:
+            search_meta = run_contractor_search(location, country, trade, radius, tolerance, max_results=15)
+            results = search_meta["results"]
+        except ContractorSearchError as exc:
+            search_error = str(exc)
+
+    if results:
+        with get_db() as db:
+            assigned_ids = set()
+            if job_id:
+                assigned_ids = {
+                    row["crew_member_id"] for row in db.execute(
+                        "SELECT crew_member_id FROM job_crew_assignments WHERE job_id = ?", (job_id,)
+                    ).fetchall()
+                }
+            for row in results:
+                existing = db.execute(
+                    """SELECT * FROM crew_members
+                       WHERE source_place_id = ?
+                          OR (source_place_id IS NULL AND name = ? COLLATE NOCASE)
+                       ORDER BY CASE WHEN source_place_id = ? THEN 0 ELSE 1 END, id
+                       LIMIT 1""",
+                    (row["place_id"], row["name"], row["place_id"]),
+                ).fetchone()
+                row["existing_member"] = dict(existing) if existing else None
+                row["already_assigned"] = bool(existing and existing["id"] in assigned_ids)
+
+    return render_template(
+        "find_subcontractor.html",
+        job=job,
+        assigned_project=assigned_project,
+        location=location,
+        country=country,
+        trade=trade,
+        radius=radius,
+        tolerance=tolerance,
+        country_config=CONTRACTOR_COUNTRY_CONFIG,
+        trade_config=CONTRACTOR_TRADE_CONFIG,
+        results=results,
+        search_meta=search_meta,
+        search_error=search_error,
+        search_performed=search_performed,
+        search_configured=bool(CONTRACTOR_SEARCH_API_KEY),
+        distance_unit=contractor_country_info(country)["unit"],
+    )
+
+
+@app.post("/subcontractors/save-found")
+def save_found_subcontractor():
+    job_id = normalize_optional_id(request.form.get("job_id"))
+    action = (request.form.get("action") or "save").strip().lower()
+    source_place_id = (request.form.get("place_id") or "").strip()
+    name = (request.form.get("name") or "").strip()
+    phone = (request.form.get("phone") or "").strip()
+    address = (request.form.get("address") or "").strip()
+    website = contractor_place_website({"website": (request.form.get("website") or "").strip()})
+    trade = (request.form.get("trade") or "handyman").strip()
+    trade_label = CONTRACTOR_TRADE_CONFIG.get(trade, CONTRACTOR_TRADE_CONFIG["handyman"])["label"]
+
+    if not source_place_id or not name:
+        flash("That contractor result is incomplete. Run the search again before saving it.")
+        return redirect(url_for("find_subcontractor", job_id=job_id) if job_id else url_for("find_subcontractor"))
+
+    with get_db() as db:
+        job = None
+        if job_id:
+            job = db.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+            if not job or not user_can_access_job(db, job_id):
+                abort(404)
+
+        existing = db.execute(
+            "SELECT * FROM crew_members WHERE source_place_id = ? LIMIT 1",
+            (source_place_id,),
+        ).fetchone()
+        if not existing:
+            existing = db.execute(
+                "SELECT * FROM crew_members WHERE name = ? COLLATE NOCASE LIMIT 1",
+                (name,),
+            ).fetchone()
+
+        created = False
+        if existing:
+            if existing["member_type"] != "SUBCONTRACTOR":
+                flash(f'{name} already exists as Internal Crew. Edit that record first if it should become a subcontractor.')
+                return redirect(url_for("edit_crew_member", crew_member_id=existing["id"]))
+            crew_member_id = existing["id"]
+            db.execute("""
+                UPDATE crew_members
+                SET source_provider = COALESCE(NULLIF(source_provider, ''), 'FOURSQUARE'),
+                    source_place_id = COALESCE(NULLIF(source_place_id, ''), ?),
+                    source_address = CASE WHEN TRIM(COALESCE(source_address, '')) = '' THEN ? ELSE source_address END,
+                    source_website = CASE WHEN TRIM(COALESCE(source_website, '')) = '' THEN ? ELSE source_website END,
+                    phone = CASE WHEN TRIM(COALESCE(phone, '')) = '' THEN ? ELSE phone END,
+                    role_trade = CASE WHEN TRIM(COALESCE(role_trade, '')) = '' THEN ? ELSE role_trade END,
+                    updated_at = ?
+                WHERE id = ?
+            """, (source_place_id, address, website, phone, trade_label, now_iso(), crew_member_id))
+            existing = db.execute("SELECT * FROM crew_members WHERE id = ?", (crew_member_id,)).fetchone()
+        else:
+            cur = db.execute("""
+                INSERT INTO crew_members (
+                    name, member_type, company_name, source_provider, source_place_id,
+                    source_address, source_website, email, phone, role_trade, notes,
+                    is_active, created_at, updated_at
+                ) VALUES (?, 'SUBCONTRACTOR', '', 'FOURSQUARE', ?, ?, ?, '', ?, ?, '', 1, ?, ?)
+            """, (name, source_place_id, address, website, phone, trade_label, now_iso(), now_iso()))
+            crew_member_id = cur.lastrowid
+            created = True
+            record_activity(
+                db,
+                "Subcontractor Saved",
+                f"Saved {name} from Find a Subcontractor ({trade_label}).",
+                job_id=job_id,
+            )
+
+        assigned = False
+        inactive_blocked = False
+        completed_blocked = False
+        already_assigned = False
+        if action == "save_assign" and job_id:
+            current = db.execute("SELECT * FROM crew_members WHERE id = ?", (crew_member_id,)).fetchone()
+            if job["status"] == "COMPLETED":
+                completed_blocked = True
+            elif not current["is_active"]:
+                inactive_blocked = True
+            else:
+                assigned = append_crew_member_to_job(db, job_id, crew_member_id)
+                already_assigned = not assigned
+                if assigned:
+                    record_activity(
+                        db,
+                        "Crew Assignment Updated",
+                        f"Added subcontractor {name} to the field assignment from Find a Subcontractor.",
+                        job_id=job_id,
+                    )
+        db.commit()
+
+    if action == "save_assign" and job_id:
+        if completed_blocked:
+            flash(f"{name} was saved to the Subcontractor Directory, but completed jobs cannot receive new assignments.")
+            return redirect(url_for("find_subcontractor", job_id=job_id))
+        if inactive_blocked:
+            flash(f"{name} is currently inactive. Reactivate the subcontractor before assigning it to a job.")
+            return redirect(url_for("edit_crew_member", crew_member_id=crew_member_id))
+        if assigned:
+            flash(f"{name} saved and assigned to this job.")
+        elif already_assigned:
+            flash(f"{name} is already assigned to this job. No duplicate assignment was created.")
+        return redirect(url_for("job_detail", job_id=job_id) + "#field-assignment")
+
+    if created:
+        flash(f"{name} saved to Crew & Subcontractors.")
+    else:
+        flash(f"{name} is already in Crew & Subcontractors; available source details were refreshed.")
+    if job_id:
+        return redirect(url_for("find_subcontractor", job_id=job_id))
+    return redirect(url_for("edit_crew_member", crew_member_id=crew_member_id))
+
+
 @app.route("/crew")
 def crew_directory():
     search_query = (request.args.get("q") or "").strip()
@@ -4425,6 +5064,8 @@ def crew_directory():
                 COALESCE(cm.email, '') || ' ' ||
                 COALESCE(cm.phone, '') || ' ' ||
                 COALESCE(cm.role_trade, '') || ' ' ||
+                COALESCE(cm.source_address, '') || ' ' ||
+                COALESCE(cm.source_website, '') || ' ' ||
                 COALESCE(cm.notes, '')
             ) LIKE ?
         """)
