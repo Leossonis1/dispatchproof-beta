@@ -1145,7 +1145,7 @@ def route_http_json(url, params=None, payload=None, timeout=35):
     headers = {
         "Authorization": ROUTE_OPTIMIZATION_API_KEY,
         "Accept": "application/json, application/geo+json",
-        "User-Agent": "DispatchProof/2.44.2 route-optimization",
+        "User-Agent": "DispatchProof/2.44.3 route-optimization",
         "Connection": "close",
     }
 
@@ -1388,6 +1388,52 @@ def load_project_route_plan(db, project_id):
     if len(stops) != total_stops and not current_user_is_admin():
         return None, []
     return plan, stops
+
+
+BULK_JOB_IMPORT_HEADERS = [
+    "Job Name",
+    "Route / Site Address",
+    "Installation Date",
+    "Site Contact Name",
+    "Site Contact Email",
+    "Site Contact Phone",
+]
+BULK_JOB_IMPORT_MAX_ROWS = 250
+
+
+def normalize_bulk_job_header(value):
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").strip().lower())
+
+
+def parse_bulk_job_date(value):
+    text = str(value or "").strip()
+    if not text:
+        return None
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%m-%d-%Y"):
+        try:
+            return datetime.strptime(text, fmt).date().isoformat()
+        except ValueError:
+            continue
+    return None
+
+
+def bulk_job_import_column_map(fieldnames):
+    aliases = {
+        "job_name": {"jobname", "job", "storename", "store", "sitename", "locationname"},
+        "project_site": {"routesiteaddress", "routeaddress", "siteaddress", "address", "projectsite", "location"},
+        "installation_date": {"installationdate", "installdate", "scheduleddate", "date"},
+        "contact_name": {"sitecontactname", "contactname", "contact"},
+        "contact_email": {"sitecontactemail", "contactemail", "email"},
+        "contact_phone": {"sitecontactphone", "contactphone", "phone"},
+    }
+    normalized = {normalize_bulk_job_header(name): name for name in (fieldnames or []) if name}
+    result = {}
+    for key, options in aliases.items():
+        for option in options:
+            if option in normalized:
+                result[key] = normalized[option]
+                break
+    return result
 
 
 def route_miles(meters):
@@ -3905,7 +3951,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.44.2",
+        "app_version": "2.44.3",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -4110,7 +4156,7 @@ def create_workspace_export_archive():
         "export_format": 2,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.44.2",
+        "app_version": "2.44.3",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -4909,7 +4955,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.44.2",
+        "app_version": "2.44.3",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -7120,6 +7166,180 @@ def project_detail(project_id):
         project_documents=project_documents,
         client_documents=client_documents,
     )
+
+
+@app.get("/projects/<int:project_id>/bulk-jobs/template.csv")
+def download_project_bulk_job_template(project_id):
+    with get_db() as db:
+        project = db.execute("""
+            SELECT p.*, c.name AS client_name
+            FROM projects p
+            JOIN clients c ON c.id = p.client_id
+            WHERE p.id = ?
+        """, (project_id,)).fetchone()
+        if not project:
+            abort(404)
+
+    rows = [
+        [
+            "EXAMPLE - Store 101 (delete this row)",
+            "123 Main St, Akron, OH 44308",
+            "09/21/2026",
+            "Jane Superintendent",
+            "jane@example.com",
+            "330-555-0101",
+        ]
+    ]
+    safe_project = re.sub(r"[^A-Za-z0-9_-]+", "_", project["name"]).strip("_") or "project"
+    return csv_download(rows, BULK_JOB_IMPORT_HEADERS, f"dispatchproof_{safe_project}_job_import_template.csv")
+
+
+@app.post("/projects/<int:project_id>/bulk-jobs/import")
+def import_project_bulk_jobs(project_id):
+    upload = request.files.get("job_import_file")
+    if not upload or not upload.filename:
+        flash("Choose a completed DispatchProof Job Import CSV first.")
+        return redirect(url_for("project_route_optimizer", project_id=project_id))
+    if not upload.filename.lower().endswith(".csv"):
+        flash("Bulk Job Import currently accepts CSV files. Download the template, fill it in, and upload the CSV.")
+        return redirect(url_for("project_route_optimizer", project_id=project_id))
+
+    raw = upload.read(2 * 1024 * 1024 + 1)
+    if len(raw) > 2 * 1024 * 1024:
+        flash("That import file is too large. Keep the CSV under 2 MB.")
+        return redirect(url_for("project_route_optimizer", project_id=project_id))
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        flash("DispatchProof could not read that CSV. Save it as a standard UTF-8 CSV and try again.")
+        return redirect(url_for("project_route_optimizer", project_id=project_id))
+
+    reader = csv.DictReader(io.StringIO(text))
+    column_map = bulk_job_import_column_map(reader.fieldnames)
+    missing = [
+        label for key, label in (
+            ("job_name", "Job Name"),
+            ("project_site", "Route / Site Address"),
+            ("installation_date", "Installation Date"),
+        ) if key not in column_map
+    ]
+    if missing:
+        flash("Import file is missing required column(s): " + ", ".join(missing) + ". Download a fresh template and try again.")
+        return redirect(url_for("project_route_optimizer", project_id=project_id))
+
+    parsed_rows = []
+    errors = []
+    for sheet_row, row in enumerate(reader, start=2):
+        values = {key: str(row.get(source, "") or "").strip() for key, source in column_map.items()}
+        job_name = values.get("job_name", "")
+        project_site = values.get("project_site", "")
+        date_text = values.get("installation_date", "")
+        if not any(values.values()):
+            continue
+        if job_name.upper().startswith("EXAMPLE -"):
+            continue
+        if len(parsed_rows) >= BULK_JOB_IMPORT_MAX_ROWS:
+            errors.append(f"Row {sheet_row}: import limit is {BULK_JOB_IMPORT_MAX_ROWS} jobs at a time.")
+            break
+        if not job_name:
+            errors.append(f"Row {sheet_row}: Job Name is required.")
+            continue
+        if not project_site:
+            errors.append(f"Row {sheet_row}: Route / Site Address is required.")
+            continue
+        install_date = parse_bulk_job_date(date_text)
+        if not install_date:
+            errors.append(f"Row {sheet_row}: Installation Date '{date_text}' is not recognized. Use YYYY-MM-DD or MM/DD/YYYY.")
+            continue
+        parsed_rows.append({
+            "job_name": job_name[:200],
+            "project_site": project_site[:500],
+            "installation_date": install_date,
+            "contact_name": (values.get("contact_name") or "TBD")[:200],
+            "contact_email": values.get("contact_email", "")[:320],
+            "contact_phone": values.get("contact_phone", "")[:100],
+        })
+
+    if errors:
+        preview = " ".join(errors[:6])
+        if len(errors) > 6:
+            preview += f" Plus {len(errors) - 6} more error(s)."
+        flash("Nothing was imported. " + preview)
+        return redirect(url_for("project_route_optimizer", project_id=project_id))
+    if not parsed_rows:
+        flash("No job rows were found in that CSV. Add jobs below the header row and try again.")
+        return redirect(url_for("project_route_optimizer", project_id=project_id))
+
+    with get_db() as db:
+        project = db.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+        if not project:
+            abort(404)
+        owner_user_id = current_user_id()
+        imported = 0
+        duplicates = 0
+        for item in parsed_rows:
+            existing = db.execute("""
+                SELECT id FROM jobs
+                WHERE project_id = ?
+                  AND LOWER(job_name) = LOWER(?)
+                  AND installation_date = ?
+                  AND LOWER(COALESCE(project_site, '')) = LOWER(?)
+                LIMIT 1
+            """, (project_id, item["job_name"], item["installation_date"], item["project_site"])).fetchone()
+            if existing:
+                duplicates += 1
+                continue
+            cur = db.execute("""
+                INSERT INTO jobs (
+                    public_token, arrival_token, client_report_token,
+                    client_id, project_id, job_name, project_site, installation_date,
+                    contact_name, contact_email, contact_phone, checklist_json,
+                    crew_lead, planned_crew_size, assigned_crew,
+                    owner_user_id, team_id, status, created_at, reminder_enabled,
+                    reminder_hours_before, reminder_count
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', NULL, '', ?, NULL, 'NO RESPONSE', ?, 1, ?, 0)
+            """, (
+                secrets.token_urlsafe(18),
+                secrets.token_urlsafe(24),
+                secrets.token_urlsafe(24),
+                project["client_id"],
+                project_id,
+                item["job_name"],
+                item["project_site"],
+                item["installation_date"],
+                item["contact_name"],
+                item["contact_email"],
+                item["contact_phone"],
+                json.dumps(DEFAULT_CHECKLIST),
+                owner_user_id,
+                now_iso(),
+                DEFAULT_REMINDER_HOURS_BEFORE,
+            ))
+            job_id = cur.lastrowid
+            record_activity(
+                db,
+                "Job Created",
+                f"Bulk imported job {item['job_name']} for {item['installation_date']}.",
+                job_id=job_id,
+            )
+            imported += 1
+
+        if imported:
+            record_activity(
+                db,
+                "Bulk Jobs Imported",
+                f"Imported {imported} job(s) into project {project['name']} from CSV."
+                + (f" Skipped {duplicates} exact duplicate(s)." if duplicates else ""),
+            )
+        db.commit()
+
+    message = f"Imported {imported} job{'s' if imported != 1 else ''} into this project."
+    if duplicates:
+        message += f" Skipped {duplicates} exact duplicate{'s' if duplicates != 1 else ''}."
+    if imported:
+        message += " They are Personal jobs owned by your workspace; assign Team access later if needed."
+    flash(message)
+    return redirect(url_for("project_route_optimizer", project_id=project_id))
 
 
 @app.route("/projects/<int:project_id>/route-optimization", methods=["GET", "POST"])
