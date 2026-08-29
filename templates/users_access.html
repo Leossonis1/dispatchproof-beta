@@ -19,7 +19,7 @@
   <span class="access-role owner-role">OWNER</span>
 </section>
 
-<div class="users-layout">
+<div class="users-layout" id="users-access">
   <section class="panel">
     <div class="panel-head">
       <div>
@@ -85,13 +85,14 @@
             <span class="access-role {{ 'admin-role' if user['role'] == 'ADMIN' else 'operations-role' }}">
               {{ 'ADMINISTRATOR' if user['role'] == 'ADMIN' else 'OPERATIONS' }}
             </span>
-            <span>Last sign in: {{ user['last_login_at']|pretty_datetime if user['last_login_at'] else 'Never' }}</span>
+            <span>Last Sign In: {{ user['last_login_at']|pretty_datetime if user['last_login_at'] else 'Never' }}</span>
           </div>
 
           <div class="user-actions">
             <a class="btn action-blue small-btn" href="{{ url_for('edit_user', user_id=user['id']) }}">Edit User</a>
 
-            <form method="post" action="{{ url_for('toggle_user_access', user_id=user['id']) }}">
+            <form method="post" action="{{ url_for('toggle_user_access', user_id=user['id']) }}"
+                  {% if user['is_active'] %}onsubmit="return confirm('Disable access for {{ user['full_name']|e }}? They will no longer be able to sign in.')"{% endif %}>
               <button class="btn ghost small-btn" type="submit">
                 {{ 'Disable Access' if user['is_active'] else 'Enable Access' }}
               </button>
@@ -156,7 +157,8 @@
         </p>
 
         <div class="user-actions">
-          <form method="post" action="{{ url_for('toggle_team_sharing', team_id=team['id']) }}">
+          <form method="post" action="{{ url_for('toggle_team_sharing', team_id=team['id']) }}"
+                {% if team['share_jobs'] %}onsubmit="return confirm('Turn job sharing off for {{ team['name']|e }}? Team members will immediately lose access to one another's team jobs until sharing is turned back on.')"{% endif %}>
             <button class="btn ghost small-btn" type="submit">
               {{ 'Turn Sharing Off' if team['share_jobs'] else 'Turn Sharing On' }}
             </button>
@@ -168,7 +170,8 @@
           {% for member in item.members %}
             <div class="user-meta-row" style="justify-content:space-between">
               <span><strong>{{ member['full_name'] }}</strong> · @{{ member['username'] }}</span>
-              <form method="post" action="{{ url_for('remove_team_member', team_id=team['id'], user_id=member['id']) }}">
+              <form method="post" action="{{ url_for('remove_team_member', team_id=team['id'], user_id=member['id']) }}"
+                    onsubmit="return confirm('Remove {{ member['full_name']|e }} from {{ team['name']|e }}? They may immediately lose access to shared team jobs.')">
                 <button class="btn ghost small-btn" type="submit">Remove</button>
               </form>
             </div>

@@ -119,6 +119,7 @@
     <div class="empty-icon completed-empty-icon">✓</div>
     <h3>{% if filters_active %}No matching completed jobs{% else %}No completed jobs yet{% endif %}</h3>
     <p>{% if filters_active %}Try clearing a filter or using a broader search.{% else %}When an on-site installation is marked complete, it will move here automatically.{% endif %}</p>
+    {% if filters_active %}<a class="btn ghost small-btn" href="{{ url_for('completed_jobs') }}">Clear Filters</a>{% else %}<a class="btn action-blue small-btn" href="{{ url_for('dashboard') }}">Go to Active Jobs</a>{% endif %}
   </div>
   {% endif %}
 </div>

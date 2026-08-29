@@ -126,7 +126,7 @@
           <small>V1.4 checks reminders when the app is running. Hosted production will use a scheduled worker.</small>
         </span>
       </label>
-      <label>Reminder window
+      <label>Reminder Window
         <select name="reminder_hours_before">
           <option value="24" {% if default_reminder_hours == 24 %}selected{% endif %}>24 hours before installation</option>
           <option value="48" {% if default_reminder_hours == 48 %}selected{% endif %}>48 hours before installation</option>
@@ -144,9 +144,34 @@
   </div>
 
   <div class="checklist-editor">
-    {% for item in default_checklist %}
+    {% for item in default_checklist[:7] %}
       <input name="checklist" value="{{ item }}">
     {% endfor %}
+  </div>
+
+  <div class="project-specific-checklist" id="project-specific-readiness">
+    <div class="project-specific-head">
+      <div>
+        <div class="eyebrow">Other</div>
+        <h3>Project-Specific Requirements</h3>
+        <p>Add anything unique to this installation. These items appear on the same readiness confirmation as the standard checklist.</p>
+      </div>
+      <button class="btn ghost small-btn" type="button" id="addCustomChecklist">+ Add Another</button>
+    </div>
+    <div id="customChecklistRows" class="custom-checklist-rows">
+      {% for item in default_checklist[7:] %}
+      <div class="custom-checklist-row">
+        <input name="checklist_custom" value="{{ item }}" placeholder="Describe a project-specific requirement">
+        <button class="btn ghost small-btn remove-custom-checklist" type="button" aria-label="Remove custom checklist item">Remove</button>
+      </div>
+      {% endfor %}
+      {% if not default_checklist[7:] %}
+      <div class="custom-checklist-row">
+        <input name="checklist_custom" placeholder="Describe a project-specific requirement">
+        <button class="btn ghost small-btn remove-custom-checklist" type="button" aria-label="Remove custom checklist item">Remove</button>
+      </div>
+      {% endif %}
+    </div>
   </div>
 
   <div class="form-actions">
@@ -168,6 +193,39 @@
     const selected = project.options[project.selectedIndex];
     const clientId = selected ? selected.getAttribute('data-client-id') : '';
     if (clientId) client.value = clientId;
+  });
+})();
+</script>
+
+<script>
+(function(){
+  const rows = document.getElementById('customChecklistRows');
+  const add = document.getElementById('addCustomChecklist');
+  if (!rows || !add) return;
+
+  function wireRemove(button){
+    button.addEventListener('click', function(){
+      const row = button.closest('.custom-checklist-row');
+      if (!row) return;
+      const allRows = rows.querySelectorAll('.custom-checklist-row');
+      if (allRows.length === 1) {
+        const input = row.querySelector('input');
+        if (input) input.value = '';
+        return;
+      }
+      row.remove();
+    });
+  }
+
+  rows.querySelectorAll('.remove-custom-checklist').forEach(wireRemove);
+  add.addEventListener('click', function(){
+    const row = document.createElement('div');
+    row.className = 'custom-checklist-row';
+    row.innerHTML = '<input name="checklist_custom" placeholder="Describe a project-specific requirement">' +
+                    '<button class="btn ghost small-btn remove-custom-checklist" type="button" aria-label="Remove custom checklist item">Remove</button>';
+    rows.appendChild(row);
+    wireRemove(row.querySelector('.remove-custom-checklist'));
+    row.querySelector('input').focus();
   });
 })();
 </script>

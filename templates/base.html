@@ -60,6 +60,13 @@
     </div>
   </aside>
   <main class="main">
+    {% if page_help_anchor %}
+    <div class="page-context-help">
+      <a href="{{ url_for('help_center') }}#{{ page_help_anchor }}" title="Open the tutorial for this page">
+        <span class="page-context-help-icon">?</span> Help me understand this page
+      </a>
+    </div>
+    {% endif %}
     {% with messages = get_flashed_messages() %}
       {% if messages %}
         {% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}
@@ -68,5 +75,19 @@
     {% block content %}{% endblock %}
   </main>
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  document.querySelectorAll('label').forEach(function(label){
+    const required = label.querySelector('input[required]:not([type="radio"]):not([type="checkbox"]), select[required], textarea[required]');
+    if (!required || label.querySelector('.required-marker')) return;
+    const marker = document.createElement('span');
+    marker.className = 'required-marker';
+    marker.textContent = ' *';
+    marker.title = 'Required';
+    const firstText = Array.from(label.childNodes).find(n => n.nodeType === Node.TEXT_NODE && n.textContent.trim());
+    if (firstText) firstText.after(marker); else label.prepend(marker);
+  });
+});
+</script>
 </body>
 </html>

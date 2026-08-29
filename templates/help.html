@@ -59,7 +59,7 @@
   </div>
 
   <div class="tutorial-grid">
-    <article class="tutorial-card" data-help-card data-search="needs attention priority queue overdue today blocked review no response dashboard">
+    <article class="tutorial-card" data-help-card data-search="needs attention priority queue overdue today blocked review no response dashboard" id="help-dashboard">
       <div class="tutorial-number">01</div>
       <h3>Use Needs Attention</h3>
       <ol>
@@ -74,7 +74,7 @@
       <div class="tutorial-tip">Reminder history is based on the Email Outbox / delivery log, so Outbox Mode reminders are visible too. Repeat reminders require confirmation to reduce accidental duplicates.</div>
     </article>
 
-    <article class="tutorial-card" data-help-card data-search="schedule board calendar dates today next 7 days later overdue installs completed">
+    <article class="tutorial-card" data-help-card data-search="schedule board calendar dates today next 7 days later overdue installs completed" id="help-schedule">
       <div class="tutorial-number">02</div>
       <h3>Use the Schedule Board</h3>
       <ol>
@@ -113,7 +113,7 @@
       <div class="tutorial-tip">A job counts as assigned when it has a Crew Lead or Crew / Installer name. Planned Crew Size by itself does not count as a named crew assignment.</div>
     </article>
 
-    <article class="tutorial-card" data-help-card data-search="crew directory add crew member reusable crew assign picker deactivate reactivate">
+    <article class="tutorial-card" data-help-card data-search="crew directory add crew member reusable crew assign picker deactivate reactivate" id="help-crew-directory">
       <div class="tutorial-number">05</div>
       <h3>Build and Use Crew Directory</h3>
       <ol>
@@ -226,7 +226,7 @@
       <div class="tutorial-tip">The status tiles above the filters also work as quick status filters.</div>
     </article>
 
-    <article class="tutorial-card" data-help-card data-search="create new job installation date contact checklist reminder client project">
+    <article class="tutorial-card" data-help-card data-search="create new job installation date contact checklist reminder client project" id="help-create-job">
       <div class="tutorial-number">14</div>
       <h3>Create a Job</h3>
       <ol>
@@ -234,13 +234,14 @@
         <li>Optionally choose a <strong>Client</strong> and <strong>Project</strong>.</li>
         <li>Enter the Job Name, Project / Site, and Installation Date.</li>
         <li>Enter the site contact name and email.</li>
-        <li>Review the readiness checklist and reminder settings.</li>
+        <li>Review the standard readiness checklist and reminder settings.</li>
+        <li>Use <strong>Other → Project-Specific Requirements</strong> for anything unique to this installation. Click <strong>+ Add Another</strong> when more than one custom requirement is needed.</li>
         <li>Click <strong>Create Job</strong>.</li>
       </ol>
       <div class="tutorial-tip">Tip: jobs can stay unassigned and be added to a client/project later.</div>
     </article>
 
-    <article class="tutorial-card" data-help-card data-search="edit job details change date reschedule site contact email phone reminder update">
+    <article class="tutorial-card" data-help-card data-search="edit job details change date reschedule site contact email phone reminder update" id="help-edit-job">
       <div class="tutorial-number">15</div>
       <h3>Edit Job Details</h3>
       <ol>
@@ -304,7 +305,7 @@
       <div class="tutorial-tip">Job Documents are internal only. They are included in backups but never appear in client reports or public links.</div>
     </article>
 
-    <article class="tutorial-card" data-help-card data-search="readiness request email outbox site contact public link generate readiness email reminder">
+    <article class="tutorial-card" data-help-card data-search="readiness request email outbox site contact public link generate readiness email reminder" id="help-readiness-request">
       <div class="tutorial-number">19</div>
       <h3>Send a Readiness Request</h3>
       <ol>
@@ -317,7 +318,7 @@
       </ol>
     </article>
 
-    <article class="tutorial-card" data-help-card data-search="installer arrival link record internally site ready field photos arrival on site">
+    <article class="tutorial-card" data-help-card data-search="installer arrival link record internally site ready field photos arrival on site" id="help-arrival">
       <div class="tutorial-number">20</div>
       <h3>Record Installer Arrival</h3>
       <ol>
@@ -344,7 +345,7 @@
       <div class="tutorial-tip">Equipment affected and installer notes are optional.</div>
     </article>
 
-    <article class="tutorial-card" data-help-card data-search="completed jobs history search filter client project find old install archive">
+    <article class="tutorial-card" data-help-card data-search="completed jobs history search filter client project find old install archive" id="help-completed-jobs">
       <div class="tutorial-number">22</div>
       <h3>Find a Completed Job</h3>
       <ol>
@@ -392,7 +393,7 @@
       </ol>
     </article>
 
-    <article class="tutorial-card" data-help-card data-search="email outbox preview readiness reminder client report combined report free beta">
+    <article class="tutorial-card" data-help-card data-search="email outbox preview readiness reminder client report combined report free beta" id="help-email-outbox">
       <div class="tutorial-number">26</div>
       <h3>Use Email Outbox</h3>
       <ol>
@@ -428,7 +429,7 @@
   </div>
 
   <div class="tutorial-grid">
-    <article class="tutorial-card" data-help-card data-search="client create primary contact project organization">
+    <article class="tutorial-card" data-help-card data-search="client create primary contact project organization" id="help-create-client">
       <div class="tutorial-number">28</div>
       <h3>Create a Client</h3>
       <ol>
@@ -439,7 +440,7 @@
       </ol>
     </article>
 
-    <article class="tutorial-card" data-help-card data-search="project create under client number location rollout">
+    <article class="tutorial-card" data-help-card data-search="project create under client number location rollout" id="help-create-project">
       <div class="tutorial-number">29</div>
       <h3>Create a Project</h3>
       <ol>
@@ -503,7 +504,7 @@
       <div class="tutorial-tip">Client Documents are internal only, included in backups, and never appear in public or client-facing reports.</div>
     </article>
 
-    <article class="tutorial-card" data-help-card data-search="document center documents search files client project job filter download open parent">
+    <article class="tutorial-card" data-help-card data-search="document center documents search files client project job filter download open parent" id="help-document-center">
       <div class="tutorial-number">34</div>
       <h3>Use Document Center</h3>
       <ol>
@@ -641,7 +642,19 @@
         {% endif %}
       </ol>
     </article>
-  </div>
+  
+    <article class="tutorial-card" data-help-card data-search="backup my workspace export personal jobs team jobs files operations account">
+      <div class="tutorial-number">42</div>
+      <h3>Back Up Your Workspace</h3>
+      <ol>
+        <li>Open <strong>My Account</strong>.</li>
+        <li>Operations users can choose <strong>Download My Workspace ZIP</strong>.</li>
+        <li>The export includes personal jobs plus team jobs currently shared with you and their linked job files.</li>
+        <li>Another PM's private jobs are never included. Owner and Administrator accounts use the full <strong>Backup & Restore</strong> page instead.</li>
+      </ol>
+      <div class="tutorial-tip">Store workspace ZIPs securely because they may contain customer contact details, job history, documents, and site photos.</div>
+    </article>
+</div>
 </section>
 
 {% if current_user_is_admin %}
@@ -655,7 +668,7 @@
   </div>
 
   <div class="tutorial-grid">
-    <article class="tutorial-card" data-help-card data-search="users access add user operations administrator password reset disable edit role">
+    <article class="tutorial-card" data-help-card data-search="users access add user operations administrator password reset disable edit role" id="help-users-access">
       <div class="tutorial-number">42</div>
       <h3>Users & Access</h3>
       <ol>
@@ -667,7 +680,7 @@
       <div class="tutorial-tip">Operations users can run jobs but cannot access administrative settings or the global Activity Log.</div>
     </article>
 
-    <article class="tutorial-card" data-help-card data-search="company settings branding logo name tagline accent email phone website">
+    <article class="tutorial-card" data-help-card data-search="company settings branding logo name tagline accent email phone website" id="help-company-settings">
       <div class="tutorial-number">43</div>
       <h3>Company Settings</h3>
       <ol>
@@ -692,7 +705,7 @@
       <div class="tutorial-tip">Readiness, arrival evidence, reports, Office Notes, and prior activity are preserved. Reopening is available only to Owner/Administrator accounts.</div>
     </article>
 
-    <article class="tutorial-card" data-help-card data-search="global activity log audit owner administrator who changed">
+    <article class="tutorial-card" data-help-card data-search="global activity log audit owner administrator who changed" id="help-activity-log">
       <div class="tutorial-number">45</div>
       <h3>Global Activity Log</h3>
       <ol>
