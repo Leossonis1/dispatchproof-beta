@@ -594,7 +594,7 @@ CONTRACTOR_COUNTRY_CONFIG = {
 }
 
 CONTRACTOR_TRADE_CONFIG = {
-    "millwork": {"label": "Millwork / Carpentry", "terms": ["cabinet installer", "finish carpenter" ]},
+    "millwork": {"label": "Millwork / Carpentry", "terms": ["finish carpenter", "millwork installer" ]},
     "plumbing": {"label": "Plumbing", "terms": ["commercial plumber", "plumbing contractor"]},
     "electrical": {"label": "Electrical", "terms": ["commercial electrician", "electrical contractor"]},
     "hvac": {"label": "HVAC", "terms": ["commercial hvac contractor", "hvac contractor"]},
@@ -675,7 +675,7 @@ def contractor_geocode(location, country="US"):
             "limit": 1,
             "countrycodes": str(country or "US").lower(),
         },
-        headers={"User-Agent": "DispatchProof/2.43.1 contractor-discovery"},
+        headers={"User-Agent": "DispatchProof/2.43.2 contractor-discovery"},
         timeout=20,
     )
     if not isinstance(data, list) or not data:
@@ -715,7 +715,7 @@ def contractor_provider_search(query, lat, lon, radius_value, limit=50, exclude_
             "Authorization": f"Bearer {CONTRACTOR_SEARCH_API_KEY}",
             "X-Places-Api-Version": "2025-06-17",
             "Accept": "application/json",
-            "User-Agent": "DispatchProof/2.43.1 contractor-discovery",
+            "User-Agent": "DispatchProof/2.43.2 contractor-discovery",
         },
         timeout=30,
     )
@@ -843,14 +843,27 @@ def contractor_obvious_non_service_business(place, trade):
     ):
         return True
 
-    # Cabinet-design-only businesses are usually showrooms/designers rather than
-    # field installers. Keep them only when the name also signals field service.
-    if trade == "millwork" and (
-        "cabinet & design" in name
-        or "cabinet and design" in name
-        or "cabinet design" in name
-    ) and not any(word in name for word in service_name_cues):
-        return True
+    # Millwork searches are specifically for people who can perform field work,
+    # not cabinet retailers/manufacturers that happen to carry a Carpenter tag.
+    # Foursquare often labels cabinet companies as Carpenter, so for an ambiguous
+    # cabinet business name we require the NAME itself to advertise field service.
+    if trade == "millwork":
+        field_service_name_cues = [
+            "install", "installer", "installation", "contract", "contractor",
+            "carpenter", "carpentry", "construction", "remodel", "service",
+            "repair", "handyman",
+        ]
+        ambiguous_cabinet_business = any(word in name for word in [
+            "cabinet", "cabinetry", "kitchen", "closet",
+        ])
+        shop_or_retail_name = any(word in name for word in [
+            " store", "store ", " shop", "shop ", "showroom", "gallery",
+            "sales", "warehouse", "liquidat", "outlet", "supply", "supplier",
+            "design", "distributor",
+        ])
+        advertises_field_service = any(word in name for word in field_service_name_cues)
+        if (ambiguous_cabinet_business or shop_or_retail_name) and not advertises_field_service:
+            return True
 
     # Global non-contractor business types that should never surface as subs.
     global_non_service = [
@@ -3522,7 +3535,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.43.1",
+        "app_version": "2.43.2",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -3727,7 +3740,7 @@ def create_workspace_export_archive():
         "export_format": 2,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.43.1",
+        "app_version": "2.43.2",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -4525,7 +4538,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.43.1",
+        "app_version": "2.43.2",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
