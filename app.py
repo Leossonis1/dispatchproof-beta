@@ -1145,7 +1145,7 @@ def route_http_json(url, params=None, payload=None, timeout=35):
     headers = {
         "Authorization": ROUTE_OPTIMIZATION_API_KEY,
         "Accept": "application/json, application/geo+json",
-        "User-Agent": "DispatchProof/2.44.1 route-optimization",
+        "User-Agent": "DispatchProof/2.44.2 route-optimization",
         "Connection": "close",
     }
 
@@ -3905,7 +3905,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.44.1",
+        "app_version": "2.44.2",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -4110,7 +4110,7 @@ def create_workspace_export_archive():
         "export_format": 2,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.44.1",
+        "app_version": "2.44.2",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -4909,7 +4909,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.44.1",
+        "app_version": "2.44.2",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -7258,6 +7258,73 @@ def project_route_optimizer(project_id):
         route_miles=route_miles,
         route_duration_label=route_duration_label,
     )
+
+
+@app.get("/projects/<int:project_id>/route-optimization/download.csv")
+def download_project_route_csv(project_id):
+    """Download the signed-in user's saved project route as a clean CSV summary."""
+    with get_db() as db:
+        project = db.execute("""
+            SELECT p.*, c.name AS client_name
+            FROM projects p
+            JOIN clients c ON c.id = p.client_id
+            WHERE p.id = ?
+        """, (project_id,)).fetchone()
+        if not project:
+            abort(404)
+
+        plan, stops = load_project_route_plan(db, project_id)
+        if not plan or not stops:
+            flash("Build and save a route before downloading it.")
+            return redirect(url_for("project_route_optimizer", project_id=project_id))
+
+        output = io.StringIO(newline="")
+        writer = csv.writer(output)
+        writer.writerow(["DispatchProof Route Plan"])
+        writer.writerow(["Client", project["client_name"]])
+        writer.writerow(["Project", project["name"]])
+        writer.writerow(["Starting Location", plan["start_address"]])
+        writer.writerow(["Return to Start", "Yes" if plan["return_to_start"] else "No"])
+        writer.writerow(["Total Driving (mi)", f"{route_miles(plan['total_distance_m']):.1f}"])
+        writer.writerow(["Estimated Drive Time", route_duration_label(plan["total_duration_s"])])
+        writer.writerow(["Route Updated", plan["updated_at"]])
+        writer.writerow([])
+        writer.writerow([
+            "Stop", "Job", "Route Address", "Installation Date", "Status",
+            "Miles From Prior Stop", "Drive Time From Prior Stop",
+        ])
+        writer.writerow(["START", "", plan["start_address"], "", "", "0.0", ""])
+        for stop in stops:
+            writer.writerow([
+                int(stop["stop_order"]),
+                stop["job_name"],
+                stop["route_address"],
+                stop["installation_date"] or "",
+                stop["status"] or "",
+                f"{route_miles(stop['leg_distance_m']):.1f}",
+                route_duration_label(stop["leg_duration_s"]),
+            ])
+
+        if plan["return_to_start"]:
+            used_distance = sum(float(stop["leg_distance_m"] or 0) for stop in stops)
+            used_duration = sum(float(stop["leg_duration_s"] or 0) for stop in stops)
+            return_distance = max(0.0, float(plan["total_distance_m"] or 0) - used_distance)
+            return_duration = max(0.0, float(plan["total_duration_s"] or 0) - used_duration)
+            writer.writerow([
+                "END", "Return to Start", plan["start_address"], "", "",
+                f"{route_miles(return_distance):.1f}",
+                route_duration_label(return_duration),
+            ])
+
+        csv_bytes = io.BytesIO(output.getvalue().encode("utf-8-sig"))
+        csv_bytes.seek(0)
+        base_name = secure_filename(f"{project['name']}_route") or f"project_{project_id}_route"
+        return send_file(
+            csv_bytes,
+            mimetype="text/csv; charset=utf-8",
+            as_attachment=True,
+            download_name=f"{base_name}.csv",
+        )
 
 
 @app.post("/jobs/<int:job_id>/assignment")
