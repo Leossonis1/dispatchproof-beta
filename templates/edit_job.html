@@ -38,6 +38,31 @@
   </section>
 
   <section>
+    <div class="eyebrow">Internal Access</div>
+    <h2>Job Access</h2>
+    {% if can_manage_job_access %}
+      <p class="section-copy">Keep this job personal, or share it with one collaboration team.</p>
+      <label>Who can work on this job?
+        <select name="team_id">
+          <option value="">Personal — only the job owner and administrators</option>
+          {% for team in team_options %}
+            <option value="{{ team['id'] }}" {% if selected_team_id == team['id'] %}selected{% endif %}>
+              Team — {{ team['name'] }}{% if not team['share_jobs'] %} (sharing currently off){% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+    {% else %}
+      <p class="section-copy">This is a shared team job. Only its original owner or an administrator can change who it is shared with.</p>
+      {% if selected_team_id %}
+        {% for team in team_options %}{% if team['id'] == selected_team_id %}<strong>Team — {{ team['name'] }}</strong>{% endif %}{% endfor %}
+      {% else %}
+        <strong>Personal job</strong>
+      {% endif %}
+    {% endif %}
+  </section>
+
+  <section>
     <div class="eyebrow">Contact</div>
     <h2>Site Contact</h2>
 

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Users & Access · DispatchProof{% endblock %}
+
 {% block content %}
 <div class="page-head">
   <div>
@@ -116,4 +117,89 @@
     {% endif %}
   </section>
 </div>
+
+<section class="panel" id="teams" style="margin-top:24px">
+  <div class="panel-head">
+    <div>
+      <div class="eyebrow">Optional Collaboration</div>
+      <h2>PM Teams</h2>
+      <p>Jobs are private by default. Create a team only when selected users need to collaborate on the same jobs.</p>
+    </div>
+  </div>
+
+  <form method="post" action="{{ url_for('add_team') }}" class="form-grid two" style="align-items:end">
+    <label>Team Name
+      <input required name="name" placeholder="Northeast PM Team">
+    </label>
+    <div>
+      <button class="btn primary" type="submit">Add Team</button>
+    </div>
+  </form>
+
+  {% if teams %}
+    <div class="user-card-list" style="margin-top:18px">
+    {% for item in teams %}
+      {% set team = item.team %}
+      <article class="user-access-card" id="team-{{ team['id'] }}">
+        <div class="user-access-head">
+          <div>
+            <strong>{{ team['name'] }}</strong>
+            <span>{{ item.members|length }} member{{ '' if item.members|length == 1 else 's' }}</span>
+          </div>
+          <span class="access-state {{ 'active-user' if team['share_jobs'] else 'inactive-user' }}">
+            {{ 'SHARING ON' if team['share_jobs'] else 'SHARING OFF' }}
+          </span>
+        </div>
+
+        <p class="small muted">
+          When sharing is on, members can open jobs explicitly assigned to this team. Personal jobs remain private.
+        </p>
+
+        <div class="user-actions">
+          <form method="post" action="{{ url_for('toggle_team_sharing', team_id=team['id']) }}">
+            <button class="btn ghost small-btn" type="submit">
+              {{ 'Turn Sharing Off' if team['share_jobs'] else 'Turn Sharing On' }}
+            </button>
+          </form>
+        </div>
+
+        {% if item.members %}
+          <div style="display:grid;gap:8px;margin:14px 0">
+          {% for member in item.members %}
+            <div class="user-meta-row" style="justify-content:space-between">
+              <span><strong>{{ member['full_name'] }}</strong> · @{{ member['username'] }}</span>
+              <form method="post" action="{{ url_for('remove_team_member', team_id=team['id'], user_id=member['id']) }}">
+                <button class="btn ghost small-btn" type="submit">Remove</button>
+              </form>
+            </div>
+          {% endfor %}
+          </div>
+        {% else %}
+          <p class="small muted">No users have been added to this team yet.</p>
+        {% endif %}
+
+        <form method="post" action="{{ url_for('add_team_member', team_id=team['id']) }}" class="form-grid two" style="align-items:end">
+          <label>Add User
+            <select name="user_id" required>
+              <option value="">Choose user</option>
+              {% for user in users %}
+                {% if user['is_active'] %}
+                <option value="{{ user['id'] }}">{{ user['full_name'] }} · @{{ user['username'] }}</option>
+                {% endif %}
+              {% endfor %}
+            </select>
+          </label>
+          <div><button class="btn action-blue small-btn" type="submit">Add to Team</button></div>
+        </form>
+      </article>
+    {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty compact-empty" style="margin-top:18px">
+      <h3>No PM teams yet</h3>
+      <p>That is fine. Every PM still gets a private job workspace by default.</p>
+    </div>
+  {% endif %}
+</section>
+
 {% endblock %}

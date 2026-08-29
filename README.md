@@ -1926,3 +1926,48 @@ Staffing-gap information remains internal DispatchProof planning data and is not
 Help & Tutorials includes **Check Staffing Gaps**.
 
 No database migration is required.
+
+## V2.37 — Private PM Jobs + Optional Team Sharing
+
+V2.37 adds a private-by-default job workspace for multiple project managers while preserving optional collaboration.
+
+### User-owned jobs
+
+Every new job created by an Operations user is automatically tied to that user. Operations users see their own jobs by default instead of the entire company job list.
+
+Owner and Administrator accounts retain company-wide job visibility.
+
+Existing pre-V2.37 jobs remain visible to Owner / Administrator only until intentionally shared through a team. This avoids assigning historical jobs to the wrong PM during migration.
+
+### PM Teams
+
+Owner / Administrator can manage **PM Teams** from Settings → Users & Access.
+
+Each team supports:
+
+- multiple user members
+- a team-wide **Sharing On / Sharing Off** control
+- explicit Team assignment on individual jobs
+
+Belonging to a team does not automatically expose a user's personal jobs.
+
+### Job Access
+
+New Job and Edit Job include an internal **Job Access** choice:
+
+- **Personal** — job owner + Owner / Administrators
+- **Team** — job owner + members of the selected team while sharing is enabled + Owner / Administrators
+
+Only the original job owner or an Owner / Administrator can change a job's access assignment.
+
+### Privacy coverage
+
+The ownership filter applies to Dashboard, Schedule, Completed Jobs, job lists under Clients / Projects, job documents, Email Outbox, crew assignment history, CSV exports, and direct internal job URLs.
+
+Crew Directory remains shared company data. Cross-PM crew conflicts still warn both sides without revealing an inaccessible private job name; the warning uses **another private job** instead.
+
+Combined Client / Project Reports remain company-wide aggregate reports and are therefore limited to Owner / Administrator accounts in V2.37. Operations users retain per-job client reports for jobs they can access.
+
+### Migration
+
+V2.37 automatically adds job ownership/team fields and the Teams tables. No manual SQL migration is required.

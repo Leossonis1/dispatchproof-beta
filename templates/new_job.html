@@ -61,6 +61,27 @@
       {% endif %}
     </div>
 
+  <div class="section-break">
+    <div>
+      <div class="eyebrow">Internal Access</div>
+      <h2>Job Access</h2>
+      <p>Personal is the default. Choose a team only when those PMs should work on this same job.</p>
+    </div>
+    <label>Who can work on this job?
+      <select name="team_id">
+        <option value="">Personal — only me and administrators</option>
+        {% for team in team_options %}
+          <option value="{{ team['id'] }}" {% if selected_team_id == team['id'] %}selected{% endif %}>
+            Team — {{ team['name'] }}{% if not team['share_jobs'] %} (sharing currently off){% endif %}
+          </option>
+        {% endfor %}
+      </select>
+    </label>
+    {% if not team_options %}
+      <div class="inline-help">No collaboration team is available to this account. This job will stay personal.</div>
+    {% endif %}
+  </div>
+
   <div class="grid-2">
     <label>Job Name
       <input required name="job_name" value="{{ form_values.job_name|e }}" placeholder="Mercy Medical Center - Casework">

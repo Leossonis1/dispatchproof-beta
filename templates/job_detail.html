@@ -6,6 +6,10 @@
     <a class="text-link" href="{{ url_for('dashboard') }}">← Back to dashboard</a>
     <h1>{{ job['job_name'] }}</h1>
     <p>{{ job['project_site'] or 'No project/site description' }} · Mobilization Attempt #{{ current_attempt_number }}</p>
+    <p class="small muted">
+      Access: {% if assigned_team %}<strong>Team · {{ assigned_team['name'] }}</strong>{% else %}<strong>Personal</strong>{% endif %}
+      · Owner: {% if job_owner %}{{ job_owner['full_name'] }}{% elif job['owner_user_id'] %}User #{{ job['owner_user_id'] }}{% else %}Owner / legacy job{% endif %}
+    </p>
   </div>
   <div class="page-head-actions">
     {% if job['status'] != 'COMPLETED' %}

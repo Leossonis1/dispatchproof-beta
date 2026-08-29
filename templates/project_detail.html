@@ -9,7 +9,9 @@
     <p>{{ project['client_name'] }}{% if project['location'] %} · {{ project['location'] }}{% endif %}</p>
   </div>
   <div class="page-actions">
+    {% if current_user_is_admin %}
     <a class="btn action-blue" href="{{ url_for('project_combined_report', project_id=project['id']) }}">Combined Project Report</a>
+    {% endif %}
     <a class="btn primary" href="{{ url_for('new_job', client_id=project['client_id'], project_id=project['id']) }}">+ New Job</a>
   </div>
 </div>

@@ -9,7 +9,9 @@
     <p>Projects and installations for this client.</p>
   </div>
   <div class="page-actions">
+    {% if current_user_is_admin %}
     <a class="btn action-blue" href="{{ url_for('client_combined_report', client_id=client['id']) }}">Combined Client Report</a>
+    {% endif %}
     <a class="btn primary" href="{{ url_for('new_project', client_id=client['id']) }}">+ New Project</a>
   </div>
 </div>
