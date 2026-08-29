@@ -165,6 +165,462 @@ ARRIVAL_ISSUES = [
     "Other",
 ]
 
+
+# V2.45: completely isolated practice scenarios. Training actions write only to
+# training_* tables; they never call production job, email, crew, routing, or
+# public-link workflows.
+TRAINING_SCENARIOS = {
+    "new-pm-basics": {
+        "title": "New PM Basics",
+        "summary": "Practice the normal one-day flow from readiness through arrival and completion.",
+        "estimated_minutes": 5,
+        "steps": [
+            {
+                "title": "Confirm the site before dispatch",
+                "screen": "Job · Store 101 — Columbus",
+                "facts": [
+                    "Installation: tomorrow",
+                    "Readiness: NO RESPONSE",
+                    "Crew: assigned",
+                    "Site contact: available",
+                ],
+                "question": "What should the PM do before sending the crew?",
+                "correct": "send_readiness",
+                "success": "Correct. Readiness should be documented before dispatch whenever possible.",
+                "choices": [
+                    ("dispatch_now", "Dispatch the crew now", "Dispatching with no readiness confirmation creates avoidable mobilization risk."),
+                    ("send_readiness", "Send / generate the Readiness Request", ""),
+                    ("complete_job", "Mark the job complete", "The job has not started yet."),
+                ],
+            },
+            {
+                "title": "Capture arrival proof",
+                "screen": "Readiness Summary",
+                "facts": [
+                    "Readiness: JOB IS READY",
+                    "All required items: confirmed",
+                    "Crew: scheduled",
+                ],
+                "question": "What proof should be collected when the installer reaches the site?",
+                "correct": "arrival_link",
+                "success": "Correct. The Installer Arrival link documents what the crew actually found on arrival.",
+                "choices": [
+                    ("arrival_link", "Use the Installer Arrival link", ""),
+                    ("delete_job", "Delete the job", "There is no reason to delete a valid active job."),
+                    ("new_readiness", "Start another readiness cycle immediately", "The current readiness is already confirmed."),
+                ],
+            },
+            {
+                "title": "Close the completed job",
+                "screen": "Installer Arrival",
+                "facts": [
+                    "Arrival: SITE READY",
+                    "Arrival photo: captured",
+                    "Installation work: complete",
+                ],
+                "question": "What is the clean closeout action?",
+                "correct": "complete_job",
+                "success": "Correct. Once the successful arrival is documented and the work is finished, the job can be completed.",
+                "choices": [
+                    ("complete_job", "Mark Job Complete", ""),
+                    ("failed_mob", "Create a Failed Mobilization report", "A failed mobilization is not appropriate when the site was ready."),
+                    ("reminder", "Generate a readiness reminder", "The job has already progressed beyond readiness."),
+                ],
+            },
+        ],
+    },
+    "blocked-site": {
+        "title": "Blocked Site — Do Not Dispatch",
+        "summary": "Practice recognizing a failed readiness requirement before money is spent on mobilization.",
+        "estimated_minutes": 5,
+        "steps": [
+            {
+                "title": "Read the readiness response",
+                "screen": "Readiness Summary · Store 204",
+                "facts": [
+                    "Finished flooring: YES",
+                    "Loading path: YES",
+                    "Power available: NO",
+                    "Status: BLOCKED",
+                ],
+                "question": "What should happen next?",
+                "correct": "hold_dispatch",
+                "success": "Correct. A blocked readiness response is a pre-dispatch problem, not a failed mobilization.",
+                "choices": [
+                    ("dispatch_anyway", "Dispatch and let the installer decide", "That defeats the purpose of pre-mobilization proof."),
+                    ("hold_dispatch", "Hold dispatch and follow up with the site", ""),
+                    ("failed_report", "Create a Failed Mobilization report now", "The crew has not mobilized, so this is not a failed mobilization."),
+                ],
+            },
+            {
+                "title": "Collect corrected readiness",
+                "screen": "Office Follow-Up",
+                "facts": [
+                    "Superintendent says temporary power is now installed",
+                    "Old response still shows Power: NO",
+                ],
+                "question": "What gives the PM fresh documented proof?",
+                "correct": "new_readiness",
+                "success": "Correct. Collect a fresh readiness response instead of relying on a phone call alone.",
+                "choices": [
+                    ("new_readiness", "Generate / collect a new Readiness Request", ""),
+                    ("edit_old", "Manually overwrite the old evidence", "Preserve the historical response and collect new proof."),
+                    ("complete_job", "Complete the job", "The crew still has not installed the work."),
+                ],
+            },
+            {
+                "title": "Dispatch after confirmation",
+                "screen": "Updated Readiness",
+                "facts": [
+                    "Power available: YES",
+                    "All other requirements: YES",
+                    "Status: JOB IS READY",
+                ],
+                "question": "Is the readiness gate now clear for dispatch?",
+                "correct": "dispatch_ready",
+                "success": "Correct. The PM now has documented confirmation supporting dispatch.",
+                "choices": [
+                    ("dispatch_ready", "Yes — proceed with the planned dispatch", ""),
+                    ("still_blocked", "No — keep it blocked forever", "The blocking condition has been corrected and re-confirmed."),
+                    ("delete_job", "Delete and recreate the job", "There is no need to discard the existing job history."),
+                ],
+            },
+        ],
+    },
+    "crew-conflict": {
+        "title": "Crew Conflict & Staffing",
+        "summary": "Practice handling double-booked crew and a staffing gap without exposing another PM's private job.",
+        "estimated_minutes": 5,
+        "steps": [
+            {
+                "title": "Resolve a double booking",
+                "screen": "Schedule · Crew Conflicts",
+                "facts": [
+                    "Your Store 310: Mike Davis assigned on Sep 14",
+                    "Conflict warning: Mike is assigned to another private job on Sep 14",
+                    "The other private job name is intentionally hidden",
+                ],
+                "question": "What is the right response?",
+                "correct": "reassign",
+                "success": "Correct. Resolve the conflict by changing crew or dates; private job details stay private.",
+                "choices": [
+                    ("reassign", "Reassign crew or adjust the schedule", ""),
+                    ("ignore", "Ignore the conflict", "That can leave two jobs expecting the same person at the same time."),
+                    ("demand_name", "Try to reveal the other PM's private job", "DispatchProof intentionally redacts private job names across PM workspaces."),
+                ],
+            },
+            {
+                "title": "Check the planned crew size",
+                "screen": "Field Assignment",
+                "facts": [
+                    "Planned Crew Size: 3",
+                    "Named crew assigned: 2",
+                    "Crew conflict: cleared",
+                ],
+                "question": "What should the PM notice next?",
+                "correct": "staffing_gap",
+                "success": "Correct. The conflict is gone, but the job still has a staffing gap.",
+                "choices": [
+                    ("staffing_gap", "There is still a staffing gap", ""),
+                    ("all_good", "Everything is fully staffed", "Two named people do not satisfy a planned crew size of three."),
+                    ("complete_job", "Complete the job now", "The installation has not occurred."),
+                ],
+            },
+            {
+                "title": "Fill the gap",
+                "screen": "Crew & Subcontractors",
+                "facts": [
+                    "No additional internal installer is available",
+                    "The job still needs one more field person",
+                ],
+                "question": "Which DispatchProof workflow can help?",
+                "correct": "find_sub",
+                "success": "Correct. A subcontractor can be found/saved and then assigned through the normal Field Assignment workflow.",
+                "choices": [
+                    ("find_sub", "Use Find a Subcontractor and assign a suitable candidate", ""),
+                    ("fake_name", "Type a fake third crew member into notes", "That does not create a schedulable field resource."),
+                    ("ignore_gap", "Leave the staffing gap unresolved", "The planned crew requirement would still be short."),
+                ],
+            },
+        ],
+    },
+    "failed-mobilization": {
+        "title": "Failed Mobilization & Return Visit",
+        "summary": "Practice preserving failed-trip evidence and starting the next mobilization on the same job.",
+        "estimated_minutes": 7,
+        "steps": [
+            {
+                "title": "Document what the crew found",
+                "screen": "Installer Arrival · Store 418",
+                "facts": [
+                    "Earlier readiness: JOB IS READY",
+                    "Installer arrival: SITE NOT READY",
+                    "Blocking issue: flooring incomplete",
+                    "Crew lost time on site",
+                ],
+                "question": "What evidence belongs in DispatchProof now?",
+                "correct": "failed_evidence",
+                "success": "Correct. Record the failed arrival, lost crew impact, notes, and required photos.",
+                "choices": [
+                    ("failed_evidence", "Record Failed Mobilization evidence and photos", ""),
+                    ("erase_readiness", "Delete the earlier readiness response", "The earlier readiness is important historical evidence."),
+                    ("complete_job", "Mark the job complete", "The installation did not succeed."),
+                ],
+            },
+            {
+                "title": "Prepare the return trip",
+                "screen": "Readiness Summary",
+                "facts": [
+                    "Mobilization Attempt #1: archived",
+                    "Return work is still required",
+                ],
+                "question": "Should the PM duplicate the job for the return trip?",
+                "correct": "start_return",
+                "success": "Correct. Start Return Visit / Next Mobilization on the same job so history remains together.",
+                "choices": [
+                    ("duplicate", "Duplicate as a new job", "That can create duplicate scheduling/conflict noise and split the evidence."),
+                    ("start_return", "Start Return Visit / Next Mobilization", ""),
+                    ("delete_old", "Delete the original job", "The failed mobilization history should be preserved."),
+                ],
+            },
+            {
+                "title": "Reconfirm readiness",
+                "screen": "Mobilization Attempt #2",
+                "facts": [
+                    "Current readiness: NO RESPONSE",
+                    "Attempt #1 remains in Mobilization History",
+                ],
+                "question": "What should happen before the crew returns?",
+                "correct": "reconfirm",
+                "success": "Correct. The return visit gets a fresh readiness confirmation while Attempt #1 stays archived.",
+                "choices": [
+                    ("reconfirm", "Collect readiness again for Attempt #2", ""),
+                    ("reuse_old", "Treat Attempt #1 readiness as current", "Site conditions changed; the new mobilization should have current proof."),
+                    ("skip_arrival", "Skip all field proof on the return", "The return visit should be documented like any other mobilization."),
+                ],
+            },
+            {
+                "title": "Close the successful return",
+                "screen": "Mobilization Attempt #2",
+                "facts": [
+                    "Readiness: JOB IS READY",
+                    "Arrival: SITE READY",
+                    "Work: complete",
+                ],
+                "question": "What should the final record preserve?",
+                "correct": "complete_with_history",
+                "success": "Correct. Complete the job while keeping both mobilization attempts in the permanent history.",
+                "choices": [
+                    ("complete_with_history", "Complete the job and keep both attempts", ""),
+                    ("delete_failure", "Delete the failed first attempt", "The failed trip is part of the job's proof record."),
+                    ("third_attempt", "Start another mobilization with no reason", "A new attempt is unnecessary after successful completion."),
+                ],
+            },
+        ],
+    },
+    "multi-day-progress": {
+        "title": "Multi-Day Progress & Field Updates",
+        "summary": "Practice replacing scattered texts with job-linked requests, notes, and daily progress photos.",
+        "estimated_minutes": 6,
+        "steps": [
+            {
+                "title": "Request a field photo",
+                "screen": "Field Updates · Store 522",
+                "facts": [
+                    "Job duration: 3 days",
+                    "PM needs a photo after upper cabinets are installed",
+                ],
+                "question": "What is the cleanest way to request it?",
+                "correct": "field_link",
+                "success": "Correct. A Field Update link keeps the request, response, and photos with the job.",
+                "choices": [
+                    ("field_link", "Create a Field Update link with the PM note", ""),
+                    ("personal_text", "Rely only on a personal text-message thread", "That separates project evidence from the DispatchProof job record."),
+                    ("readiness", "Use a new readiness confirmation for progress photos", "Readiness evidence serves a different purpose."),
+                ],
+            },
+            {
+                "title": "Record Day 1",
+                "screen": "Daily Progress",
+                "facts": [
+                    "Day 1 work: demo complete, lowers started",
+                    "Installer has 8 progress photos",
+                ],
+                "question": "Where should that progress be submitted?",
+                "correct": "daily_progress",
+                "success": "Correct. Daily Progress keeps the note and photos grouped under the work date.",
+                "choices": [
+                    ("daily_progress", "Submit a Daily Progress entry", ""),
+                    ("failed_mob", "Attach them to a Failed Mobilization report", "There was no failed mobilization."),
+                    ("client_docs", "Upload them as Client Documents", "Daily site progress belongs with the job timeline, not the client reference library."),
+                ],
+            },
+            {
+                "title": "Keep the days organized",
+                "screen": "Daily Progress Timeline",
+                "facts": [
+                    "Day 1: 8 photos",
+                    "Day 2: 11 photos",
+                    "Day 3: 6 photos",
+                ],
+                "question": "What does DispatchProof preserve automatically?",
+                "correct": "chronology",
+                "success": "Correct. Daily Progress entries remain grouped chronologically by work date.",
+                "choices": [
+                    ("chronology", "A dated progress history for each work day", ""),
+                    ("overwrite", "Only the latest day's photos", "Daily entries are additive; earlier days remain available."),
+                    ("readiness_only", "The photos only inside readiness", "Progress evidence is intentionally separate from readiness evidence."),
+                ],
+            },
+            {
+                "title": "Share progress with the client",
+                "screen": "Client Report",
+                "facts": [
+                    "Three Daily Progress days are stored",
+                    "PM wants to show documented progress",
+                ],
+                "question": "Where can the progress evidence be presented?",
+                "correct": "client_report",
+                "success": "Correct. Daily Progress is available in the Client Report while ordinary PM field-request chatter stays internal.",
+                "choices": [
+                    ("client_report", "Use the job's Client Report", ""),
+                    ("email_every_photo", "Manually email every photo from the phone", "That recreates the scattered communication problem the progress log is designed to solve."),
+                    ("activity_log", "Send the internal Activity Log to the client", "The Activity Log is an internal admin record."),
+                ],
+            },
+        ],
+    },
+    "subcontractor-sourcing": {
+        "title": "Find & Assign a Subcontractor",
+        "summary": "Practice filling a trade gap with the lightweight contractor-search workflow.",
+        "estimated_minutes": 5,
+        "steps": [
+            {
+                "title": "Recognize the labor gap",
+                "screen": "Field Assignment · Store 615",
+                "facts": [
+                    "Trade needed: Electrical",
+                    "No internal electrician available",
+                    "Job location: Akron, OH",
+                ],
+                "question": "What DispatchProof feature should the PM use?",
+                "correct": "find_sub",
+                "success": "Correct. Find a Subcontractor searches near the job without leaving the workflow.",
+                "choices": [
+                    ("find_sub", "Find a Subcontractor", ""),
+                    ("duplicate_job", "Duplicate the job", "Duplicating the job does not solve the trade gap."),
+                    ("route_opt", "Route Optimization", "Routing plans travel; it does not source labor."),
+                ],
+            },
+            {
+                "title": "Evaluate search results",
+                "screen": "Find a Subcontractor · Electrical",
+                "facts": [
+                    "Search results are candidates, not certified contractors",
+                    "DispatchProof shows search-match signals and available business information",
+                ],
+                "question": "What still belongs to the PM/company?",
+                "correct": "qualify",
+                "success": "Correct. The company still verifies credentials, insurance, pricing, availability, and fit.",
+                "choices": [
+                    ("qualify", "Qualify the contractor before hiring", ""),
+                    ("auto_approve", "Assume every search result is approved", "DispatchProof does not certify or guarantee search results."),
+                    ("ignore_scope", "Ignore trade/scope fit", "Trade and scope fit are important parts of contractor selection."),
+                ],
+            },
+            {
+                "title": "Save and assign",
+                "screen": "Search Result",
+                "facts": [
+                    "Candidate has been reviewed and selected",
+                    "The PM wants to use them on Store 615",
+                ],
+                "question": "What keeps the contractor reusable for future work?",
+                "correct": "save_assign",
+                "success": "Correct. Save & Assign adds the contractor to the Subcontractor Directory and assigns them to this job.",
+                "choices": [
+                    ("save_assign", "Save & Assign to This Job", ""),
+                    ("copy_name", "Only copy the business name into notes", "That does not create a reusable schedulable subcontractor record."),
+                    ("client_doc", "Store the contractor as a Client Document", "Client Documents are for reference files, not field resources."),
+                ],
+            },
+        ],
+    },
+    "rollout-route": {
+        "title": "Rollout Route Planning",
+        "summary": "Practice bulk job setup and route optimization for a multi-location rollout.",
+        "estimated_minutes": 6,
+        "steps": [
+            {
+                "title": "Start with the client's list",
+                "screen": "Project · 30-Store Rollout",
+                "facts": [
+                    "Client supplied 30 locations in a spreadsheet",
+                    "Each location is roughly one day of work",
+                ],
+                "question": "What avoids entering all 30 jobs by hand?",
+                "correct": "bulk_import",
+                "success": "Correct. Download the Job Import Template, paste the rollout list, and import the CSV into the Project.",
+                "choices": [
+                    ("bulk_import", "Use Bulk Rollout Job Import", ""),
+                    ("manual_30", "Create all 30 jobs manually", "That works, but the bulk import exists specifically to avoid repetitive entry."),
+                    ("crew_csv", "Import them into Crew", "These are jobs, not crew resources."),
+                ],
+            },
+            {
+                "title": "Respect the route limit",
+                "screen": "Route Optimization",
+                "facts": [
+                    "Project jobs: 30",
+                    "Route Optimization limit: 40 active jobs per route",
+                ],
+                "question": "Can all 30 locations be optimized together in this scenario?",
+                "correct": "within_limit",
+                "success": "Correct. Thirty stops are within the current 40-job route limit.",
+                "choices": [
+                    ("within_limit", "Yes — select all 30 active jobs", ""),
+                    ("only_ten", "No — only 10 can be routed", "The current route limit is 40 active jobs."),
+                    ("import_limit", "No — the 250-job import limit is the route limit", "Bulk import and route optimization have different limits."),
+                ],
+            },
+            {
+                "title": "Optimize from a real start point",
+                "screen": "Route Builder",
+                "facts": [
+                    "Crew is leaving from a hotel in Columbus, OH",
+                    "All route addresses have been checked",
+                ],
+                "question": "What information is required before optimizing?",
+                "correct": "start_location",
+                "success": "Correct. Enter the Crew Starting Location, choose the jobs, and optimize the route.",
+                "choices": [
+                    ("start_location", "Enter the Crew Starting Location", ""),
+                    ("blank_start", "Leave Starting Location blank", "DispatchProof requires a starting location before optimization."),
+                    ("fake_address", "Use a vague label such as 'southwest'", "Use a geocodable city/state or full address."),
+                ],
+            },
+            {
+                "title": "Hand the plan to the field",
+                "screen": "Saved Route",
+                "facts": [
+                    "Optimized stop order: saved",
+                    "Mileage and drive time: calculated",
+                    "PM has made one manual order adjustment",
+                ],
+                "question": "How can the PM keep/share the final stop list outside DispatchProof?",
+                "correct": "download_route",
+                "success": "Correct. Download Route CSV preserves the ordered stops, addresses, mileage, drive time, and totals.",
+                "choices": [
+                    ("download_route", "Download Route CSV", ""),
+                    ("screenshot_only", "Rely only on a screenshot", "A screenshot loses useful structured route details."),
+                    ("delete_plan", "Clear the saved route", "Clearing removes the plan instead of preserving it."),
+                ],
+            },
+        ],
+    },
+}
+TRAINING_STARTER_TRACK = tuple(TRAINING_SCENARIOS.keys())
+
 def get_db():
     conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
@@ -491,6 +947,39 @@ def ensure_columns(db):
             lat REAL NOT NULL,
             lon REAL NOT NULL,
             cached_at TEXT NOT NULL
+        )
+    """)
+
+
+
+    # V2.45: training/simulation data is intentionally stored in separate tables.
+    # Nothing here references production jobs, crew, email events, or public tokens.
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS training_assignments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            scenario_key TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'ASSIGNED',
+            current_step INTEGER NOT NULL DEFAULT 0,
+            coaching_flags INTEGER NOT NULL DEFAULT 0,
+            assigned_by TEXT NOT NULL,
+            assigned_at TEXT NOT NULL,
+            started_at TEXT,
+            completed_at TEXT,
+            last_activity_at TEXT,
+            UNIQUE(user_id, scenario_key),
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS training_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            assignment_id INTEGER NOT NULL,
+            step_index INTEGER NOT NULL,
+            action_key TEXT NOT NULL,
+            is_correct INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(assignment_id) REFERENCES training_assignments(id) ON DELETE CASCADE
         )
     """)
 
@@ -2082,6 +2571,15 @@ def init_db():
                 now_iso(),
                 "Activity Log enabled. Earlier job evidence remains available in existing histories.",
             ))
+
+        db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_training_assignments_user_status
+            ON training_assignments(user_id, status, assigned_at DESC)
+        """)
+        db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_training_attempts_assignment
+            ON training_attempts(assignment_id, created_at DESC)
+        """)
 
         db.execute("""
             INSERT OR IGNORE INTO app_settings (
@@ -3951,7 +4449,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.44.3",
+        "app_version": "2.45",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -4156,7 +4654,7 @@ def create_workspace_export_archive():
         "export_format": 2,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.44.3",
+        "app_version": "2.45",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -4906,6 +5404,51 @@ def company_logo_external_url(settings=None):
 
     return url_for("company_logo", _external=True)
 
+
+def training_scenario(scenario_key):
+    return TRAINING_SCENARIOS.get((scenario_key or "").strip())
+
+
+def training_assignment_card(row):
+    data = dict(row)
+    scenario = training_scenario(data.get("scenario_key"))
+    total_steps = len(scenario["steps"]) if scenario else 0
+    current_step = max(0, int(data.get("current_step") or 0))
+    if data.get("status") == "COMPLETED":
+        completed_steps = total_steps
+    else:
+        completed_steps = min(current_step, total_steps)
+    data["scenario"] = scenario
+    data["total_steps"] = total_steps
+    data["completed_steps"] = completed_steps
+    data["progress_percent"] = int(round((completed_steps / total_steps) * 100)) if total_steps else 0
+    return data
+
+
+def get_training_assignment(db, assignment_id):
+    return db.execute("""
+        SELECT ta.*, u.full_name AS user_full_name, u.username AS user_username,
+               u.role AS user_role, u.is_active AS user_is_active
+        FROM training_assignments ta
+        JOIN users u ON u.id = ta.user_id
+        WHERE ta.id = ?
+    """, (assignment_id,)).fetchone()
+
+
+def user_can_view_training_assignment(assignment):
+    if not assignment:
+        return False
+    if current_user_is_admin():
+        return True
+    user_id = current_user_id()
+    return bool(user_id and assignment["user_id"] == user_id)
+
+
+def user_can_practice_training_assignment(assignment):
+    user_id = current_user_id()
+    return bool(user_id and assignment and assignment["user_id"] == user_id)
+
+
 PAGE_HELP_ANCHORS = {
     "dashboard": "help-dashboard",
     "schedule_board": "help-schedule",
@@ -4934,6 +5477,8 @@ PAGE_HELP_ANCHORS = {
     "edit_user": "help-users-access",
     "activity_log": "help-activity-log",
     "backup_restore": "backup-restore",
+    "training_home": "training-simulation",
+    "training_scenario_page": "training-simulation",
 }
 
 def page_help_anchor_for_request():
@@ -4955,7 +5500,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.44.3",
+        "app_version": "2.45",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -5018,6 +5563,8 @@ def ensure_db():
         "delete_job_document",
         "delete_project_document",
         "delete_client_document",
+        "assign_training",
+        "remove_training_assignment",
     }
     if request.endpoint in admin_only_endpoints and user_authenticated() and not current_user_is_admin():
         flash("Administrator access is required for that page.")
@@ -7947,6 +8494,259 @@ def document_center_upload():
 
     flash(f"Job Document uploaded to {parent['job_name']}.")
     return redirect(url_for("document_center", scope="JOB"))
+
+
+
+@app.route("/training")
+def training_home():
+    scenario_library = [
+        {"key": key, **scenario, "step_count": len(scenario["steps"])}
+        for key, scenario in TRAINING_SCENARIOS.items()
+    ]
+
+    with get_db() as db:
+        if current_user_is_admin():
+            users = db.execute("""
+                SELECT id, full_name, username, role, is_active
+                FROM users
+                WHERE is_active = 1
+                ORDER BY LOWER(full_name), LOWER(username)
+            """).fetchall()
+            rows = db.execute("""
+                SELECT ta.*, u.full_name AS user_full_name, u.username AS user_username,
+                       u.role AS user_role, u.is_active AS user_is_active
+                FROM training_assignments ta
+                JOIN users u ON u.id = ta.user_id
+                ORDER BY
+                    CASE ta.status WHEN 'IN_PROGRESS' THEN 0 WHEN 'ASSIGNED' THEN 1 ELSE 2 END,
+                    LOWER(u.full_name), ta.assigned_at DESC
+            """).fetchall()
+            assignments = [training_assignment_card(row) for row in rows]
+        else:
+            users = []
+            user_id = current_user_id()
+            rows = db.execute("""
+                SELECT ta.*, u.full_name AS user_full_name, u.username AS user_username,
+                       u.role AS user_role, u.is_active AS user_is_active
+                FROM training_assignments ta
+                JOIN users u ON u.id = ta.user_id
+                WHERE ta.user_id = ?
+                ORDER BY
+                    CASE ta.status WHEN 'IN_PROGRESS' THEN 0 WHEN 'ASSIGNED' THEN 1 ELSE 2 END,
+                    ta.assigned_at DESC
+            """, (user_id,)).fetchall() if user_id else []
+            assignments = [training_assignment_card(row) for row in rows]
+
+    return render_template(
+        "training.html",
+        assignments=assignments,
+        training_users=users,
+        scenario_library=scenario_library,
+        starter_track_count=len(TRAINING_STARTER_TRACK),
+    )
+
+
+@app.post("/training/assign")
+def assign_training():
+    user_id = normalize_optional_id(request.form.get("user_id"))
+    scenario_key = (request.form.get("scenario_key") or "").strip()
+    if not user_id:
+        flash("Choose a user before assigning training.")
+        return redirect(url_for("training_home") + "#training-manager")
+
+    keys = list(TRAINING_STARTER_TRACK) if scenario_key == "__starter__" else [scenario_key]
+    if not keys or any(key not in TRAINING_SCENARIOS for key in keys):
+        flash("Choose a valid training scenario.")
+        return redirect(url_for("training_home") + "#training-manager")
+
+    with get_db() as db:
+        user = db.execute(
+            "SELECT id, full_name, username FROM users WHERE id = ? AND is_active = 1",
+            (user_id,),
+        ).fetchone()
+        if not user:
+            flash("That active user could not be found.")
+            return redirect(url_for("training_home") + "#training-manager")
+
+        added = 0
+        for key in keys:
+            cur = db.execute("""
+                INSERT OR IGNORE INTO training_assignments (
+                    user_id, scenario_key, status, current_step, coaching_flags,
+                    assigned_by, assigned_at, last_activity_at
+                ) VALUES (?, ?, 'ASSIGNED', 0, 0, ?, ?, ?)
+            """, (
+                user_id, key,
+                current_display_name() or current_username() or "Administrator",
+                now_iso(), now_iso(),
+            ))
+            added += int(cur.rowcount or 0)
+
+        record_activity(
+            db,
+            "Training Assigned",
+            f"Assigned {added} training scenario{'s' if added != 1 else ''} to {user['full_name']} (@{user['username']}).",
+        )
+        db.commit()
+
+    if added:
+        flash(f"Assigned {added} training scenario{'s' if added != 1 else ''} to {user['full_name']}.")
+    else:
+        flash(f"Those training scenarios are already assigned to {user['full_name']}. Use Reset if you want them to start over.")
+    return redirect(url_for("training_home") + "#training-manager")
+
+
+@app.get("/training/<int:assignment_id>")
+def training_scenario_page(assignment_id):
+    with get_db() as db:
+        assignment = get_training_assignment(db, assignment_id)
+        if not assignment or not user_can_view_training_assignment(assignment):
+            abort(404)
+
+        scenario = training_scenario(assignment["scenario_key"])
+        if not scenario:
+            abort(404)
+
+        card = training_assignment_card(assignment)
+        step_index = min(card["completed_steps"], max(0, len(scenario["steps"]) - 1)) if scenario["steps"] else 0
+        step = None if card["status"] == "COMPLETED" else scenario["steps"][step_index]
+        attempts = db.execute("""
+            SELECT step_index, action_key, is_correct, created_at
+            FROM training_attempts
+            WHERE assignment_id = ?
+            ORDER BY id DESC
+            LIMIT 12
+        """, (assignment_id,)).fetchall()
+
+    return render_template(
+        "training_scenario.html",
+        assignment=card,
+        scenario=scenario,
+        step=step,
+        step_index=step_index,
+        attempts=attempts,
+        can_practice=user_can_practice_training_assignment(assignment),
+    )
+
+
+@app.post("/training/<int:assignment_id>/answer")
+def answer_training_scenario(assignment_id):
+    action_key = (request.form.get("action_key") or "").strip()
+    with get_db() as db:
+        assignment = get_training_assignment(db, assignment_id)
+        if not assignment or not user_can_view_training_assignment(assignment):
+            abort(404)
+        if not user_can_practice_training_assignment(assignment):
+            flash("Administrators may review this trainee's progress, but only the assigned user can answer the simulation.")
+            return redirect(url_for("training_scenario_page", assignment_id=assignment_id))
+
+        scenario = training_scenario(assignment["scenario_key"])
+        if not scenario:
+            abort(404)
+        if assignment["status"] == "COMPLETED":
+            flash("This training scenario is already complete. Reset it if you want to practice again.")
+            return redirect(url_for("training_scenario_page", assignment_id=assignment_id))
+
+        step_index = max(0, int(assignment["current_step"] or 0))
+        if step_index >= len(scenario["steps"]):
+            db.execute(
+                "UPDATE training_assignments SET status = 'COMPLETED', completed_at = ?, last_activity_at = ? WHERE id = ?",
+                (now_iso(), now_iso(), assignment_id),
+            )
+            db.commit()
+            return redirect(url_for("training_scenario_page", assignment_id=assignment_id))
+
+        step = scenario["steps"][step_index]
+        choice_map = {choice[0]: choice for choice in step["choices"]}
+        choice = choice_map.get(action_key)
+        if not choice:
+            flash("Choose one of the available actions.")
+            return redirect(url_for("training_scenario_page", assignment_id=assignment_id))
+
+        correct = action_key == step["correct"]
+        db.execute("""
+            INSERT INTO training_attempts (assignment_id, step_index, action_key, is_correct, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (assignment_id, step_index, action_key, 1 if correct else 0, now_iso()))
+
+        started_at = assignment["started_at"] or now_iso()
+        if correct:
+            next_step = step_index + 1
+            completed = next_step >= len(scenario["steps"])
+            db.execute("""
+                UPDATE training_assignments
+                SET status = ?, current_step = ?, started_at = ?,
+                    completed_at = ?, last_activity_at = ?
+                WHERE id = ?
+            """, (
+                "COMPLETED" if completed else "IN_PROGRESS",
+                next_step,
+                started_at,
+                now_iso() if completed else None,
+                now_iso(),
+                assignment_id,
+            ))
+            db.commit()
+            flash(step["success"])
+            if completed:
+                flash(f"Training complete: {scenario['title']}.")
+            return redirect(url_for("training_scenario_page", assignment_id=assignment_id))
+
+        db.execute("""
+            UPDATE training_assignments
+            SET status = 'IN_PROGRESS', coaching_flags = coaching_flags + 1,
+                started_at = ?, last_activity_at = ?
+            WHERE id = ?
+        """, (started_at, now_iso(), assignment_id))
+        db.commit()
+        feedback = choice[2] or "That is not the best action for this situation. Try again."
+        flash(f"Practice note: {feedback}")
+        return redirect(url_for("training_scenario_page", assignment_id=assignment_id))
+
+
+@app.post("/training/<int:assignment_id>/reset")
+def reset_training_assignment(assignment_id):
+    with get_db() as db:
+        assignment = get_training_assignment(db, assignment_id)
+        if not assignment or not user_can_view_training_assignment(assignment):
+            abort(404)
+        if not (current_user_is_admin() or user_can_practice_training_assignment(assignment)):
+            abort(404)
+        db.execute("DELETE FROM training_attempts WHERE assignment_id = ?", (assignment_id,))
+        db.execute("""
+            UPDATE training_assignments
+            SET status = 'ASSIGNED', current_step = 0, coaching_flags = 0,
+                started_at = NULL, completed_at = NULL, last_activity_at = ?
+            WHERE id = ?
+        """, (now_iso(), assignment_id))
+        if current_user_is_admin():
+            record_activity(
+                db,
+                "Training Reset",
+                f"Reset {assignment['scenario_key']} training for {assignment['user_full_name']} (@{assignment['user_username']}).",
+            )
+        db.commit()
+    flash("Training scenario reset. The practice data has returned to the beginning.")
+    return redirect(url_for("training_scenario_page", assignment_id=assignment_id))
+
+
+@app.post("/training/<int:assignment_id>/remove")
+def remove_training_assignment(assignment_id):
+    with get_db() as db:
+        assignment = get_training_assignment(db, assignment_id)
+        if not assignment:
+            abort(404)
+        scenario = training_scenario(assignment["scenario_key"])
+        db.execute("DELETE FROM training_attempts WHERE assignment_id = ?", (assignment_id,))
+        db.execute("DELETE FROM training_assignments WHERE id = ?", (assignment_id,))
+        record_activity(
+            db,
+            "Training Removed",
+            f"Removed {scenario['title'] if scenario else assignment['scenario_key']} from {assignment['user_full_name']} (@{assignment['user_username']}).",
+        )
+        db.commit()
+    flash("Training assignment removed.")
+    return redirect(url_for("training_home") + "#training-manager")
 
 
 @app.route("/help")
