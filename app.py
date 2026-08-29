@@ -173,10 +173,36 @@ def ensure_columns(db):
         "crew_lead": "TEXT",
         "planned_crew_size": "INTEGER",
         "assigned_crew": "TEXT",
+        "owner_user_id": "INTEGER",
+        "team_id": "INTEGER",
     }
     for name, sql_type in needed.items():
         if name not in existing:
             db.execute(f"ALTER TABLE jobs ADD COLUMN {name} {sql_type}")
+
+    # V2.37: PM-owned jobs with optional team collaboration. Existing jobs
+    # intentionally keep owner_user_id/team_id NULL so only Owner/Admin sees
+    # legacy records until a new owner/team is explicitly assigned.
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS teams (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL COLLATE NOCASE,
+            share_jobs INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT
+        )
+    """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS team_members (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            team_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(team_id, user_id),
+            FOREIGN KEY(team_id) REFERENCES teams(id) ON DELETE CASCADE,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
 
     db.execute("""
         CREATE TABLE IF NOT EXISTS readiness_confirmations (
@@ -840,7 +866,11 @@ def init_db():
             last_reminder_sent_at TEXT,
             reminder_enabled INTEGER DEFAULT 1,
             reminder_hours_before INTEGER DEFAULT 48,
-            reminder_count INTEGER DEFAULT 0
+            reminder_count INTEGER DEFAULT 0,
+            owner_user_id INTEGER,
+            team_id INTEGER,
+            FOREIGN KEY(owner_user_id) REFERENCES users(id),
+            FOREIGN KEY(team_id) REFERENCES teams(id)
         );
 
         CREATE TABLE IF NOT EXISTS crew_members (
@@ -915,6 +945,22 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_crew_unavailability_member_dates
             ON crew_unavailability(crew_member_id, start_date, end_date)
         """)
+        db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_jobs_owner_user_id
+            ON jobs(owner_user_id, status, installation_date)
+        """)
+        db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_jobs_team_id
+            ON jobs(team_id, status, installation_date)
+        """)
+        db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_team_members_user
+            ON team_members(user_id, team_id)
+        """)
+        db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_team_members_team
+            ON team_members(team_id, user_id)
+        """)
 
         db.execute("""
             CREATE INDEX IF NOT EXISTS idx_job_notes_job_id
@@ -934,6 +980,27 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_client_documents_client_id
             ON client_documents(client_id, created_at DESC, id DESC)
         """)
+
+        access_migration = db.execute(
+            "SELECT 1 FROM app_migrations WHERE migration_key = ?",
+            ("v2.37_user_team_access",),
+        ).fetchone()
+        if not access_migration:
+            db.execute("""
+                INSERT INTO app_migrations (migration_key, applied_at, details)
+                VALUES (?, ?, ?)
+            """, (
+                "v2.37_user_team_access",
+                now_iso(),
+                "Added private-by-default job ownership plus optional team job sharing. Legacy jobs remain Owner/Admin-only.",
+            ))
+            record_activity(
+                db,
+                "User Job Privacy Enabled",
+                "Enabled private-by-default PM jobs and optional team collaboration. Existing legacy jobs remain Owner/Admin-only.",
+                actor_type="SYSTEM",
+                actor_name="DispatchProof",
+            )
 
         crew_migration = db.execute(
             "SELECT 1 FROM app_migrations WHERE migration_key = ?",
@@ -1164,61 +1231,46 @@ def get_active_staffing_gaps(jobs):
     return by_job, len(by_job), total_needed
 
 
-def get_active_crew_conflicts(db):
-    """
-    Return active same-day directory-crew conflicts.
-
-    A conflict exists when the same Crew Directory member is linked to
-    more than one non-completed job with the same installation date.
-
-    Returns:
-      by_job: {job_id: [{crew_member_name, installation_date, other_jobs:[...]}]}
-      group_count: number of unique crew-member/date conflict groups
-    """
+def get_active_crew_conflicts(db, visible_job_ids=None):
+    """Detect company-wide crew conflicts while respecting PM job privacy."""
     rows = db.execute("""
-        SELECT
-            j.id AS job_id,
-            j.job_name,
-            j.installation_date,
-            cm.id AS crew_member_id,
-            cm.name AS crew_member_name
+        SELECT j.id AS job_id, j.job_name, j.installation_date,
+               cm.id AS crew_member_id, cm.name AS crew_member_name
         FROM job_crew_assignments jca
         JOIN jobs j ON j.id = jca.job_id
         JOIN crew_members cm ON cm.id = jca.crew_member_id
         WHERE j.status <> 'COMPLETED'
           AND TRIM(COALESCE(j.installation_date, '')) <> ''
-        ORDER BY
-            j.installation_date,
-            cm.id,
-            j.id
+        ORDER BY j.installation_date, cm.id, j.id
     """).fetchall()
 
+    visible = None if visible_job_ids is None else set(visible_job_ids)
     groups = {}
     for row in rows:
-        key = (row["installation_date"], row["crew_member_id"])
-        groups.setdefault(key, []).append(row)
+        groups.setdefault((row["installation_date"], row["crew_member_id"]), []).append(row)
 
     by_job = {}
     group_count = 0
-
     for (install_date, _member_id), group_rows in groups.items():
-        unique_job_ids = {row["job_id"] for row in group_rows}
-        if len(unique_job_ids) < 2:
+        if len({row["job_id"] for row in group_rows}) < 2:
             continue
-
+        target_rows = group_rows if visible is None else [row for row in group_rows if row["job_id"] in visible]
+        if not target_rows:
+            continue
         group_count += 1
-        for row in group_rows:
-            others = [
-                other["job_name"]
-                for other in group_rows
-                if other["job_id"] != row["job_id"]
-            ]
+        for row in target_rows:
+            others = []
+            for other in group_rows:
+                if other["job_id"] == row["job_id"]:
+                    continue
+                label = other["job_name"] if visible is None or other["job_id"] in visible else "another private job"
+                if label not in others:
+                    others.append(label)
             by_job.setdefault(row["job_id"], []).append({
                 "crew_member_name": row["crew_member_name"],
                 "installation_date": install_date,
                 "other_jobs": others,
             })
-
     return by_job, group_count
 
 
@@ -2336,6 +2388,107 @@ def current_db_user():
         ).fetchone()
 
 
+def current_user_id():
+    try:
+        user_id = int(session.get("dispatchproof_user_id") or 0)
+    except (TypeError, ValueError):
+        return None
+    return user_id if user_id > 0 else None
+
+
+def job_visibility_sql(alias="j"):
+    """Return a SQL predicate + params for jobs visible to this signed-in user."""
+    if current_user_is_admin():
+        return "1=1", []
+
+    user_id = current_user_id()
+    if not user_id:
+        return "0=1", []
+
+    alias = re.sub(r"[^A-Za-z0-9_]", "", alias or "j") or "j"
+    clause = f"""(
+        {alias}.owner_user_id = ?
+        OR (
+            {alias}.team_id IS NOT NULL
+            AND EXISTS (
+                SELECT 1
+                FROM team_members tm
+                JOIN teams t ON t.id = tm.team_id
+                WHERE tm.user_id = ?
+                  AND tm.team_id = {alias}.team_id
+                  AND t.share_jobs = 1
+            )
+        )
+    )"""
+    return clause, [user_id, user_id]
+
+
+def user_can_access_job(db, job_id):
+    if current_user_is_admin():
+        return True
+    clause, params = job_visibility_sql("j")
+    row = db.execute(
+        f"SELECT 1 FROM jobs j WHERE j.id = ? AND ({clause})",
+        (job_id, *params),
+    ).fetchone()
+    return bool(row)
+
+
+def user_team_options(db, include_disabled=False):
+    """Teams the current user may choose for a job."""
+    if current_user_is_admin():
+        return db.execute("""
+            SELECT t.*, COUNT(tm.user_id) AS member_count
+            FROM teams t
+            LEFT JOIN team_members tm ON tm.team_id = t.id
+            GROUP BY t.id
+            ORDER BY LOWER(t.name), t.id
+        """).fetchall()
+
+    user_id = current_user_id()
+    if not user_id:
+        return []
+    sharing_filter = "" if include_disabled else "WHERE t.share_jobs = 1"
+    return db.execute(f"""
+        SELECT t.*, COUNT(all_tm.user_id) AS member_count
+        FROM teams t
+        JOIN team_members mine ON mine.team_id = t.id AND mine.user_id = ?
+        LEFT JOIN team_members all_tm ON all_tm.team_id = t.id
+        {sharing_filter}
+        GROUP BY t.id
+        ORDER BY LOWER(t.name), t.id
+    """, (user_id,)).fetchall()
+
+
+def resolve_job_team_id(db, raw_team_id, allow_disabled=False):
+    team_id = normalize_optional_id(raw_team_id)
+    if not team_id:
+        return None, None
+
+    if current_user_is_admin():
+        team = db.execute("SELECT * FROM teams WHERE id = ?", (team_id,)).fetchone()
+    else:
+        user_id = current_user_id()
+        sharing_sql = "" if allow_disabled else "AND t.share_jobs = 1"
+        team = db.execute(f"""
+            SELECT t.*
+            FROM teams t
+            JOIN team_members tm ON tm.team_id = t.id
+            WHERE t.id = ? AND tm.user_id = ? {sharing_sql}
+        """, (team_id, user_id)).fetchone() if user_id else None
+
+    if not team:
+        return None, "That team is not available for job sharing."
+    return team_id, None
+
+
+def can_manage_job_access(job):
+    if current_user_is_admin():
+        return True
+    user_id = current_user_id()
+    return bool(user_id and job and job["owner_user_id"] == user_id)
+
+
 def normalize_optional_id(value):
     value = str(value or "").strip()
     return int(value) if value.isdigit() and int(value) > 0 else None
@@ -2583,7 +2736,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.36",
+        "app_version": "2.37",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2813,7 +2966,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.36",
+        "app_version": "2.37",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -2850,6 +3003,14 @@ def ensure_db():
         "reset_user_password",
         "change_user_role",
         "edit_user",
+        "add_team",
+        "toggle_team_sharing",
+        "add_team_member",
+        "remove_team_member",
+        "client_combined_report",
+        "rotate_client_combined_report",
+        "project_combined_report",
+        "rotate_project_combined_report",
         "activity_log",
         "reopen_job",
         "delete_job_document",
@@ -2859,6 +3020,17 @@ def ensure_db():
     if request.endpoint in admin_only_endpoints and user_authenticated() and not current_user_is_admin():
         flash("Administrator access is required for that page.")
         return redirect(url_for("dashboard"))
+
+    # V2.37: central direct-URL protection for every authenticated internal
+    # route carrying a job_id. Public token/evidence routes are excluded above.
+    job_id = (request.view_args or {}).get("job_id") if request.view_args else None
+    if job_id and request.endpoint not in public_endpoints:
+        with get_db() as db:
+            exists = db.execute("SELECT 1 FROM jobs WHERE id = ?", (job_id,)).fetchone()
+            if not exists:
+                abort(404)
+            if not user_can_access_job(db, job_id):
+                abort(404)
 
     # Do not make static/public requests responsible for sending reminders.
     if request.endpoint in {
@@ -2965,7 +3137,7 @@ def not_found(error):
 def health():
     return {
         "status": "ok",
-        "version": "2.36",
+        "version": "2.37",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -3074,6 +3246,7 @@ def crew_directory():
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
 
     with get_db() as db:
+        visibility_clause, visibility_params = job_visibility_sql("j")
         members = db.execute(f"""
             SELECT
                 cm.*,
@@ -3096,14 +3269,14 @@ def crew_directory():
             LEFT JOIN job_crew_assignments jca
               ON jca.crew_member_id = cm.id
             LEFT JOIN jobs j
-              ON j.id = jca.job_id
+              ON j.id = jca.job_id AND ({visibility_clause})
             {where_sql}
             GROUP BY cm.id
             ORDER BY
                 CASE WHEN cm.is_active = 1 THEN 0 ELSE 1 END,
                 LOWER(cm.name),
                 cm.id
-        """, (today, next7, today, *params)).fetchall()
+        """, (today, next7, today, *visibility_params, *params)).fetchall()
 
         counts = {
             "active": db.execute(
@@ -3112,12 +3285,13 @@ def crew_directory():
             "inactive": db.execute(
                 "SELECT COUNT(*) AS c FROM crew_members WHERE is_active = 0"
             ).fetchone()["c"],
-            "assigned_active_jobs": db.execute("""
+            "assigned_active_jobs": db.execute(f"""
                 SELECT COUNT(DISTINCT j.id) AS c
                 FROM jobs j
                 JOIN job_crew_assignments jca ON jca.job_id = j.id
                 WHERE j.status <> 'COMPLETED'
-            """).fetchone()["c"],
+                  AND ({visibility_clause})
+            """, visibility_params).fetchone()["c"],
             "upcoming_time_off": db.execute("""
                 SELECT COUNT(*) AS c
                 FROM crew_unavailability
@@ -3175,6 +3349,7 @@ def add_crew_member():
 @app.route("/crew/<int:crew_member_id>/edit", methods=["GET", "POST"])
 def edit_crew_member(crew_member_id):
     with get_db() as db:
+        visibility_clause, visibility_params = job_visibility_sql("j")
         member = db.execute(
             "SELECT * FROM crew_members WHERE id = ?",
             (crew_member_id,),
@@ -3237,7 +3412,7 @@ def edit_crew_member(crew_member_id):
             flash("Crew member updated." if changes else "No crew member changes were made.")
             return redirect(url_for("edit_crew_member", crew_member_id=crew_member_id))
 
-        assignments = db.execute("""
+        assignments = db.execute(f"""
             SELECT
                 j.id,
                 j.job_name,
@@ -3252,12 +3427,13 @@ def edit_crew_member(crew_member_id):
             LEFT JOIN clients c ON c.id = j.client_id
             LEFT JOIN projects p ON p.id = j.project_id
             WHERE jca.crew_member_id = ?
+              AND ({visibility_clause})
             ORDER BY
                 CASE WHEN j.status = 'COMPLETED' THEN 1 ELSE 0 END,
                 j.installation_date DESC,
                 j.id DESC
             LIMIT 50
-        """, (crew_member_id,)).fetchall()
+        """, (crew_member_id, *visibility_params)).fetchall()
 
         unavailability = db.execute("""
             SELECT *
@@ -3395,12 +3571,117 @@ def users_access():
                 LOWER(full_name),
                 LOWER(username)
         """).fetchall()
+        teams = db.execute("""
+            SELECT t.*, COUNT(tm.user_id) AS member_count
+            FROM teams t
+            LEFT JOIN team_members tm ON tm.team_id = t.id
+            GROUP BY t.id
+            ORDER BY LOWER(t.name), t.id
+        """).fetchall()
+        team_cards = []
+        for team in teams:
+            members = db.execute("""
+                SELECT u.id, u.full_name, u.username, u.role, u.is_active
+                FROM team_members tm
+                JOIN users u ON u.id = tm.user_id
+                WHERE tm.team_id = ?
+                ORDER BY LOWER(u.full_name), LOWER(u.username)
+            """, (team["id"],)).fetchall()
+            team_cards.append({"team": team, "members": members})
 
     return render_template(
         "users_access.html",
         users=users,
+        teams=team_cards,
         owner_username=ADMIN_USERNAME,
     )
+
+
+@app.post("/settings/teams/add")
+def add_team():
+    name = (request.form.get("name") or "").strip()
+    if not name:
+        flash("Team Name is required.")
+        return redirect(url_for("users_access") + "#teams")
+
+    try:
+        with get_db() as db:
+            cur = db.execute("""
+                INSERT INTO teams (name, share_jobs, created_at, updated_at)
+                VALUES (?, 1, ?, ?)
+            """, (name, now_iso(), now_iso()))
+            record_activity(db, "Team Added", f"Created collaboration team {name} with job sharing enabled.")
+            db.commit()
+            team_id = cur.lastrowid
+    except sqlite3.IntegrityError:
+        flash("A team with that name already exists.")
+        return redirect(url_for("users_access") + "#teams")
+
+    flash(f"Team {name} created. Add the PMs who should collaborate.")
+    return redirect(url_for("users_access") + f"#team-{team_id}")
+
+
+@app.post("/settings/teams/<int:team_id>/toggle-sharing")
+def toggle_team_sharing(team_id):
+    with get_db() as db:
+        team = db.execute("SELECT * FROM teams WHERE id = ?", (team_id,)).fetchone()
+        if not team:
+            abort(404)
+        new_value = 0 if team["share_jobs"] else 1
+        db.execute("UPDATE teams SET share_jobs = ?, updated_at = ? WHERE id = ?", (new_value, now_iso(), team_id))
+        record_activity(
+            db,
+            "Team Job Sharing Enabled" if new_value else "Team Job Sharing Disabled",
+            f"{'Enabled' if new_value else 'Disabled'} shared-job access for team {team['name']}.",
+        )
+        db.commit()
+    flash(f"{team['name']} job sharing {'enabled' if new_value else 'disabled'}.")
+    return redirect(url_for("users_access") + f"#team-{team_id}")
+
+
+@app.post("/settings/teams/<int:team_id>/members/add")
+def add_team_member(team_id):
+    user_id = normalize_optional_id(request.form.get("user_id"))
+    if not user_id:
+        flash("Choose a user to add to the team.")
+        return redirect(url_for("users_access") + f"#team-{team_id}")
+
+    with get_db() as db:
+        team = db.execute("SELECT * FROM teams WHERE id = ?", (team_id,)).fetchone()
+        user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not team or not user:
+            abort(404)
+        if not user["is_active"]:
+            flash("Only active users can be added to a PM team.")
+            return redirect(url_for("users_access") + f"#team-{team_id}")
+        try:
+            db.execute(
+                "INSERT INTO team_members (team_id, user_id, created_at) VALUES (?, ?, ?)",
+                (team_id, user_id, now_iso()),
+            )
+        except sqlite3.IntegrityError:
+            flash(f"{user['full_name']} is already on {team['name']}.")
+            return redirect(url_for("users_access") + f"#team-{team_id}")
+        record_activity(db, "Team Member Added", f"Added {user['full_name']} (@{user['username']}) to {team['name']}.")
+        db.commit()
+
+    flash(f"{user['full_name']} added to {team['name']}.")
+    return redirect(url_for("users_access") + f"#team-{team_id}")
+
+
+@app.post("/settings/teams/<int:team_id>/members/<int:user_id>/remove")
+def remove_team_member(team_id, user_id):
+    with get_db() as db:
+        team = db.execute("SELECT * FROM teams WHERE id = ?", (team_id,)).fetchone()
+        user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not team or not user:
+            abort(404)
+        db.execute("DELETE FROM team_members WHERE team_id = ? AND user_id = ?", (team_id, user_id))
+        record_activity(db, "Team Member Removed", f"Removed {user['full_name']} (@{user['username']}) from {team['name']}.")
+        db.commit()
+
+    flash(f"{user['full_name']} removed from {team['name']}.")
+    return redirect(url_for("users_access") + f"#team-{team_id}")
 
 
 @app.post("/settings/users/add")
@@ -4216,7 +4497,8 @@ def project_portfolio_asset(token, job_id, filename):
 @app.route("/clients")
 def clients():
     with get_db() as db:
-        rows = db.execute("""
+        visibility_clause, visibility_params = job_visibility_sql("j")
+        rows = db.execute(f"""
             SELECT c.*,
                    COUNT(DISTINCT p.id) AS project_count,
                    COUNT(DISTINCT j.id) AS job_count,
@@ -4224,10 +4506,10 @@ def clients():
                    COUNT(DISTINCT CASE WHEN j.status != 'COMPLETED' THEN j.id END) AS active_job_count
             FROM clients c
             LEFT JOIN projects p ON p.client_id = c.id
-            LEFT JOIN jobs j ON j.client_id = c.id
+            LEFT JOIN jobs j ON j.client_id = c.id AND ({visibility_clause})
             GROUP BY c.id
             ORDER BY LOWER(c.name), c.id
-        """).fetchall()
+        """, visibility_params).fetchall()
     return render_template("clients.html", clients=rows)
 
 
@@ -4275,6 +4557,7 @@ def new_client():
 @app.route("/clients/<int:client_id>", methods=["GET", "POST"])
 def client_detail(client_id):
     with get_db() as db:
+        visibility_clause, visibility_params = job_visibility_sql("j")
         client = db.execute("SELECT * FROM clients WHERE id = ?", (client_id,)).fetchone()
         if not client:
             abort(404)
@@ -4309,26 +4592,27 @@ def client_detail(client_id):
             flash(f"Client {name} updated.")
             return redirect(url_for("client_detail", client_id=client_id))
 
-        projects = db.execute("""
+        projects = db.execute(f"""
             SELECT p.*,
                    COUNT(DISTINCT j.id) AS job_count,
                    COUNT(DISTINCT CASE WHEN j.status = 'COMPLETED' THEN j.id END) AS completed_job_count,
                    COUNT(DISTINCT CASE WHEN j.status != 'COMPLETED' THEN j.id END) AS active_job_count
             FROM projects p
-            LEFT JOIN jobs j ON j.project_id = p.id
+            LEFT JOIN jobs j ON j.project_id = p.id AND ({visibility_clause})
             WHERE p.client_id = ?
             GROUP BY p.id
             ORDER BY LOWER(p.name), p.id
-        """, (client_id,)).fetchall()
+        """, (*visibility_params, client_id)).fetchall()
 
-        jobs = db.execute("""
+        jobs = db.execute(f"""
             SELECT j.*, p.name AS project_name
             FROM jobs j
             LEFT JOIN projects p ON p.id = j.project_id
             WHERE j.client_id = ?
+              AND ({visibility_clause})
             ORDER BY CASE WHEN j.status = 'COMPLETED' THEN 1 ELSE 0 END,
                      j.installation_date, j.id
-        """, (client_id,)).fetchall()
+        """, (client_id, *visibility_params)).fetchall()
 
         client_documents = db.execute("""
             SELECT *
@@ -4396,6 +4680,7 @@ def new_project(client_id):
 @app.route("/projects/<int:project_id>", methods=["GET", "POST"])
 def project_detail(project_id):
     with get_db() as db:
+        visibility_clause, visibility_params = job_visibility_sql("j")
         project = db.execute("""
             SELECT p.*, c.name AS client_name
             FROM projects p
@@ -4433,13 +4718,14 @@ def project_detail(project_id):
             flash(f"Project {name} updated.")
             return redirect(url_for("project_detail", project_id=project_id))
 
-        jobs = db.execute("""
-            SELECT *
-            FROM jobs
-            WHERE project_id = ?
+        jobs = db.execute(f"""
+            SELECT j.*
+            FROM jobs j
+            WHERE j.project_id = ?
+              AND ({visibility_clause})
             ORDER BY CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END,
                      installation_date, id
-        """, (project_id,)).fetchall()
+        """, (project_id, *visibility_params)).fetchall()
         project_documents = db.execute("""
             SELECT *
             FROM project_documents
@@ -4515,8 +4801,9 @@ def document_center():
     project_id = normalize_optional_id(request.args.get("project_id"))
 
     with get_db() as db:
+        visibility_clause, visibility_params = job_visibility_sql("j")
         clients, projects = get_clients_and_projects(db)
-        jobs = db.execute("""
+        jobs = db.execute(f"""
             SELECT
                 j.id,
                 j.job_name,
@@ -4529,11 +4816,12 @@ def document_center():
             FROM jobs j
             LEFT JOIN clients c ON c.id = j.client_id
             LEFT JOIN projects p ON p.id = j.project_id
+            WHERE ({visibility_clause})
             ORDER BY CASE WHEN j.status = 'COMPLETED' THEN 1 ELSE 0 END,
                      j.installation_date DESC,
                      j.job_name COLLATE NOCASE,
                      j.id DESC
-        """).fetchall()
+        """, visibility_params).fetchall()
 
         # Keep these as three simple queries instead of one compound UNION.
         # This is more tolerant of restored/upgraded beta databases and avoids
@@ -4577,7 +4865,7 @@ def document_center():
             JOIN clients c ON c.id = p.client_id
         """).fetchall()
 
-        job_rows = db.execute("""
+        job_rows = db.execute(f"""
             SELECT
                 'JOB' AS document_scope,
                 jd.id AS document_id,
@@ -4596,7 +4884,8 @@ def document_center():
             JOIN jobs j ON j.id = jd.job_id
             LEFT JOIN clients c ON c.id = j.client_id
             LEFT JOIN projects p ON p.id = j.project_id
-        """).fetchall()
+            WHERE ({visibility_clause})
+        """, visibility_params).fetchall()
 
         rows = list(client_rows) + list(project_rows) + list(job_rows)
         rows.sort(
@@ -4813,7 +5102,7 @@ def document_center_upload():
             LEFT JOIN projects p ON p.id = j.project_id
             WHERE j.id = ?
         """, (job_id,)).fetchone()
-        if not parent:
+        if not parent or not user_can_access_job(db, job_id):
             abort(404)
 
         stored_filename = f"jobdoc_{job_id}_{secrets.token_hex(8)}_{original_filename}"
@@ -4915,7 +5204,8 @@ def build_schedule_view(args):
     project_filter = normalize_optional_id(args.get("project"))
 
     with get_db() as db:
-        all_jobs = db.execute("""
+        visibility_clause, visibility_params = job_visibility_sql("j")
+        all_jobs = db.execute(f"""
             SELECT
                 j.*,
                 c.name AS client_name,
@@ -4924,8 +5214,9 @@ def build_schedule_view(args):
             FROM jobs j
             LEFT JOIN clients c ON c.id = j.client_id
             LEFT JOIN projects p ON p.id = j.project_id
+            WHERE ({visibility_clause})
             ORDER BY j.installation_date ASC, j.id ASC
-        """).fetchall()
+        """, visibility_params).fetchall()
 
         clients = db.execute("""
             SELECT id, name
@@ -4939,8 +5230,11 @@ def build_schedule_view(args):
             ORDER BY LOWER(name), id
         """).fetchall()
 
-        crew_conflicts_by_job, crew_conflict_group_count = get_active_crew_conflicts(db)
+        visible_job_ids = {job["id"] for job in all_jobs}
+        crew_conflicts_by_job, crew_conflict_group_count = get_active_crew_conflicts(db, visible_job_ids)
         crew_unavailability_by_job, crew_unavailability_group_count = get_active_crew_unavailability_issues(db)
+        crew_unavailability_by_job = {k: v for k, v in crew_unavailability_by_job.items() if k in visible_job_ids}
+        crew_unavailability_group_count = sum(len(v) for v in crew_unavailability_by_job.values())
 
     staffing_gaps_by_job, staffing_gap_job_count, staffing_gap_total_needed = get_active_staffing_gaps(all_jobs)
 
@@ -5172,7 +5466,8 @@ def dashboard():
     project_filter = parse_filter_id(request.args.get("project"))
 
     with get_db() as db:
-        all_jobs = db.execute("""
+        visibility_clause, visibility_params = job_visibility_sql("j")
+        all_jobs = db.execute(f"""
             SELECT
                 j.*,
                 c.name AS client_name,
@@ -5209,8 +5504,9 @@ def dashboard():
             LEFT JOIN clients c ON c.id = j.client_id
             LEFT JOIN projects p ON p.id = j.project_id
             WHERE j.status != 'COMPLETED'
+              AND ({visibility_clause})
             ORDER BY installation_date ASC, j.id DESC
-        """).fetchall()
+        """, visibility_params).fetchall()
 
         clients = db.execute("""
             SELECT id, name
@@ -5224,8 +5520,11 @@ def dashboard():
             ORDER BY LOWER(name), id
         """).fetchall()
 
-        crew_conflicts_by_job, crew_conflict_group_count = get_active_crew_conflicts(db)
+        visible_job_ids = {job["id"] for job in all_jobs}
+        crew_conflicts_by_job, crew_conflict_group_count = get_active_crew_conflicts(db, visible_job_ids)
         crew_unavailability_by_job, crew_unavailability_group_count = get_active_crew_unavailability_issues(db)
+        crew_unavailability_by_job = {k: v for k, v in crew_unavailability_by_job.items() if k in visible_job_ids}
+        crew_unavailability_group_count = sum(len(v) for v in crew_unavailability_by_job.values())
 
     staffing_gaps_by_job, staffing_gap_job_count, staffing_gap_total_needed = get_active_staffing_gaps(all_jobs)
 
@@ -5363,7 +5662,8 @@ def completed_jobs():
     project_filter = parse_filter_id(request.args.get("project"))
 
     with get_db() as db:
-        all_jobs = db.execute("""
+        visibility_clause, visibility_params = job_visibility_sql("j")
+        all_jobs = db.execute(f"""
             SELECT
                 j.*,
                 c.name AS client_name,
@@ -5378,8 +5678,9 @@ def completed_jobs():
             LEFT JOIN clients c ON c.id = j.client_id
             LEFT JOIN projects p ON p.id = j.project_id
             WHERE j.status = 'COMPLETED'
+              AND ({visibility_clause})
             ORDER BY j.completed_at DESC, j.installation_date DESC, j.id DESC
-        """).fetchall()
+        """, visibility_params).fetchall()
 
         clients = db.execute("""
             SELECT id, name
@@ -5467,7 +5768,8 @@ def export_active_csv():
     project_filter = export_filter_id(request.args.get("project"))
 
     with get_db() as db:
-        all_jobs = db.execute("""
+        visibility_clause, visibility_params = job_visibility_sql("j")
+        all_jobs = db.execute(f"""
             SELECT
                 j.*,
                 c.name AS client_name,
@@ -5482,8 +5784,9 @@ def export_active_csv():
             LEFT JOIN clients c ON c.id = j.client_id
             LEFT JOIN projects p ON p.id = j.project_id
             WHERE j.status != 'COMPLETED'
+              AND ({visibility_clause})
             ORDER BY j.installation_date ASC, j.id DESC
-        """).fetchall()
+        """, visibility_params).fetchall()
 
     export_jobs = []
     for job in all_jobs:
@@ -5561,7 +5864,8 @@ def export_completed_csv():
     project_filter = export_filter_id(request.args.get("project"))
 
     with get_db() as db:
-        all_jobs = db.execute("""
+        visibility_clause, visibility_params = job_visibility_sql("j")
+        all_jobs = db.execute(f"""
             SELECT
                 j.*,
                 c.name AS client_name,
@@ -5576,8 +5880,9 @@ def export_completed_csv():
             LEFT JOIN clients c ON c.id = j.client_id
             LEFT JOIN projects p ON p.id = j.project_id
             WHERE j.status = 'COMPLETED'
+              AND ({visibility_clause})
             ORDER BY j.completed_at DESC, j.installation_date DESC, j.id DESC
-        """).fetchall()
+        """, visibility_params).fetchall()
 
     export_jobs = []
     for job in all_jobs:
@@ -5651,6 +5956,7 @@ def new_job():
         reminder_enabled = 1 if request.form.get("reminder_enabled") == "on" else 0
         reminder_hours_before = int(request.form.get("reminder_hours_before") or DEFAULT_REMINDER_HOURS_BEFORE)
         duplicate_source_id = normalize_optional_id(request.form.get("duplicate_source_id"))
+        requested_team_id = normalize_optional_id(request.form.get("team_id"))
         planned_crew_size_raw = request.form.get("planned_crew_size", "").strip()
         planned_crew_size = None
         if planned_crew_size_raw:
@@ -5671,6 +5977,7 @@ def new_job():
                 clients, projects = get_clients_and_projects(db)
                 crew_members = get_crew_members_for_picker(db)
                 crew_state = resolve_job_crew_form(db, request.form)
+                team_options = user_team_options(db)
             return render_template(
                 "new_job.html",
                 default_checklist=checklist,
@@ -5686,6 +5993,8 @@ def new_job():
                 selected_client_id=normalize_optional_id(request.form.get("client_id")),
                 selected_project_id=normalize_optional_id(request.form.get("project_id")),
                 duplicate_source=None,
+                team_options=team_options,
+                selected_team_id=requested_team_id,
                 form_values={
                     "job_name": request.form.get("job_name", ""),
                     "project_site": request.form.get("project_site", ""),
@@ -5702,13 +6011,47 @@ def new_job():
             crew_state = resolve_job_crew_form(db, request.form)
             crew_lead = crew_state["crew_lead"]
             assigned_crew = crew_state["assigned_crew"]
+            team_options = user_team_options(db)
+            team_id, team_error = resolve_job_team_id(db, request.form.get("team_id"))
 
             duplicate_source = None
             if duplicate_source_id:
-                duplicate_source = db.execute(
-                    "SELECT id, job_name FROM jobs WHERE id = ?",
-                    (duplicate_source_id,),
-                ).fetchone()
+                if user_can_access_job(db, duplicate_source_id):
+                    duplicate_source = db.execute(
+                        "SELECT id, job_name FROM jobs WHERE id = ?",
+                        (duplicate_source_id,),
+                    ).fetchone()
+
+            if team_error:
+                flash(team_error)
+                clients, projects = get_clients_and_projects(db)
+                return render_template(
+                    "new_job.html",
+                    default_checklist=checklist,
+                    default_reminder_enabled=bool(reminder_enabled),
+                    default_reminder_hours=reminder_hours_before,
+                    clients=clients,
+                    projects=projects,
+                    crew_members=crew_members,
+                    selected_crew_ids=crew_state["selected_crew_ids"],
+                    selected_lead_id=crew_state["selected_lead_id"],
+                    custom_crew_lead=crew_state["custom_crew_lead"],
+                    custom_crew_names=crew_state["custom_crew_names"],
+                    selected_client_id=normalize_optional_id(request.form.get("client_id")),
+                    selected_project_id=normalize_optional_id(request.form.get("project_id")),
+                    duplicate_source=duplicate_source,
+                    team_options=team_options,
+                    selected_team_id=requested_team_id,
+                    form_values={
+                        "job_name": request.form.get("job_name", ""),
+                        "project_site": request.form.get("project_site", ""),
+                        "installation_date": request.form.get("installation_date", ""),
+                        "contact_name": request.form.get("contact_name", ""),
+                        "contact_email": request.form.get("contact_email", ""),
+                        "contact_phone": request.form.get("contact_phone", ""),
+                        "planned_crew_size": planned_crew_size_raw,
+                    },
+                )
 
             client_id, project_id, assignment_error = resolve_job_assignment(
                 db, request.form.get("client_id"), request.form.get("project_id")
@@ -5731,6 +6074,8 @@ def new_job():
                     selected_client_id=normalize_optional_id(request.form.get("client_id")),
                     selected_project_id=normalize_optional_id(request.form.get("project_id")),
                     duplicate_source=duplicate_source,
+                    team_options=team_options,
+                    selected_team_id=requested_team_id,
                     form_values={
                         "job_name": request.form.get("job_name", ""),
                         "project_site": request.form.get("project_site", ""),
@@ -5749,9 +6094,10 @@ def new_job():
                     job_name, project_site, installation_date,
                     contact_name, contact_email, contact_phone, checklist_json,
                     crew_lead, planned_crew_size, assigned_crew,
+                    owner_user_id, team_id,
                     status, created_at, reminder_enabled, reminder_hours_before,
                     reminder_count
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NO RESPONSE', ?, ?, ?, 0)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NO RESPONSE', ?, ?, ?, 0)
             """, (
                 token,
                 arrival_token,
@@ -5768,6 +6114,8 @@ def new_job():
                 crew_lead,
                 planned_crew_size,
                 assigned_crew,
+                current_user_id(),
+                team_id,
                 now_iso(),
                 reminder_enabled,
                 reminder_hours_before,
@@ -5814,6 +6162,8 @@ def new_job():
     with get_db() as db:
         clients, projects = get_clients_and_projects(db)
         crew_members = get_crew_members_for_picker(db)
+        team_options = user_team_options(db)
+        selected_team_id = None
         selected_crew_ids = []
         selected_lead_id = None
         custom_crew_lead = ""
@@ -5823,13 +6173,17 @@ def new_job():
         duplicate_from = normalize_optional_id(request.args.get("duplicate_from"))
 
         if duplicate_from:
-            duplicate_source = db.execute(
-                "SELECT * FROM jobs WHERE id = ?",
-                (duplicate_from,),
-            ).fetchone()
+            duplicate_source = None
+            if user_can_access_job(db, duplicate_from):
+                duplicate_source = db.execute(
+                    "SELECT * FROM jobs WHERE id = ?",
+                    (duplicate_from,),
+                ).fetchone()
             if duplicate_source:
                 selected_client_id = duplicate_source["client_id"]
                 selected_project_id = duplicate_source["project_id"]
+                allowed_team_ids = {team["id"] for team in team_options}
+                selected_team_id = duplicate_source["team_id"] if duplicate_source["team_id"] in allowed_team_ids else None
                 form_values = {
                     "job_name": duplicate_source["job_name"] or "",
                     "project_site": duplicate_source["project_site"] or "",
@@ -5878,6 +6232,8 @@ def new_job():
         selected_client_id=selected_client_id,
         selected_project_id=selected_project_id,
         duplicate_source=duplicate_source,
+        team_options=team_options,
+        selected_team_id=selected_team_id,
         form_values=form_values,
     )
 
@@ -6161,27 +6517,31 @@ def client_report_asset(token, filename):
 @app.route("/email-outbox")
 def email_outbox():
     with get_db() as db:
-        events = db.execute("""
+        visibility_clause, visibility_params = job_visibility_sql("j")
+        events = db.execute(f"""
             SELECT e.*, j.job_name,
                    COALESCE(e.scope_name, j.job_name) AS display_name
             FROM email_events e
             JOIN jobs j ON j.id = e.job_id
+            WHERE ({visibility_clause})
             ORDER BY e.id DESC
             LIMIT 100
-        """).fetchall()
+        """, visibility_params).fetchall()
 
     return render_template("email_outbox.html", events=events)
 
 @app.route("/email-outbox/<int:event_id>")
 def email_outbox_detail(event_id):
     with get_db() as db:
-        event = db.execute("""
+        visibility_clause, visibility_params = job_visibility_sql("j")
+        event = db.execute(f"""
             SELECT e.*, j.job_name, j.project_site,
                    COALESCE(e.scope_name, j.job_name) AS display_name
             FROM email_events e
             JOIN jobs j ON j.id = e.job_id
             WHERE e.id = ?
-        """, (event_id,)).fetchone()
+              AND ({visibility_clause})
+        """, (event_id, *visibility_params)).fetchone()
 
     if not event:
         abort(404)
@@ -6933,6 +7293,9 @@ def edit_job(job_id):
         if not job:
             abort(404)
 
+        manage_job_access = can_manage_job_access(job)
+        team_options = user_team_options(db, include_disabled=True)
+
         if job["status"] == "COMPLETED":
             flash("Completed jobs are locked. Reopen/reset the job before changing its setup.")
             return redirect(url_for("job_detail", job_id=job_id))
@@ -6947,6 +7310,12 @@ def edit_job(job_id):
             crew_state = resolve_job_crew_form(db, request.form)
             crew_lead = crew_state["crew_lead"]
             assigned_crew = crew_state["assigned_crew"]
+            team_id = job["team_id"]
+            if manage_job_access:
+                team_id, team_error = resolve_job_team_id(db, request.form.get("team_id"), allow_disabled=True)
+                if team_error:
+                    flash(team_error)
+                    return redirect(url_for("edit_job", job_id=job_id))
             planned_crew_size_raw = request.form.get("planned_crew_size", "").strip()
             planned_crew_size = None
             if planned_crew_size_raw:
@@ -6990,6 +7359,9 @@ def edit_job(job_id):
                     selected_lead_id=crew_state["selected_lead_id"],
                     custom_crew_lead=crew_state["custom_crew_lead"],
                     custom_crew_names=crew_state["custom_crew_names"],
+                    team_options=team_options,
+                    selected_team_id=team_id,
+                    can_manage_job_access=manage_job_access,
                 )
 
             if planned_crew_size == -1:
@@ -7013,6 +7385,9 @@ def edit_job(job_id):
                     selected_lead_id=crew_state["selected_lead_id"],
                     custom_crew_lead=crew_state["custom_crew_lead"],
                     custom_crew_names=crew_state["custom_crew_names"],
+                    team_options=team_options,
+                    selected_team_id=team_id,
+                    can_manage_job_access=manage_job_access,
                 )
 
             changes = []
@@ -7036,6 +7411,13 @@ def edit_job(job_id):
                 planned_crew_size,
             )
             note_change("Crew / Installers", job["assigned_crew"], assigned_crew)
+            if manage_job_access and job["team_id"] != team_id:
+                old_team = db.execute("SELECT name FROM teams WHERE id = ?", (job["team_id"],)).fetchone() if job["team_id"] else None
+                new_team = db.execute("SELECT name FROM teams WHERE id = ?", (team_id,)).fetchone() if team_id else None
+                changes.append(
+                    f"Job Access: {'Team · ' + old_team['name'] if old_team else 'Personal'} → "
+                    f"{'Team · ' + new_team['name'] if new_team else 'Personal'}"
+                )
             note_change(
                 "Automatic Reminder",
                 "Enabled" if job["reminder_enabled"] else "Disabled",
@@ -7059,6 +7441,7 @@ def edit_job(job_id):
                         crew_lead = ?,
                         planned_crew_size = ?,
                         assigned_crew = ?,
+                        team_id = ?,
                         reminder_enabled = ?,
                         reminder_hours_before = ?
                     WHERE id = ?
@@ -7072,6 +7455,7 @@ def edit_job(job_id):
                     crew_lead,
                     planned_crew_size,
                     assigned_crew,
+                    team_id,
                     reminder_enabled,
                     reminder_hours_before,
                     job_id,
@@ -7159,6 +7543,9 @@ def edit_job(job_id):
         selected_lead_id=crew_picker_state["selected_lead_id"],
         custom_crew_lead=crew_picker_state["custom_crew_lead"],
         custom_crew_names=crew_picker_state["custom_crew_names"],
+        team_options=team_options,
+        selected_team_id=job["team_id"],
+        can_manage_job_access=manage_job_access,
     )
 
 
@@ -7287,7 +7674,9 @@ def job_detail(job_id):
             (job["project_id"],),
         ).fetchone() if job["project_id"] else None
         assignment_clients, assignment_projects = get_clients_and_projects(db)
-        all_crew_conflicts, _crew_conflict_group_count = get_active_crew_conflicts(db)
+        assigned_team = db.execute("SELECT * FROM teams WHERE id = ?", (job["team_id"],)).fetchone() if job["team_id"] else None
+        job_owner = db.execute("SELECT id, full_name, username FROM users WHERE id = ?", (job["owner_user_id"],)).fetchone() if job["owner_user_id"] else None
+        all_crew_conflicts, _crew_conflict_group_count = get_active_crew_conflicts(db, {job_id})
         crew_conflicts = all_crew_conflicts.get(job_id, [])
         all_crew_unavailability, _crew_unavailability_group_count = get_active_crew_unavailability_issues(db)
         crew_unavailability_issues = all_crew_unavailability.get(job_id, [])
@@ -7321,6 +7710,8 @@ def job_detail(job_id):
         crew_conflicts=crew_conflicts,
         crew_unavailability_issues=crew_unavailability_issues,
         staffing_gap=staffing_gap,
+        assigned_team=assigned_team,
+        job_owner=job_owner,
     )
 
 @app.route("/jobs/<int:job_id>/arrival", methods=["GET", "POST"])
