@@ -93,7 +93,7 @@
       {% if current_user_is_admin %}
         <p>Owner and Administrator accounts can protect and restore the complete DispatchProof system.</p>
       {% else %}
-        <p>Download a private ZIP of the jobs and job files you can access right now.</p>
+        <p>Download a ZIP of your authorized jobs plus shared Client, Project, Crew, and setup files you can access right now.</p>
       {% endif %}
     </div>
   </div>
@@ -111,10 +111,14 @@
       <div><dt>Team Jobs</dt><dd>{{ workspace_stats.team_jobs }}</dd></div>
       <div><dt>Job Documents</dt><dd>{{ workspace_stats.job_documents }}</dd></div>
       <div><dt>Site Evidence Files</dt><dd>{{ workspace_stats.evidence_files }}</dd></div>
+      <div><dt>Shared Clients</dt><dd>{{ workspace_stats.clients }}</dd></div>
+      <div><dt>Shared Projects</dt><dd>{{ workspace_stats.projects }}</dd></div>
+      <div><dt>Crew Records</dt><dd>{{ workspace_stats.crew_members }}</dd></div>
+      <div><dt>Shared Setup Files</dt><dd>{{ workspace_stats.shared_documents }}</dd></div>
     </dl>
     <div class="account-permission-note">
       <strong>Private-by-default export</strong>
-      <span>Your ZIP includes your personal jobs plus team jobs currently shared with you. It never includes another PM's private jobs. Full database restore remains Administrator-only.</span>
+      <span>Your ZIP includes your personal jobs plus team jobs currently shared with you, along with the shared Client/Project/Crew setup records Operators can already access. It never includes another PM's private jobs. Full database restore remains Administrator-only.</span>
     </div>
     <div class="spacer"></div>
     <a class="btn primary" href="{{ url_for('export_my_workspace') }}">Download My Workspace ZIP</a>
@@ -129,9 +133,9 @@
       <label>Workspace ZIP *
         <input required type="file" name="workspace_file" accept=".zip,application/zip">
       </label>
-      <button class="btn secondary" type="submit">Preview Workspace Restore</button>
+      <button class="btn secondary" type="submit">Preview &amp; Continue to Restore</button>
     </form>
-    <p class="small muted">Restore creates new personal job copies and safely reuses existing Clients, Projects, and Crew by name. It does not restore old email-delivery logs or overwrite the shared company database.</p>
+    <p class="small muted">Restore is additive: it can rebuild missing shared Clients, Projects, Crew, setup documents, and your job copies without overwriting existing live records. It does not restore old email-delivery logs or overwrite the shared company database.</p>
   {% endif %}
 </section>
 

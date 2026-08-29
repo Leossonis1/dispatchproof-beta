@@ -1,13 +1,7 @@
-# DispatchProof V2.40 Patch Only
+# DispatchProof V2.40.1 Patch Only
 
-Apply this patch over V2.39.2.
+Apply these files over an existing V2.40 installation.
 
-Replace/add:
-- `app.py`
-- `VERSION.txt`
-- `templates/my_account.html`
-- `templates/workspace_restore_preview.html`
+Fixes Operator workspace backup/restore so setup progress is protected even before a job exists. New workspace ZIPs include shared Clients, Projects, Crew, crew unavailability, Client documents, and Project documents in addition to authorized jobs and job files. Restore is additive and does not overwrite existing records.
 
-The app automatically creates the additive `workspace_restore_items` table on startup. No database reset is required.
-
-After deploy, sign in as an Operator and open **My Account → Restore / Import My Workspace**. Upload a ZIP created by **Download My Workspace ZIP**, review the preview, then confirm restore.
+Important: a zero-job ZIP that was already created by V2.40 cannot contain standalone setup records because V2.40 never wrote those records into that archive. Create a fresh workspace ZIP after deploying V2.40.1.

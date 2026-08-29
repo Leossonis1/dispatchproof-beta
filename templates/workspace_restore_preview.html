@@ -19,6 +19,10 @@
       <div><dt>Team Jobs → Personal Copies</dt><dd>{{ preview.team_jobs_as_personal }}</dd></div>
       <div><dt>Linked Files Available</dt><dd>{{ preview.available_files }}</dd></div>
       <div><dt>Crew Assignments</dt><dd>{{ preview.crew_assignments }}</dd></div>
+      <div><dt>Missing Clients to Add</dt><dd>{{ preview.new_clients }}</dd></div>
+      <div><dt>Missing Projects to Add</dt><dd>{{ preview.new_projects }}</dd></div>
+      <div><dt>Missing Crew to Add</dt><dd>{{ preview.new_crew }}</dd></div>
+      <div><dt>Shared Setup Files to Add</dt><dd>{{ preview.new_shared_documents }}</dd></div>
     </dl>
   </section>
 
@@ -27,18 +31,24 @@
     <ul class="clean-list">
       <li>New jobs are restored into <strong>your private workspace</strong>. Existing live jobs are not overwritten.</li>
       <li>Team jobs in the backup become private personal copies.</li>
-      <li>Existing Clients, Projects, and Crew are reused by name; missing ones can be recreated.</li>
+      <li>Existing Clients, Projects, and Crew are reused by name; missing shared setup records are recreated additively.</li>
+      <li>Client and Project documents included in V2.40.1+ workspace ZIPs are restored only when an equivalent file is not already present.</li>
       <li>Readiness history, mobilization history, job notes, crew assignments, documents, and site evidence are restored when present.</li>
       <li>Old email-delivery logs and activity-log entries are not replayed ({{ preview.skipped_email_events + preview.skipped_activity }} historical log entries skipped).</li>
     </ul>
-    {% if preview.new_jobs > 0 %}
-      <form method="post" action="{{ url_for('commit_my_workspace_restore') }}" onsubmit="return confirm('Restore these jobs into your personal workspace? Existing live jobs will not be overwritten.')">
+    {% if preview.restorable_items > 0 %}
+      <form method="post" action="{{ url_for('commit_my_workspace_restore') }}" onsubmit="return confirm('Restore these workspace records? Existing live records will not be overwritten.')">
         <input type="hidden" name="restore_token" value="{{ restore_token }}">
         <button class="btn primary" type="submit">Restore My Workspace</button>
         <a class="btn secondary" href="{{ url_for('my_account') }}#workspace-restore">Cancel</a>
       </form>
     {% else %}
-      <div class="notice">All jobs in this backup have already been restored to this account.</div>
+      {% if preview.export_format == 1 and preview.total_jobs == 0 and preview.setup_records_in_zip == 0 %}
+        <div class="notice"><strong>This older workspace ZIP contains no restorable records.</strong><br>V2.40 exported only job-linked data, so a zero-job backup did not contain standalone Client, Project, or Crew setup. V2.40.1 fixes future backups.</div>
+      {% else %}
+        <div class="notice">Everything in this backup is already present in this workspace.</div>
+      {% endif %}
+      <button class="btn primary" type="button" disabled>Restore My Workspace</button>
       <a class="btn secondary" href="{{ url_for('my_account') }}#workspace-restore">Back to My Account</a>
     {% endif %}
   </section>
