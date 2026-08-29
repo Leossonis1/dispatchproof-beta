@@ -2736,7 +2736,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.37",
+        "app_version": "2.38",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2754,6 +2754,222 @@ def create_backup_archive():
                     z.write(p, Path("uploads") / p.relative_to(UPLOAD_DIR))
 
     return archive_path, temp_dir
+
+def workspace_export_filename():
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    username = secure_filename(current_username()) or "user"
+    return f"dispatchproof_workspace_{username}_{stamp}.zip"
+
+
+def _rows_as_dicts(rows):
+    return [dict(row) for row in rows]
+
+
+def _select_for_job_ids(db, table, job_ids, order_by="id ASC"):
+    if not job_ids:
+        return []
+    placeholders = ",".join("?" for _ in job_ids)
+    return _rows_as_dicts(db.execute(
+        f"SELECT * FROM {table} WHERE job_id IN ({placeholders}) ORDER BY {order_by}",
+        tuple(job_ids),
+    ).fetchall())
+
+
+def _csv_text(rows):
+    if not rows:
+        return ""
+    fieldnames = []
+    seen = set()
+    for row in rows:
+        for key in row.keys():
+            if key not in seen:
+                fieldnames.append(key)
+                seen.add(key)
+    out = io.StringIO(newline="")
+    writer = csv.DictWriter(out, fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(rows)
+    return out.getvalue()
+
+
+def build_workspace_export_data(db):
+    """Return only job data the current signed-in user can access right now."""
+    visibility_clause, visibility_params = job_visibility_sql("j")
+    jobs = _rows_as_dicts(db.execute(f"""
+        SELECT j.*
+        FROM jobs j
+        WHERE ({visibility_clause})
+        ORDER BY j.installation_date, j.id
+    """, visibility_params).fetchall())
+    job_ids = [row["id"] for row in jobs]
+
+    readiness = _select_for_job_ids(db, "readiness_confirmations", job_ids)
+    mobilizations = _select_for_job_ids(db, "mobilization_attempts", job_ids, "job_id ASC, attempt_number ASC, id ASC")
+    notes = _select_for_job_ids(db, "job_notes", job_ids, "job_id ASC, created_at ASC, id ASC")
+    documents = _select_for_job_ids(db, "job_documents", job_ids, "job_id ASC, created_at ASC, id ASC")
+    emails = _select_for_job_ids(db, "email_events", job_ids, "job_id ASC, created_at ASC, id ASC")
+    activity = _select_for_job_ids(db, "activity_log", job_ids, "job_id ASC, created_at ASC, id ASC")
+    crew_assignments = _select_for_job_ids(db, "job_crew_assignments", job_ids, "job_id ASC, sort_order ASC, id ASC")
+
+    client_ids = sorted({row["client_id"] for row in jobs if row.get("client_id")})
+    project_ids = sorted({row["project_id"] for row in jobs if row.get("project_id")})
+    team_ids = sorted({row["team_id"] for row in jobs if row.get("team_id")})
+    crew_ids = sorted({row["crew_member_id"] for row in crew_assignments if row.get("crew_member_id")})
+
+    def select_ids(table, ids, columns="*"):
+        if not ids:
+            return []
+        placeholders = ",".join("?" for _ in ids)
+        return _rows_as_dicts(db.execute(
+            f"SELECT {columns} FROM {table} WHERE id IN ({placeholders}) ORDER BY id ASC",
+            tuple(ids),
+        ).fetchall())
+
+    data = {
+        "jobs": jobs,
+        "clients": select_ids("clients", client_ids),
+        "projects": select_ids("projects", project_ids),
+        "teams": select_ids("teams", team_ids, "id, name, share_jobs, created_at, updated_at"),
+        "readiness_confirmations": readiness,
+        "mobilization_attempts": mobilizations,
+        "job_notes": notes,
+        "job_documents": documents,
+        "email_events": emails,
+        "activity_log": activity,
+        "job_crew_assignments": crew_assignments,
+        "crew_members": select_ids("crew_members", crew_ids),
+    }
+    return data
+
+
+def workspace_export_stats(db):
+    data = build_workspace_export_data(db)
+    evidence = set()
+    for job in data["jobs"]:
+        evidence.update(parse_json_list(job.get("photo_json")))
+        evidence.update(parse_json_list(job.get("arrival_photos_json")))
+    for row in data["readiness_confirmations"]:
+        evidence.update(parse_json_list(row.get("photo_json")))
+    for row in data["mobilization_attempts"]:
+        evidence.update(parse_json_list(row.get("photo_json")))
+        evidence.update(parse_json_list(row.get("arrival_photos_json")))
+    return {
+        "jobs": len(data["jobs"]),
+        "job_documents": len(data["job_documents"]),
+        "evidence_files": len({name for name in evidence if name}),
+        "team_jobs": sum(1 for job in data["jobs"] if job.get("team_id")),
+    }
+
+
+def create_workspace_export_archive():
+    """Create a non-destructive, user-scoped backup/export ZIP.
+
+    This is intentionally not a restorable full-system database backup. It contains
+    only jobs the current user may access at export time and files attached to
+    those jobs, preventing one PM from exporting another PM's private workspace.
+    """
+    temp_dir = Path(tempfile.mkdtemp(prefix="dispatchproof_workspace_"))
+    archive_path = temp_dir / workspace_export_filename()
+
+    with get_db() as db:
+        data = build_workspace_export_data(db)
+
+    job_by_id = {row["id"]: row for row in data["jobs"]}
+    file_index = []
+    missing_files = []
+    included_uploads = set()
+
+    def add_upload(z, stored_filename, archive_name, job_id, kind, original_filename=None):
+        if not stored_filename:
+            return
+        stored_filename = str(stored_filename)
+        if stored_filename in included_uploads:
+            return
+        source = UPLOAD_DIR / stored_filename
+        if not source.is_file():
+            missing_files.append({
+                "job_id": job_id,
+                "kind": kind,
+                "stored_filename": stored_filename,
+                "original_filename": original_filename,
+            })
+            return
+        z.write(source, archive_name)
+        included_uploads.add(stored_filename)
+        file_index.append({
+            "job_id": job_id,
+            "kind": kind,
+            "stored_filename": stored_filename,
+            "original_filename": original_filename or stored_filename,
+            "archive_path": str(archive_name).replace("\\", "/"),
+        })
+
+    manifest = {
+        "product": PRODUCT_NAME,
+        "export_format": 1,
+        "export_type": "user_workspace",
+        "created_at": now_iso(),
+        "app_version": "2.38",
+        "exported_for": {
+            "username": current_username(),
+            "display_name": current_display_name(),
+            "role": current_user_role(),
+        },
+        "scope_note": "Contains only jobs and job-linked files this account could access at export time. Full-system restore remains Owner/Administrator-only.",
+        "counts": {key: len(rows) for key, rows in data.items()},
+    }
+
+    with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("workspace_manifest.json", json.dumps(manifest, indent=2))
+        z.writestr("workspace_data.json", json.dumps(data, indent=2))
+        z.writestr(
+            "README.txt",
+            "DispatchProof Workspace Export\n"
+            "==============================\n\n"
+            "This ZIP is a personal/team workspace backup for reference and file recovery.\n"
+            "It contains only jobs this account was authorized to access when the export was created.\n"
+            "It does not contain other PMs' private jobs, user passwords, or the full company database.\n"
+            "Only Owner/Administrator full-system backups can be restored over DispatchProof.\n\n"
+            "Store this ZIP securely because it may contain customer contact information, job history, and site evidence.\n"
+        )
+
+        for table, rows in data.items():
+            z.writestr(f"data/{table}.csv", _csv_text(rows))
+
+        # Internal job documents.
+        for doc in data["job_documents"]:
+            safe_original = secure_filename(doc.get("original_filename") or "") or doc["stored_filename"]
+            archive_name = Path("files") / f"job_{doc['job_id']}" / "documents" / f"{doc['id']}_{safe_original}"
+            add_upload(
+                z,
+                doc["stored_filename"],
+                archive_name,
+                doc["job_id"],
+                "job_document",
+                doc.get("original_filename"),
+            )
+
+        # Readiness / arrival evidence, including archived attempts.
+        evidence_by_job = {job_id: set() for job_id in job_by_id}
+        for job in data["jobs"]:
+            evidence_by_job[job["id"]].update(parse_json_list(job.get("photo_json")))
+            evidence_by_job[job["id"]].update(parse_json_list(job.get("arrival_photos_json")))
+        for row in data["readiness_confirmations"]:
+            evidence_by_job.setdefault(row["job_id"], set()).update(parse_json_list(row.get("photo_json")))
+        for row in data["mobilization_attempts"]:
+            evidence_by_job.setdefault(row["job_id"], set()).update(parse_json_list(row.get("photo_json")))
+            evidence_by_job.setdefault(row["job_id"], set()).update(parse_json_list(row.get("arrival_photos_json")))
+
+        for job_id, filenames in evidence_by_job.items():
+            for filename in sorted(name for name in filenames if name):
+                archive_name = Path("files") / f"job_{job_id}" / "evidence" / secure_filename(filename)
+                add_upload(z, filename, archive_name, job_id, "site_evidence")
+
+        z.writestr("file_index.json", json.dumps(file_index, indent=2))
+        z.writestr("missing_files.json", json.dumps(missing_files, indent=2))
+
+    return archive_path, temp_dir, manifest, len(file_index), len(missing_files)
+
 
 def validate_backup_zip(zip_path):
     """Validate archive layout before any current data is touched."""
@@ -2966,7 +3182,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.37",
+        "app_version": "2.38",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -3137,7 +3353,7 @@ def not_found(error):
 def health():
     return {
         "status": "ok",
-        "version": "2.37",
+        "version": "2.38",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -3207,11 +3423,47 @@ def my_account():
         flash("Password changed successfully.")
         return redirect(url_for("my_account"))
 
+    workspace_stats = None
+    if not current_user_is_admin():
+        with get_db() as db:
+            workspace_stats = workspace_export_stats(db)
+
     return render_template(
         "my_account.html",
         owner_account=owner_account,
         user=user,
+        workspace_stats=workspace_stats,
     )
+
+
+@app.get("/account/export")
+def export_my_workspace():
+    if current_user_is_admin():
+        flash("Owner and Administrator accounts can use the full Backup & Restore page.")
+        return redirect(url_for("backup_restore"))
+
+    archive_path, temp_dir, manifest, file_count, missing_count = create_workspace_export_archive()
+    job_count = manifest.get("counts", {}).get("jobs", 0)
+
+    with get_db() as db:
+        record_activity(
+            db,
+            "Workspace Export Downloaded",
+            f"Exported {job_count} accessible job(s) and {file_count} linked file(s).",
+        )
+        db.commit()
+
+    response = send_file(
+        archive_path,
+        as_attachment=True,
+        download_name=archive_path.name,
+        mimetype="application/zip",
+        max_age=0,
+    )
+    if missing_count:
+        response.headers["X-DispatchProof-Missing-Files"] = str(missing_count)
+    response.call_on_close(lambda: shutil.rmtree(temp_dir, ignore_errors=True))
+    return response
 
 
 @app.route("/crew")
