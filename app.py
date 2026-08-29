@@ -183,6 +183,24 @@ def ensure_columns(db):
         if name not in existing:
             db.execute(f"ALTER TABLE jobs ADD COLUMN {name} {sql_type}")
 
+    # V2.41: crew records can represent either internal crew or a subcontractor.
+    # Existing records stay Internal Crew so upgrades do not change scheduling behavior.
+    crew_existing = {row["name"] for row in db.execute("PRAGMA table_info(crew_members)").fetchall()}
+    crew_needed = {
+        "member_type": "TEXT NOT NULL DEFAULT 'INTERNAL'",
+        "company_name": "TEXT",
+    }
+    for name, sql_type in crew_needed.items():
+        if name not in crew_existing:
+            db.execute(f"ALTER TABLE crew_members ADD COLUMN {name} {sql_type}")
+    db.execute("""
+        UPDATE crew_members
+        SET member_type = 'INTERNAL'
+        WHERE member_type IS NULL
+           OR TRIM(member_type) = ''
+           OR UPPER(member_type) NOT IN ('INTERNAL', 'SUBCONTRACTOR')
+    """)
+
     # V2.37: PM-owned jobs with optional team collaboration. Existing jobs
     # intentionally keep owner_user_id/team_id NULL so only Owner/Admin sees
     # legacy records until a new owner/team is explicitly assigned.
@@ -496,6 +514,11 @@ def ensure_columns(db):
     db.commit()
 
 
+def normalize_crew_member_type(value):
+    value = str(value or "").strip().upper()
+    return value if value in {"INTERNAL", "SUBCONTRACTOR"} else "INTERNAL"
+
+
 def parse_crew_names(value):
     """Normalize comma/semicolon/newline separated crew names without duplicates."""
     names = []
@@ -590,6 +613,8 @@ def get_crew_members_for_picker(db, job_id=None):
                OR jca.crew_member_id IS NOT NULL
             ORDER BY
                 CASE WHEN cm.is_active = 1 THEN 0 ELSE 1 END,
+                CASE WHEN cm.member_type = 'SUBCONTRACTOR' THEN 1 ELSE 0 END,
+                LOWER(COALESCE(cm.company_name, '')),
                 LOWER(cm.name),
                 cm.id
         """, (job_id,)).fetchall()
@@ -598,7 +623,11 @@ def get_crew_members_for_picker(db, job_id=None):
         SELECT cm.*, 0 AS assigned_to_job
         FROM crew_members cm
         WHERE cm.is_active = 1
-        ORDER BY LOWER(cm.name), cm.id
+        ORDER BY
+            CASE WHEN cm.member_type = 'SUBCONTRACTOR' THEN 1 ELSE 0 END,
+            LOWER(COALESCE(cm.company_name, '')),
+            LOWER(cm.name),
+            cm.id
     """).fetchall()
 
 
@@ -895,6 +924,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS crew_members (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT UNIQUE NOT NULL COLLATE NOCASE,
+            member_type TEXT NOT NULL DEFAULT 'INTERNAL',
+            company_name TEXT,
             email TEXT,
             phone TEXT,
             role_trade TEXT,
@@ -951,6 +982,10 @@ def init_db():
         db.execute("""
             CREATE INDEX IF NOT EXISTS idx_crew_members_active_name
             ON crew_members(is_active, name)
+        """)
+        db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_crew_members_type_active_name
+            ON crew_members(member_type, is_active, name)
         """)
         db.execute("""
             CREATE INDEX IF NOT EXISTS idx_job_crew_assignments_job
@@ -2804,7 +2839,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.40.9.2",
+        "app_version": "2.41",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -3003,7 +3038,7 @@ def create_workspace_export_archive():
         "export_format": 2,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.40.9.2",
+        "app_version": "2.41",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -3763,7 +3798,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.40.9.2",
+        "app_version": "2.41",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -4139,8 +4174,11 @@ def commit_my_workspace_restore():
 def crew_directory():
     search_query = (request.args.get("q") or "").strip()
     status_filter = (request.args.get("status") or "active").strip().lower()
+    type_filter = (request.args.get("type") or "all").strip().lower()
     if status_filter not in {"active", "inactive", "all"}:
         status_filter = "active"
+    if type_filter not in {"all", "internal", "subcontractor"}:
+        type_filter = "all"
 
     today = local_today().isoformat()
     next7 = (local_today() + timedelta(days=7)).isoformat()
@@ -4152,10 +4190,17 @@ def crew_directory():
     elif status_filter == "inactive":
         where.append("cm.is_active = 0")
 
+    if type_filter == "internal":
+        where.append("cm.member_type = 'INTERNAL'")
+    elif type_filter == "subcontractor":
+        where.append("cm.member_type = 'SUBCONTRACTOR'")
+
     if search_query:
         where.append("""
             LOWER(
                 COALESCE(cm.name, '') || ' ' ||
+                COALESCE(cm.company_name, '') || ' ' ||
+                COALESCE(cm.member_type, '') || ' ' ||
                 COALESCE(cm.email, '') || ' ' ||
                 COALESCE(cm.phone, '') || ' ' ||
                 COALESCE(cm.role_trade, '') || ' ' ||
@@ -4195,6 +4240,8 @@ def crew_directory():
             GROUP BY cm.id
             ORDER BY
                 CASE WHEN cm.is_active = 1 THEN 0 ELSE 1 END,
+                CASE WHEN cm.member_type = 'SUBCONTRACTOR' THEN 1 ELSE 0 END,
+                LOWER(COALESCE(cm.company_name, '')),
                 LOWER(cm.name),
                 cm.id
         """, (today, next7, today, *visibility_params, *params)).fetchall()
@@ -4202,6 +4249,12 @@ def crew_directory():
         counts = {
             "active": db.execute(
                 "SELECT COUNT(*) AS c FROM crew_members WHERE is_active = 1"
+            ).fetchone()["c"],
+            "active_internal": db.execute(
+                "SELECT COUNT(*) AS c FROM crew_members WHERE is_active = 1 AND member_type = 'INTERNAL'"
+            ).fetchone()["c"],
+            "active_subcontractors": db.execute(
+                "SELECT COUNT(*) AS c FROM crew_members WHERE is_active = 1 AND member_type = 'SUBCONTRACTOR'"
             ).fetchone()["c"],
             "inactive": db.execute(
                 "SELECT COUNT(*) AS c FROM crew_members WHERE is_active = 0"
@@ -4226,44 +4279,54 @@ def crew_directory():
         counts=counts,
         search_query=search_query,
         status_filter=status_filter,
+        type_filter=type_filter,
     )
 
 
 @app.post("/crew/add")
 def add_crew_member():
     name = (request.form.get("name") or "").strip()
+    member_type = normalize_crew_member_type(request.form.get("member_type"))
+    company_name = (request.form.get("company_name") or "").strip()
     email = (request.form.get("email") or "").strip()
     phone = (request.form.get("phone") or "").strip()
     role_trade = (request.form.get("role_trade") or "").strip()
     notes = (request.form.get("notes") or "").strip()
 
+    if member_type != "SUBCONTRACTOR":
+        company_name = ""
+
     if not name:
-        flash("Crew Member Name is required.")
+        flash("Name is required.")
         return redirect(url_for("crew_directory") + "#add-crew")
 
     try:
         with get_db() as db:
             cur = db.execute("""
                 INSERT INTO crew_members (
-                    name, email, phone, role_trade, notes,
+                    name, member_type, company_name, email, phone, role_trade, notes,
                     is_active, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
             """, (
-                name, email, phone, role_trade, notes, now_iso(), now_iso()
+                name, member_type, company_name, email, phone, role_trade, notes,
+                now_iso(), now_iso()
             ))
+            kind = "subcontractor" if member_type == "SUBCONTRACTOR" else "internal crew member"
+            article = "a" if member_type == "SUBCONTRACTOR" else "an"
+            company_text = f" with {company_name}" if company_name else ""
             record_activity(
                 db,
                 "Crew Member Added",
-                f"Added {name} to Crew Directory"
+                f"Added {name} as {article} {kind}{company_text}"
                 + (f" ({role_trade})." if role_trade else "."),
             )
             db.commit()
             member_id = cur.lastrowid
     except sqlite3.IntegrityError:
-        flash("A crew member with that name already exists.")
+        flash("A directory record with that name already exists.")
         return redirect(url_for("crew_directory") + "#add-crew")
 
-    flash(f"{name} added to Crew Directory.")
+    flash(f"{name} added to Crew & Subcontractors.")
     return redirect(url_for("edit_crew_member", crew_member_id=member_id))
 
 
@@ -4280,13 +4343,18 @@ def edit_crew_member(crew_member_id):
 
         if request.method == "POST":
             name = (request.form.get("name") or "").strip()
+            member_type = normalize_crew_member_type(request.form.get("member_type"))
+            company_name = (request.form.get("company_name") or "").strip()
             email = (request.form.get("email") or "").strip()
             phone = (request.form.get("phone") or "").strip()
             role_trade = (request.form.get("role_trade") or "").strip()
             notes = (request.form.get("notes") or "").strip()
 
+            if member_type != "SUBCONTRACTOR":
+                company_name = ""
+
             if not name:
-                flash("Crew Member Name is required.")
+                flash("Name is required.")
                 return redirect(url_for("edit_crew_member", crew_member_id=crew_member_id))
 
             changes = []
@@ -4298,6 +4366,8 @@ def edit_crew_member(crew_member_id):
                     changes.append(f"{label}: {old_text or '—'} → {new_text or '—'}")
 
             crew_note_change("Name", member["name"], name)
+            crew_note_change("Type", "Subcontractor" if member["member_type"] == "SUBCONTRACTOR" else "Internal Crew", "Subcontractor" if member_type == "SUBCONTRACTOR" else "Internal Crew")
+            crew_note_change("Company", member["company_name"], company_name)
             crew_note_change("Role / Trade", member["role_trade"], role_trade)
             crew_note_change("Email", member["email"], email)
             crew_note_change("Phone", member["phone"], phone)
@@ -4306,11 +4376,11 @@ def edit_crew_member(crew_member_id):
             try:
                 db.execute("""
                     UPDATE crew_members
-                    SET name = ?, email = ?, phone = ?,
-                        role_trade = ?, notes = ?, updated_at = ?
+                    SET name = ?, member_type = ?, company_name = ?,
+                        email = ?, phone = ?, role_trade = ?, notes = ?, updated_at = ?
                     WHERE id = ?
                 """, (
-                    name, email, phone, role_trade, notes,
+                    name, member_type, company_name, email, phone, role_trade, notes,
                     now_iso(), crew_member_id,
                 ))
 
@@ -4327,10 +4397,10 @@ def edit_crew_member(crew_member_id):
                     )
                 db.commit()
             except sqlite3.IntegrityError:
-                flash("A crew member with that name already exists.")
+                flash("A directory record with that name already exists.")
                 return redirect(url_for("edit_crew_member", crew_member_id=crew_member_id))
 
-            flash("Crew member updated." if changes else "No crew member changes were made.")
+            flash("Directory record updated." if changes else "No directory changes were made.")
             return redirect(url_for("edit_crew_member", crew_member_id=crew_member_id))
 
         assignments = db.execute(f"""
@@ -8675,6 +8745,13 @@ def job_detail(job_id):
         crew_conflicts = all_crew_conflicts.get(job_id, [])
         all_crew_unavailability, _crew_unavailability_group_count = get_active_crew_unavailability_issues(db)
         crew_unavailability_issues = all_crew_unavailability.get(job_id, [])
+        assigned_crew_records = db.execute("""
+            SELECT cm.*, jca.is_lead, jca.sort_order
+            FROM job_crew_assignments jca
+            JOIN crew_members cm ON cm.id = jca.crew_member_id
+            WHERE jca.job_id = ?
+            ORDER BY jca.sort_order, LOWER(cm.name), cm.id
+        """, (job_id,)).fetchall()
 
     staffing_gap = None if job["status"] == "COMPLETED" else job_staffing_gap(job)
 
@@ -8704,6 +8781,7 @@ def job_detail(job_id):
         assignment_projects=assignment_projects,
         crew_conflicts=crew_conflicts,
         crew_unavailability_issues=crew_unavailability_issues,
+        assigned_crew_records=assigned_crew_records,
         staffing_gap=staffing_gap,
         assigned_team=assigned_team,
         job_owner=job_owner,
