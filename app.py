@@ -2396,6 +2396,45 @@ def current_user_id():
     return user_id if user_id > 0 else None
 
 
+def database_user_session_is_current():
+    """Validate DB-backed sessions against the live Users table.
+
+    The permanent Owner login is environment-backed and has no users.id.
+    All other sessions must still point at the same active database user that
+    originally authenticated. This prevents stale browser sessions from
+    carrying a deleted/recreated user id into foreign-keyed job records.
+    """
+    if not user_authenticated() or session.get("dispatchproof_owner"):
+        return True
+
+    user_id = current_user_id()
+    session_username = (current_username() or "").strip()
+    if not user_id or not session_username:
+        return False
+
+    with get_db() as db:
+        user = db.execute(
+            "SELECT id, full_name, username, role, is_active FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+
+    if not user or not user["is_active"]:
+        return False
+    if (user["username"] or "").strip().lower() != session_username.lower():
+        return False
+
+    # Keep display/role information synchronized with live account settings.
+    session["dispatchproof_authenticated"] = True
+    session["dispatchproof_admin"] = True
+    session["dispatchproof_owner"] = False
+    session["dispatchproof_user_id"] = user["id"]
+    session["dispatchproof_username"] = user["username"]
+    session["dispatchproof_admin_username"] = user["username"]
+    session["dispatchproof_display_name"] = user["full_name"]
+    session["dispatchproof_role"] = user["role"]
+    return True
+
+
 def job_visibility_sql(alias="j"):
     """Return a SQL predicate + params for jobs visible to this signed-in user."""
     if current_user_is_admin():
@@ -2736,7 +2775,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.39.1",
+        "app_version": "2.39.2",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2909,7 +2948,7 @@ def create_workspace_export_archive():
         "export_format": 1,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.39.1",
+        "app_version": "2.39.2",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -3214,7 +3253,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.39.1",
+        "app_version": "2.39.2",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -3240,6 +3279,17 @@ def ensure_db():
     }
     if request.endpoint not in public_endpoints and not user_authenticated():
         return redirect(url_for("login", next=request.full_path if request.query_string else request.path))
+
+    # V2.39.2: a signed browser cookie is not enough for DB-backed users.
+    # Confirm the referenced user still exists, is active, and is the same
+    # username before allowing any internal work. This closes a stale-session
+    # path that could surface later as FOREIGN KEY constraint failed on jobs.
+    if request.endpoint not in public_endpoints and user_authenticated() and not session.get("dispatchproof_owner"):
+        if not database_user_session_is_current():
+            next_url = request.full_path if request.query_string else request.path
+            session.clear()
+            flash("Your user session is no longer current. Please sign in again before continuing.")
+            return redirect(url_for("login", next=next_url))
 
     admin_only_endpoints = {
         "company_settings",
@@ -3386,7 +3436,7 @@ def not_found(error):
 def health():
     return {
         "status": "ok",
-        "version": "2.39.1",
+        "version": "2.39.2",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -6374,39 +6424,56 @@ def new_job():
                     },
                 )
 
-            cur = db.execute("""
-                INSERT INTO jobs (
-                    public_token, arrival_token, client_report_token,
-                    client_id, project_id,
-                    job_name, project_site, installation_date,
-                    contact_name, contact_email, contact_phone, checklist_json,
-                    crew_lead, planned_crew_size, assigned_crew,
-                    owner_user_id, team_id,
-                    status, created_at, reminder_enabled, reminder_hours_before,
-                    reminder_count
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NO RESPONSE', ?, ?, ?, 0)
-            """, (
-                token,
-                arrival_token,
-                client_report_token,
-                client_id,
-                project_id,
-                request.form["job_name"].strip(),
-                request.form.get("project_site", "").strip(),
-                request.form["installation_date"],
-                request.form["contact_name"].strip(),
-                request.form["contact_email"].strip(),
-                request.form.get("contact_phone", "").strip(),
-                json.dumps(checklist),
-                crew_lead,
-                planned_crew_size,
-                assigned_crew,
-                current_user_id(),
-                team_id,
-                now_iso(),
-                reminder_enabled,
-                reminder_hours_before,
-            ))
+            owner_user_id = current_user_id()
+            try:
+                cur = db.execute("""
+                    INSERT INTO jobs (
+                        public_token, arrival_token, client_report_token,
+                        client_id, project_id,
+                        job_name, project_site, installation_date,
+                        contact_name, contact_email, contact_phone, checklist_json,
+                        crew_lead, planned_crew_size, assigned_crew,
+                        owner_user_id, team_id,
+                        status, created_at, reminder_enabled, reminder_hours_before,
+                        reminder_count
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NO RESPONSE', ?, ?, ?, 0)
+                """, (
+                    token,
+                    arrival_token,
+                    client_report_token,
+                    client_id,
+                    project_id,
+                    request.form["job_name"].strip(),
+                    request.form.get("project_site", "").strip(),
+                    request.form["installation_date"],
+                    request.form["contact_name"].strip(),
+                    request.form["contact_email"].strip(),
+                    request.form.get("contact_phone", "").strip(),
+                    json.dumps(checklist),
+                    crew_lead,
+                    planned_crew_size,
+                    assigned_crew,
+                    owner_user_id,
+                    team_id,
+                    now_iso(),
+                    reminder_enabled,
+                    reminder_hours_before,
+                ))
+            except sqlite3.IntegrityError:
+                db.rollback()
+                fk_list = [dict(row) for row in db.execute("PRAGMA foreign_key_list(jobs)").fetchall()]
+                parent_state = {
+                    "owner_user_exists": bool(owner_user_id and db.execute("SELECT 1 FROM users WHERE id = ?", (owner_user_id,)).fetchone()) if owner_user_id else True,
+                    "team_exists": bool(team_id and db.execute("SELECT 1 FROM teams WHERE id = ?", (team_id,)).fetchone()) if team_id else True,
+                    "client_exists": bool(client_id and db.execute("SELECT 1 FROM clients WHERE id = ?", (client_id,)).fetchone()) if client_id else True,
+                    "project_exists": bool(project_id and db.execute("SELECT 1 FROM projects WHERE id = ?", (project_id,)).fetchone()) if project_id else True,
+                }
+                app.logger.exception(
+                    "Job create integrity error user_id=%r team_id=%r client_id=%r project_id=%r parent_state=%r job_fk_list=%r",
+                    owner_user_id, team_id, client_id, project_id, parent_state, fk_list,
+                )
+                flash("The job could not be created because an account, team, client, or project link changed. Nothing was saved. Please refresh the form and try again.")
+                return redirect(url_for("new_job", client_id=client_id or "", project_id=project_id or ""))
             job_id = cur.lastrowid
             save_job_crew_assignments(
                 db,
