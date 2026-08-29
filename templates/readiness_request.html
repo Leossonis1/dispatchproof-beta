@@ -114,8 +114,8 @@
     <div class="public-link-tools">
       <div class="copy-box" id="publicLink">{{ public_url }}</div>
       <div class="button-row">
-        <button class="btn action-blue" type="button" id="copyLinkButton" onclick="copyPublicLink()">Copy Link</button>
-        <a class="btn action-blue" target="_blank" href="{{ public_url }}">Open External Page</a>
+        <button class="btn action-blue" type="button" id="copyLinkButton">Copy Link</button>
+        <a class="btn action-blue" id="openExternalReadinessLink" target="_blank" href="{{ public_url }}">Open External Page</a>
         <a class="btn action-blue" href="{{ url_for('job_detail', job_id=job['id']) }}">View Job</a>
       </div>
     </div>
@@ -167,16 +167,43 @@
 </section>
 
 <script>
-async function copyPublicLink() {
-  const url = document.getElementById('publicLink').textContent.trim();
-  const button = document.getElementById('copyLinkButton');
-  try {
-    await navigator.clipboard.writeText(url);
-    button.textContent = 'Copied!';
-    setTimeout(() => button.textContent = 'Copy Link', 1600);
-  } catch (e) {
-    window.prompt('Copy this link:', url);
-  }
-}
+document.addEventListener('DOMContentLoaded', function () {
+  const copyButton = document.getElementById('copyLinkButton');
+  const openLink = document.getElementById('openExternalReadinessLink');
+  const display = document.getElementById('publicLink');
+  if (!copyButton || !openLink) return;
+
+  copyButton.addEventListener('click', async function () {
+    // Use the browser-resolved href from the exact link that Open External Page uses.
+    // This guarantees Copy Link and Open External Page always point to the same place.
+    const url = (openLink.href || display?.textContent || '').trim();
+    if (!url) {
+      window.alert('No readiness link is available to copy.');
+      return;
+    }
+
+    const copied = await dispatchProofCopyText(url);
+    if (copied) {
+      const original = copyButton.textContent;
+      copyButton.textContent = 'Copied!';
+      copyButton.disabled = true;
+      setTimeout(() => {
+        copyButton.textContent = original;
+        copyButton.disabled = false;
+      }, 1600);
+      return;
+    }
+
+    // Last-resort fallback: select the visible URL and show it for manual copy.
+    if (display) {
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(display);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+    window.prompt('Copy this readiness link:', url);
+  });
+});
 </script>
 {% endblock %}
