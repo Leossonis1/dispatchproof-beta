@@ -1971,3 +1971,36 @@ Combined Client / Project Reports remain company-wide aggregate reports and are 
 ### Migration
 
 V2.37 automatically adds job ownership/team fields and the Teams tables. No manual SQL migration is required.
+
+
+## V2.38 — Self-Service Workspace Backup / Export
+
+V2.38 lets Operations users protect their own work without giving them access to the company-wide database backup.
+
+### Backup My Workspace
+
+**My Account** now shows a **Backup My Workspace** panel for Operations users. The download creates a ZIP containing only the jobs the signed-in user is authorized to access at that moment:
+
+- their personal jobs;
+- team jobs currently shared with them;
+- readiness confirmations and mobilization history for those jobs;
+- internal job notes;
+- Email Outbox history tied to those jobs;
+- job activity history;
+- crew assignments and referenced crew records;
+- internal job documents; and
+- readiness / arrival evidence photos, including archived attempt evidence.
+
+The ZIP includes a JSON snapshot, per-table CSV files, linked job files, a file index, and a manifest.
+
+### Privacy boundary
+
+The workspace export uses the same V2.37 job-visibility rule as Dashboard, Schedule, Documents, and Email Outbox. An Operations user cannot export another PM's private jobs or private job files.
+
+Team job data is included only while that team is shared with the signed-in user at export time.
+
+### Restore remains Administrator-only
+
+Operations workspace ZIPs are non-destructive personal recovery/reference exports. They cannot overwrite the shared DispatchProof database.
+
+Owner / Administrator accounts retain **Backup & Restore**, including the complete database and full-system restore. This prevents one PM from accidentally replacing every other PM's data.

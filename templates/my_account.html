@@ -84,5 +84,43 @@
       </form>
     {% endif %}
   </section>
+
+
+<section class="panel account-backup-panel">
+  <div class="panel-head">
+    <div>
+      <h2>{{ 'Full System Backup' if current_user_is_admin else 'Backup My Workspace' }}</h2>
+      {% if current_user_is_admin %}
+        <p>Owner and Administrator accounts can protect and restore the complete DispatchProof system.</p>
+      {% else %}
+        <p>Download a private ZIP of the jobs and job files you can access right now.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if current_user_is_admin %}
+    <div class="account-permission-note">
+      <strong>Company-wide backup</strong>
+      <span>The full backup includes all PM workspaces and supports system restore.</span>
+    </div>
+    <div class="spacer"></div>
+    <a class="btn primary" href="{{ url_for('backup_restore') }}">Open Backup &amp; Restore</a>
+  {% else %}
+    <dl class="details workspace-export-details">
+      <div><dt>Accessible Jobs</dt><dd>{{ workspace_stats.jobs }}</dd></div>
+      <div><dt>Team Jobs</dt><dd>{{ workspace_stats.team_jobs }}</dd></div>
+      <div><dt>Job Documents</dt><dd>{{ workspace_stats.job_documents }}</dd></div>
+      <div><dt>Site Evidence Files</dt><dd>{{ workspace_stats.evidence_files }}</dd></div>
+    </dl>
+    <div class="account-permission-note">
+      <strong>Private-by-default export</strong>
+      <span>Your ZIP includes your personal jobs plus team jobs currently shared with you. It never includes another PM's private jobs. Full database restore remains Administrator-only.</span>
+    </div>
+    <div class="spacer"></div>
+    <a class="btn primary" href="{{ url_for('export_my_workspace') }}">Download My Workspace ZIP</a>
+    <p class="small muted workspace-security-note">Store the ZIP securely. It may contain customer contact details, job history, documents, and site photos.</p>
+  {% endif %}
+</section>
+
 </div>
 {% endblock %}
