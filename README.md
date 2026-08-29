@@ -1,10 +1,5 @@
-# DispatchProof V2.40.2 — Patch Only
+# DispatchProof V2.40.3
 
-Apply this patch over V2.40.1.
+Operator Workspace Restore button reliability fix.
 
-Changes:
-- Adds permanent Delete to Crew Directory and Crew Member detail pages.
-- Permanent deletion is allowed only when the crew member has no linked job history.
-- If job history exists, DispatchProof blocks deletion and directs the user to Deactivate instead.
-- Availability/time-off records are removed automatically for successfully deleted unused crew.
-- No database migration or reset is required.
+Use the patch-only ZIP when upgrading an existing V2.40.2 installation. No database reset is required.

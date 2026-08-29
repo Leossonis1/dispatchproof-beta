@@ -37,10 +37,16 @@
       <li>Old email-delivery logs and activity-log entries are not replayed ({{ preview.skipped_email_events + preview.skipped_activity }} historical log entries skipped).</li>
     </ul>
     {% if preview.restorable_items > 0 %}
-      <form method="post" action="{{ url_for('commit_my_workspace_restore') }}" onsubmit="return confirm('Restore these workspace records? Existing live records will not be overwritten.')">
+      <form method="post" action="{{ url_for('commit_my_workspace_restore') }}" class="workspace-restore-confirm-form">
         <input type="hidden" name="restore_token" value="{{ restore_token }}">
-        <button class="btn primary" type="submit">Restore My Workspace</button>
-        <a class="btn secondary" href="{{ url_for('my_account') }}#workspace-restore">Cancel</a>
+        <label class="workspace-restore-confirm-check">
+          <input type="checkbox" name="confirm_restore" value="yes" required>
+          I understand this will add the previewed records to my workspace. Existing live records will not be overwritten.
+        </label>
+        <div class="button-row">
+          <button class="btn primary" type="submit">Restore My Workspace</button>
+          <a class="btn secondary" href="{{ url_for('my_account') }}#workspace-restore">Cancel</a>
+        </div>
       </form>
     {% else %}
       {% if preview.export_format == 1 and preview.total_jobs == 0 and preview.setup_records_in_zip == 0 %}
