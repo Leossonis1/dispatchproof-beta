@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Field Link Closed · DispatchProof</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <style>:root{--brand-accent: {{ company_accent_color }};}</style>
+</head>
+<body class="public-body"><main class="public-shell"><div class="public-brand public-company-brand">{% if company_logo_url %}<img src="{{ company_logo_url }}" alt="{{ company_name }} logo">{% endif %}<strong>{{ company_name }}</strong><span>· powered by DispatchProof</span></div><section class="public-card submitted-card"><div class="eyebrow">Field Link Closed</div><h1>{{ field_link['job_name'] }}</h1><p>{{ reason }}</p><p class="muted">Contact the project manager if another field update is needed.</p></section></main></body>
+</html>

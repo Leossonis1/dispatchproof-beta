@@ -52,6 +52,8 @@
       <div><dt>Activity Events</dt><dd>{{ counts.activity_events }}</dd></div>
       <div><dt>Internal Job Notes</dt><dd>{{ counts.job_notes }}</dd></div>
       <div><dt>Job Documents</dt><dd>{{ counts.job_documents }}</dd></div>
+      <div><dt>Field Update Links</dt><dd>{{ counts.field_update_links }}</dd></div>
+      <div><dt>Field Progress Entries</dt><dd>{{ counts.field_progress_entries }}</dd></div>
       <div><dt>Project Documents</dt><dd>{{ counts.project_documents }}</dd></div>
       <div><dt>Client Documents</dt><dd>{{ counts.client_documents }}</dd></div>
       <div><dt>Clients</dt><dd>{{ counts.clients }}</dd></div>
@@ -60,7 +62,7 @@
       <div><dt>Crew Assignments</dt><dd>{{ counts.job_crew_assignments }}</dd></div>
       <div><dt>Crew / Sub Availability</dt><dd>{{ counts.crew_unavailability }}</dd></div>
       <div><dt>Uploaded Files</dt><dd>{{ upload_count }}</dd></div>
-      <div><dt>Backup Includes</dt><dd>Jobs · Crew/Subs · Availability · History · Notes · Documents · Users · Activity · Outbox · Evidence</dd></div>
+      <div><dt>Backup Includes</dt><dd>Jobs · Crew/Subs · Availability · Field Progress · History · Notes · Documents · Users · Activity · Outbox · Evidence</dd></div>
     </dl>
 
     <a class="btn primary wide" href="{{ url_for('download_backup') }}">Download Backup ZIP</a>

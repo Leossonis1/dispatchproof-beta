@@ -221,6 +221,48 @@
     </section>
     {% endif %}
 
+    {% set daily_progress = report.progress_entries|selectattr('entry_type', 'equalto', 'DAILY_PROGRESS')|list %}
+    {% if daily_progress %}
+    <section class="public-report-card">
+      <div class="report-card-head">
+        <div>
+          <div class="eyebrow">Installation Progress</div>
+          <h2>Daily Progress</h2>
+        </div>
+        <span class="secure-link-badge">{{ daily_progress|length }} UPDATE{{ '' if daily_progress|length == 1 else 'S' }}</span>
+      </div>
+      <p class="small muted">Progress entries are shown in work-date order so the installation can be reviewed day by day.</p>
+      <div class="client-attempt-list">
+      {% for entry in daily_progress %}
+        <article class="client-attempt field-client-progress">
+          <div class="client-attempt-head">
+            <strong>{{ entry.work_date|pretty_date }}</strong>
+            <span>{{ entry.submitted_by }} · submitted {{ entry.created_at|pretty_datetime }}</span>
+          </div>
+          {% if entry.work_completed %}<div class="notes-box"><strong>Work Completed</strong><p>{{ entry.work_completed }}</p></div>{% endif %}
+          {% if entry.issues_delays %}<div class="notes-box"><strong>Issues / Delays</strong><p>{{ entry.issues_delays }}</p></div>{% endif %}
+          {% if entry.notes %}<div class="notes-box"><strong>Field Note</strong><p>{{ entry.notes }}</p></div>{% endif %}
+          {% if entry.crew_size is not none or entry.hours_worked is not none %}
+          <div class="report-stat-grid compact">
+            {% if entry.crew_size is not none %}<div><span>Crew</span><strong>{{ entry.crew_size }}</strong></div>{% endif %}
+            {% if entry.hours_worked is not none %}<div><span>Hours Worked</span><strong>{{ entry.hours_worked|pretty_number }}</strong></div>{% endif %}
+          </div>
+          {% endif %}
+          {% if entry.photos %}
+          <div class="report-photo-grid">
+            {% for photo in entry.photos %}
+              <a target="_blank" rel="noopener" href="{{ url_for('client_report_asset', token=report_token, filename=photo) }}">
+                <img src="{{ url_for('client_report_asset', token=report_token, filename=photo) }}" alt="Daily progress photo">
+              </a>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </article>
+      {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
     <section class="public-report-card">
       <div class="report-card-head">
         <div>

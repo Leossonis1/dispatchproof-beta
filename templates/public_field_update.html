@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Field Update · DispatchProof</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <style>:root{--brand-accent: {{ company_accent_color }};}</style>
+</head>
+<body class="public-body">
+  <main class="public-shell field-public-shell">
+    <div class="public-brand public-company-brand">
+      {% if company_logo_url %}<img src="{{ company_logo_url }}" alt="{{ company_name }} logo">{% endif %}
+      <strong>{{ company_name }}</strong><span>· powered by DispatchProof</span>
+    </div>
+
+    {% with messages = get_flashed_messages() %}{% if messages %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
+
+    <section class="public-card">
+      <div class="eyebrow">Secure Field Update</div>
+      <h1>{{ field_link['job_name'] }}</h1>
+      <p>{{ field_link['project_site'] or '' }}</p>
+      <div class="date-chip">Scheduled installation: {{ field_link['installation_date']|pretty_date }}</div>
+
+      <div class="why-box field-request-box">
+        <strong>Request from the Project Manager</strong>
+        <span>{{ field_link['request_note'] }}</span>
+      </div>
+
+      <div class="public-section">
+        <h2>Respond to PM Request</h2>
+        <p>Use this for a requested note or photos. You can return to this link later while the job is active.</p>
+        <form method="post" enctype="multipart/form-data" class="field-public-form">
+          <input type="hidden" name="entry_type" value="RESPONSE">
+          <label>Your Name
+            <input required name="submitted_by" value="{{ field_link['recipient_name'] }}" autocomplete="name">
+          </label>
+          <label>Response / Note
+            <textarea name="notes" rows="4" maxlength="4000" placeholder="Example: Uppers are complete. Added close-up photos of the damaged panel."></textarea>
+          </label>
+          <div class="field-photo-capture" data-photo-capture data-min="0">
+            <div class="field-photo-actions">
+              <label class="field-photo-action camera-action"><span class="field-photo-action-icon">●</span><span><strong>Take Photo</strong><small>Open the phone camera</small></span><input class="photo-camera-input" type="file" accept="image/*" capture="environment"></label>
+              <label class="field-photo-action"><span class="field-photo-action-icon gallery-icon">▣</span><span><strong>Choose Existing Photos</strong><small>Select from this device</small></span><input class="photo-gallery-input" type="file" accept="image/*" multiple></label>
+            </div>
+            <input class="photo-submit-input" type="file" name="photos" accept="image/*" multiple hidden>
+            <div class="field-photo-status"><span class="field-photo-counter">No photos added yet</span></div>
+            <div class="field-photo-preview" aria-live="polite"></div>
+          </div>
+          <button class="btn primary wide" type="submit">Submit Response</button>
+        </form>
+      </div>
+
+      <div class="public-section daily-progress-public-section">
+        <h2>Daily Progress Log</h2>
+        <p>For multi-day work, submit one progress entry each workday. DispatchProof keeps the days and photos in order for the PM and Client Report.</p>
+        <form method="post" enctype="multipart/form-data" class="field-public-form" id="dailyProgressForm">
+          <input type="hidden" name="entry_type" value="DAILY_PROGRESS">
+          <div class="grid-2">
+            <label>Your Name
+              <input required name="submitted_by" value="{{ field_link['recipient_name'] }}" autocomplete="name">
+            </label>
+            <label>Work Date
+              <input required type="date" name="work_date" value="{{ today }}">
+            </label>
+            <label>Crew Size <span class="muted">(optional)</span>
+              <input type="number" min="0" max="999" step="1" name="crew_size" inputmode="numeric" placeholder="3">
+            </label>
+            <label>Hours Worked <span class="muted">(optional)</span>
+              <input type="number" min="0" max="24" step="0.25" name="hours_worked" inputmode="decimal" placeholder="8">
+            </label>
+          </div>
+          <label>Work Completed Today
+            <textarea required name="work_completed" rows="4" maxlength="4000" placeholder="Example: Set all lower cabinets and installed countertops in Rooms 101–104."></textarea>
+          </label>
+          <label>Issues / Delays <span class="muted">(optional)</span>
+            <textarea name="issues_delays" rows="3" maxlength="4000" placeholder="Example: Waiting on electrician at Room 104. No impact to other areas."></textarea>
+          </label>
+          <label>Additional Note <span class="muted">(optional)</span>
+            <textarea name="notes" rows="3" maxlength="4000" placeholder="Anything else the PM should know today."></textarea>
+          </label>
+          <div class="field-photo-capture" id="dailyProgressPhotos" data-photo-capture data-min="1">
+            <div class="field-photo-actions">
+              <label class="field-photo-action camera-action"><span class="field-photo-action-icon">●</span><span><strong>Take Progress Photo</strong><small>Open the phone camera</small></span><input class="photo-camera-input" type="file" accept="image/*" capture="environment"></label>
+              <label class="field-photo-action"><span class="field-photo-action-icon gallery-icon">▣</span><span><strong>Choose Existing Photos</strong><small>Select one or more photos</small></span><input class="photo-gallery-input" type="file" accept="image/*" multiple></label>
+            </div>
+            <input class="photo-submit-input" type="file" name="photos" accept="image/*" multiple hidden>
+            <div class="field-photo-status"><span class="field-photo-counter">0 of 1 required photos added</span></div>
+            <div class="field-photo-preview" aria-live="polite"></div>
+          </div>
+          <p class="legal-note">Daily progress is saved to this job with the work date, submission time, your name, notes, and photos.</p>
+          <button class="btn primary wide" type="submit">Submit Daily Progress</button>
+        </form>
+      </div>
+    </section>
+    <p class="public-foot">No account required · Secure job-specific link · Powered by DispatchProof</p>
+  </main>
+<script src="{{ url_for('static', filename='photo_capture.js') }}"></script>
+<script>
+const dailyForm = document.getElementById('dailyProgressForm');
+if (dailyForm) dailyForm.addEventListener('submit', (e) => {
+  const capture = document.getElementById('dailyProgressPhotos').photoCapture;
+  if (!capture || capture.count() < 1) {
+    e.preventDefault();
+    alert('Please add at least 1 daily progress photo.');
+  }
+});
+</script>
+</body>
+</html>

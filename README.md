@@ -1,7 +1,7 @@
-# DispatchProof V2.41 Patch Only
+# DispatchProof V2.42 PATCH ONLY
 
-Apply this patch on top of **V2.40.9.2**.
+Apply this patch on top of a working **V2.41** installation.
 
-V2.41 adds reusable **Subcontractor** records to the existing Crew workflow, including optional company name, type filters/badges, assignment picker support, availability/conflicts, and job-detail identification.
+V2.42 adds job-level Field Updates and Daily Progress Logs with secure installer/subcontractor links, field photo uploads, daily progress history, Client Report integration, Email Outbox integration, and backup/restore coverage.
 
-The database migration is automatic and additive. Existing Crew Directory records remain **Internal Crew** and existing job assignments are preserved.
+The migration is automatic and additive. Existing readiness, arrival, mobilization, job, crew/subcontractor, document, and report records are not reset.

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Field Update Received · DispatchProof</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <style>:root{--brand-accent: {{ company_accent_color }};}</style>
+</head>
+<body class="public-body">
+  <main class="public-shell">
+    <div class="public-brand public-company-brand">{% if company_logo_url %}<img src="{{ company_logo_url }}" alt="{{ company_name }} logo">{% endif %}<strong>{{ company_name }}</strong><span>· powered by DispatchProof</span></div>
+    <section class="public-card submitted-card">
+      <div class="success-mark">✓</div>
+      <div class="eyebrow">Field Update Received</div>
+      <h1>Thank you.</h1>
+      <p>Your {{ 'daily progress' if kind == 'daily_progress' else 'field response' }} for <strong>{{ field_link['job_name'] }}</strong> has been saved to the job record.</p>
+      <a class="btn primary wide" href="{{ url_for('public_field_update', token=field_link['token']) }}">Return to Field Update Page</a>
+    </section>
+    <p class="public-foot">Powered by DispatchProof</p>
+  </main>
+</body>
+</html>
