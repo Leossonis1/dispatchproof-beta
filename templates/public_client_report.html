@@ -42,14 +42,21 @@
       <div><span>Client</span><strong>{{ report_client['name'] if report_client else '—' }}</strong></div>
       <div><span>Project</span><strong>{{ report_project['name'] if report_project else (job['project_site'] or '—') }}</strong></div>
       <div><span>Site Contact</span><strong>{{ job['contact_name'] }}</strong></div>
-      <div><span>Readiness Confirmed</span><strong>{{ job['response_at']|pretty_datetime if job['response_at'] else 'Not received' }}</strong></div>
-      <div><span>Arrival</span><strong>{{ job['arrived_at']|pretty_datetime if job['arrived_at'] else 'Not recorded' }}</strong></div>
+      <div><span>Current Readiness</span><strong>{{ job['response_at']|pretty_datetime if job['response_at'] else ('Awaiting response' if report.mobilization_history else 'Not received') }}</strong></div>
+      <div><span>Current Arrival</span><strong>{{ job['arrived_at']|pretty_datetime if job['arrived_at'] else ('Not reached yet' if report.mobilization_history else 'Not recorded') }}</strong></div>
     </div>
+
+    {% if report.mobilization_history and not job['response_at'] %}
+    <div class="notes-box" style="margin-top:18px;">
+      <strong>Current Mobilization Attempt</strong>
+      <p>This job is currently awaiting a new readiness confirmation. {{ report.mobilization_history|length }} prior mobilization attempt{{ '' if report.mobilization_history|length == 1 else 's' }} {{ 'is' if report.mobilization_history|length == 1 else 'are' }} preserved in Mobilization History below.</p>
+    </div>
+    {% endif %}
 
     <section class="public-report-card">
       <div class="report-card-head">
         <div>
-          <div class="eyebrow">Pre-Dispatch</div>
+          <div class="eyebrow">Current Mobilization · Pre-Dispatch</div>
           <h2>Readiness Confirmation</h2>
         </div>
         <span class="badge {{ job['status']|lower|replace(' ', '-') }}">{{ job['status'] }}</span>
@@ -72,7 +79,7 @@
         {% endfor %}
       </div>
       {% else %}
-        <div class="empty-mini">No readiness response has been submitted yet.</div>
+        <div class="empty-mini">{% if report.mobilization_history %}The current mobilization is awaiting a readiness response. Prior readiness confirmations are preserved in Mobilization History below.{% else %}No readiness response has been submitted yet.{% endif %}</div>
       {% endif %}
 
       {% if report.photos %}
@@ -89,7 +96,7 @@
     <section class="public-report-card">
       <div class="report-card-head">
         <div>
-          <div class="eyebrow">Field Arrival</div>
+          <div class="eyebrow">Current Mobilization · Field Arrival</div>
           <h2>Installer Arrival</h2>
         </div>
       </div>
@@ -132,7 +139,7 @@
         </div>
         {% endif %}
       {% else %}
-        <div class="empty-mini">Installer arrival has not been recorded yet.</div>
+        <div class="empty-mini">{% if report.mobilization_history %}The current mobilization has not reached installer arrival yet. Prior arrival results are preserved in Mobilization History below.{% else %}Installer arrival has not been recorded yet.{% endif %}</div>
       {% endif %}
     </section>
 
@@ -146,20 +153,66 @@
       </div>
 
       <div class="client-attempt-list">
-      {% for attempt in report.mobilization_history %}
+      {% for attempt in report.mobilization_history|reverse %}
         <article class="client-attempt">
           <div class="client-attempt-head">
             <strong>Attempt #{{ attempt.attempt_number }}</strong>
             <span>{{ attempt.arrived_at|pretty_datetime if attempt.arrived_at else attempt.response_at|pretty_datetime }}</span>
           </div>
+
+          <div class="report-stat-grid compact">
+            <div><span>Readiness</span><strong>{{ attempt.readiness_status or '—' }}</strong></div>
+            <div><span>Arrival</span><strong>{% if attempt.arrival_status == 'NOT READY' %}FAILED MOBILIZATION{% elif attempt.arrival_status == 'READY' %}SITE READY{% else %}NOT RECORDED{% endif %}</strong></div>
+          </div>
+
+          {% if attempt.confirmed_by or attempt.response_at %}
+          <p>Readiness{% if attempt.response_at %} confirmed {{ attempt.response_at|pretty_datetime }}{% endif %}{% if attempt.confirmed_by %} by <strong>{{ attempt.confirmed_by }}</strong>{% if attempt.confirmed_title %} · {{ attempt.confirmed_title }}{% endif %}{% endif %}.</p>
+          {% endif %}
+
+          {% if attempt.arrival_status %}
           <p>
-            {{ 'Failed Mobilization' if attempt.arrival_status == 'NOT READY' else 'Completed Mobilization' }}
+            {{ 'Site Not Ready / Failed Mobilization' if attempt.arrival_status == 'NOT READY' else 'Site Ready on Arrival' }}
+            {% if attempt.arrived_at %} · {{ attempt.arrived_at|pretty_datetime }}{% endif %}
             {% if attempt.arrival_reported_by %} · {{ attempt.arrival_reported_by }}{% endif %}
           </p>
+          {% endif %}
+
           {% if attempt.arrival_status == 'NOT READY' %}
-          <div class="report-stat-grid compact">
-            <div><span>Crew</span><strong>{{ attempt.crew_size|pretty_number }}</strong></div>
+          <div class="report-stat-grid">
+            <div><span>Crew Affected</span><strong>{{ attempt.crew_size|pretty_number }}</strong></div>
             <div><span>Hours Lost</span><strong>{{ attempt.hours_lost|pretty_number }}</strong></div>
+            <div><span>Equipment Affected</span><strong>{{ attempt.equipment_affected or '—' }}</strong></div>
+            <div><span>Report</span><strong>{{ attempt.failed_report_number or '—' }}</strong></div>
+          </div>
+
+          {% if attempt.arrival_issues %}
+          <div class="issue-chips">
+            {% for issue in attempt.arrival_issues %}<span>{{ issue }}</span>{% endfor %}
+          </div>
+          {% endif %}
+
+          {% if attempt.arrival_notes %}
+          <div class="notes-box"><strong>Installer Notes</strong><p>{{ attempt.arrival_notes }}</p></div>
+          {% endif %}
+          {% endif %}
+
+          {% if attempt.photos %}
+          <div class="report-photo-grid">
+            {% for photo in attempt.photos %}
+              <a target="_blank" rel="noopener" href="{{ url_for('client_report_asset', token=report_token, filename=photo) }}">
+                <img src="{{ url_for('client_report_asset', token=report_token, filename=photo) }}" alt="Archived pre-dispatch site evidence">
+              </a>
+            {% endfor %}
+          </div>
+          {% endif %}
+
+          {% if attempt.arrival_photos %}
+          <div class="report-photo-grid">
+            {% for photo in attempt.arrival_photos %}
+              <a target="_blank" rel="noopener" href="{{ url_for('client_report_asset', token=report_token, filename=photo) }}">
+                <img src="{{ url_for('client_report_asset', token=report_token, filename=photo) }}" alt="Archived installer arrival evidence">
+              </a>
+            {% endfor %}
           </div>
           {% endif %}
         </article>

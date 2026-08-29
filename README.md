@@ -26,3 +26,7 @@
 Operator Workspace Restore button reliability fix.
 
 Use the patch-only ZIP when upgrading an existing V2.40.2 installation. No database reset is required.
+
+
+## V2.40.7 — Client Report Mobilization Clarity
+Client Installation Reports now clearly separate the current mobilization cycle from preserved prior attempts and show fuller archived readiness/arrival evidence.
