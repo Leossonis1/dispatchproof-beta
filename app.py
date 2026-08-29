@@ -1,5 +1,5 @@
 
-from flask import Flask, render_template, request, redirect, url_for, send_from_directory, send_file, flash, abort, session
+from flask import Flask, render_template, request, redirect, url_for, send_from_directory, send_file, flash, abort, session, has_request_context
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -1747,7 +1747,17 @@ def make_report_number(job_id, timestamp):
 
 
 def public_app_base_url():
-    """Return the public base URL when hosted, otherwise fall back to Flask."""
+    """Return the base URL for secure public links.
+
+    V2.40.4 prefers the hostname of the live request that generated the link.
+    This prevents a stale DISPATCHPROOF_PUBLIC_BASE_URL from sending a site
+    contact to another DispatchProof deployment/database where the token does
+    not exist. Environment URLs remain fallbacks for non-request contexts.
+    """
+    if has_request_context():
+        live_base = (request.url_root or "").strip().rstrip("/")
+        if live_base:
+            return live_base
     if PUBLIC_BASE_URL:
         return PUBLIC_BASE_URL
     if RENDER_EXTERNAL_URL:
@@ -2794,7 +2804,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.40.3",
+        "app_version": "2.40.4",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -2993,7 +3003,7 @@ def create_workspace_export_archive():
         "export_format": 2,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.40.3",
+        "app_version": "2.40.4",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -3753,7 +3763,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.40.3",
+        "app_version": "2.40.4",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -7526,11 +7536,18 @@ def email_outbox_detail(event_id):
 
     return render_template("email_outbox_detail.html", event=event)
 
-@app.route("/r/<token>", methods=["GET", "POST"])
+@app.route("/r/<token>", methods=["GET", "POST"], strict_slashes=False)
 def public_readiness(token):
     with get_db() as db:
         job = db.execute("SELECT * FROM jobs WHERE public_token = ?", (token,)).fetchone()
     if not job:
+        app.logger.warning(
+            "Public readiness token not found token_prefix=%s request_host=%s configured_public_base=%s render_external_url=%s",
+            (token or "")[:8],
+            (request.url_root or "").rstrip("/"),
+            PUBLIC_BASE_URL or "<unset>",
+            RENDER_EXTERNAL_URL or "<unset>",
+        )
         abort(404)
 
     if job["status"] == "COMPLETED":
