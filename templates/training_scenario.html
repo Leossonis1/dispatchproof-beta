@@ -49,7 +49,7 @@
   <div class="big-check">✓</div>
   <h2>Scenario Complete</h2>
   <p>You worked through all {{ assignment['total_steps'] }} decisions in <strong>{{ scenario['title'] }}</strong>.</p>
-  <p class="muted">Practice retries are coaching moments, not a grade. Practice Again reshuffles the question order so the next run is different.</p>
+  <p class="muted">Practice retries are coaching moments, not a grade. Practice Again reshuffles both the question order and answer positions so the next run is different.</p>
   <div class="button-row centered-actions">
     <a class="btn primary" href="{{ url_for('training_home') }}">Back to Training</a>
     <form method="post" action="{{ url_for('reset_training_assignment', assignment_id=assignment['id']) }}" onsubmit="return confirm('Reset this scenario and practice again from the beginning?');">
@@ -76,7 +76,7 @@
     <h3>{{ step['question'] }}</h3>
     {% if can_practice %}
     <form method="post" action="{{ url_for('answer_training_scenario', assignment_id=assignment['id']) }}" class="training-choice-form">
-      {% for choice in step['choices'] %}
+      {% for choice in display_choices %}
       <label class="training-choice">
         <input type="radio" name="action_key" value="{{ choice[0] }}" required>
         <span>{{ choice[1] }}</span>
@@ -94,7 +94,7 @@
 <div class="training-bottom-actions">
   <a class="text-link" href="{{ url_for('training_home') }}">← Training Home</a>
   {% if assignment['status'] != 'COMPLETED' %}
-  <form method="post" action="{{ url_for('reset_training_assignment', assignment_id=assignment['id']) }}" onsubmit="return confirm('Reset this scenario and reshuffle the questions?');">
+  <form method="post" action="{{ url_for('reset_training_assignment', assignment_id=assignment['id']) }}" onsubmit="return confirm('Reset this scenario and reshuffle the questions and answer choices?');">
     <button class="btn small-btn" type="submit">Reset Scenario</button>
   </form>
   {% endif %}
