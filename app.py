@@ -4462,7 +4462,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.45.1",
+        "app_version": "2.45.2",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -4667,7 +4667,7 @@ def create_workspace_export_archive():
         "export_format": 2,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.45.1",
+        "app_version": "2.45.2",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -5510,6 +5510,95 @@ def training_answer_feedback(scenario, question_order, attempt):
     }
 
 
+def training_results_rows(db, user_id=None):
+    """Return one export-ready summary row per training assignment."""
+    params = []
+    where = ""
+    if user_id is not None:
+        where = "WHERE ta.user_id = ?"
+        params.append(int(user_id))
+
+    rows = db.execute(f"""
+        SELECT ta.*, u.full_name AS user_full_name, u.username AS user_username,
+               u.role AS user_role, u.is_active AS user_is_active,
+               COUNT(tr.id) AS total_attempts,
+               COALESCE(SUM(CASE WHEN tr.is_correct = 1 THEN 1 ELSE 0 END), 0) AS correct_attempts,
+               COALESCE(SUM(CASE WHEN tr.is_correct = 0 THEN 1 ELSE 0 END), 0) AS incorrect_attempts
+        FROM training_assignments ta
+        JOIN users u ON u.id = ta.user_id
+        LEFT JOIN training_attempts tr ON tr.assignment_id = ta.id
+        {where}
+        GROUP BY ta.id
+        ORDER BY LOWER(u.full_name), LOWER(u.username), ta.assigned_at, ta.id
+    """, tuple(params)).fetchall()
+
+    results = []
+    for row in rows:
+        card = training_assignment_card(row)
+        scenario = card.get("scenario") or {}
+        results.append({
+            "user_id": card.get("user_id"),
+            "user_full_name": card.get("user_full_name") or "",
+            "user_username": card.get("user_username") or "",
+            "user_role": card.get("user_role") or "",
+            "scenario_title": scenario.get("title") or card.get("scenario_key") or "",
+            "status": (card.get("status") or "").replace("_", " ").title(),
+            "questions_completed": int(card.get("completed_steps") or 0),
+            "total_questions": int(card.get("total_steps") or 0),
+            "completion_percent": int(card.get("progress_percent") or 0),
+            "coaching_moments": int(card.get("coaching_flags") or 0),
+            "total_attempts": int(card.get("total_attempts") or 0),
+            "correct_attempts": int(card.get("correct_attempts") or 0),
+            "incorrect_attempts": int(card.get("incorrect_attempts") or 0),
+            "assigned_by": card.get("assigned_by") or "",
+            "assigned_at": card.get("assigned_at") or "",
+            "started_at": card.get("started_at") or "",
+            "completed_at": card.get("completed_at") or "",
+            "last_activity_at": card.get("last_activity_at") or "",
+        })
+    return results
+
+
+def training_results_csv_response(rows, filename):
+    output = io.StringIO(newline="")
+    writer = csv.writer(output)
+    writer.writerow([
+        "User Name", "Username", "Role", "Scenario", "Status",
+        "Questions Completed", "Total Questions", "Completion Percent",
+        "Coaching Moments", "Total Attempts", "Correct Attempts", "Incorrect Attempts",
+        "Assigned By", "Assigned At", "Started At", "Completed At", "Last Activity At",
+    ])
+    for row in rows:
+        writer.writerow([
+            row["user_full_name"],
+            row["user_username"],
+            (row["user_role"] or "").title(),
+            row["scenario_title"],
+            row["status"],
+            row["questions_completed"],
+            row["total_questions"],
+            f"{row['completion_percent']}%",
+            row["coaching_moments"],
+            row["total_attempts"],
+            row["correct_attempts"],
+            row["incorrect_attempts"],
+            row["assigned_by"],
+            row["assigned_at"],
+            row["started_at"],
+            row["completed_at"],
+            row["last_activity_at"],
+        ])
+
+    csv_bytes = io.BytesIO(output.getvalue().encode("utf-8-sig"))
+    csv_bytes.seek(0)
+    return send_file(
+        csv_bytes,
+        mimetype="text/csv; charset=utf-8",
+        as_attachment=True,
+        download_name=filename,
+    )
+
+
 def get_training_assignment(db, assignment_id):
     return db.execute("""
         SELECT ta.*, u.full_name AS user_full_name, u.username AS user_username,
@@ -5585,7 +5674,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.45.1",
+        "app_version": "2.45.2",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -5650,6 +5739,8 @@ def ensure_db():
         "delete_client_document",
         "assign_training",
         "remove_training_assignment",
+        "download_all_training_results_csv",
+        "download_user_training_results_csv",
     }
     if request.endpoint in admin_only_endpoints and user_authenticated() and not current_user_is_admin():
         flash("Administrator access is required for that page.")
@@ -8607,8 +8698,21 @@ def training_home():
                     LOWER(u.full_name), ta.assigned_at DESC
             """).fetchall()
             assignments = [training_assignment_card(row) for row in rows]
+            export_users = []
+            seen_export_user_ids = set()
+            for row in rows:
+                uid = int(row["user_id"])
+                if uid in seen_export_user_ids:
+                    continue
+                seen_export_user_ids.add(uid)
+                export_users.append({
+                    "id": uid,
+                    "full_name": row["user_full_name"],
+                    "username": row["user_username"],
+                })
         else:
             users = []
+            export_users = []
             user_id = current_user_id()
             rows = db.execute("""
                 SELECT ta.*, u.full_name AS user_full_name, u.username AS user_username,
@@ -8628,6 +8732,37 @@ def training_home():
         training_users=users,
         scenario_library=scenario_library,
         starter_track_count=len(TRAINING_STARTER_TRACK),
+        training_export_users=export_users,
+    )
+
+
+@app.get("/training/results.csv")
+def download_all_training_results_csv():
+    if not current_user_is_admin():
+        abort(404)
+    with get_db() as db:
+        rows = training_results_rows(db)
+    return training_results_csv_response(rows, "DispatchProof_Training_Results_All.csv")
+
+
+@app.get("/training/results/user/<int:user_id>.csv")
+def download_user_training_results_csv(user_id):
+    if not current_user_is_admin():
+        abort(404)
+    with get_db() as db:
+        user = db.execute(
+            "SELECT id, full_name, username FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+        if not user:
+            abort(404)
+        rows = training_results_rows(db, user_id=user_id)
+
+    safe_name = secure_filename(user["full_name"] or user["username"] or f"user_{user_id}")
+    safe_name = safe_name or f"user_{user_id}"
+    return training_results_csv_response(
+        rows,
+        f"DispatchProof_Training_Results_{safe_name}.csv",
     )
 
 
