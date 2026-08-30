@@ -84,6 +84,15 @@ ROUTE_GEOCODE_CACHE_TTL_DAYS = max(1, int(os.getenv("ROUTE_GEOCODE_CACHE_TTL_DAY
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
 DOCUMENT_EXTENSIONS = {"pdf", "doc", "docx", "xls", "xlsx", "csv", "txt", "png", "jpg", "jpeg", "webp", "dwg", "dxf"}
 MAX_JOB_DOCUMENT_BYTES = 20 * 1024 * 1024
+VOICE_AUDIO_EXTENSIONS = {"webm", "wav", "mp3", "m4a", "mp4", "mpeg", "mpga", "ogg", "flac"}
+MAX_VOICE_AUDIO_BYTES = 20 * 1024 * 1024
+OPENAI_TRANSCRIPTION_API_KEY = (
+    os.getenv("DISPATCHPROOF_OPENAI_API_KEY", "").strip()
+    or os.getenv("OPENAI_API_KEY", "").strip()
+)
+OPENAI_TRANSCRIPTION_MODEL = os.getenv(
+    "DISPATCHPROOF_TRANSCRIPTION_MODEL", "gpt-4o-mini-transcribe"
+).strip() or "gpt-4o-mini-transcribe"
 
 # V1.4 company placeholders. Later these become company settings.
 COMPANY_NAME = os.getenv("DISPATCHPROOF_COMPANY_NAME", "DispatchProof")
@@ -876,6 +885,8 @@ def ensure_columns(db):
             recipient_name TEXT NOT NULL,
             recipient_email TEXT,
             request_note TEXT NOT NULL,
+            shared_documents_json TEXT,
+            share_site_contact INTEGER NOT NULL DEFAULT 1,
             is_active INTEGER NOT NULL DEFAULT 1,
             created_by TEXT NOT NULL,
             created_at TEXT NOT NULL,
@@ -900,9 +911,55 @@ def ensure_columns(db):
             hours_worked REAL,
             issues_delays TEXT,
             photo_json TEXT,
+            voice_filename TEXT,
+            voice_content_type TEXT,
+            voice_file_size INTEGER,
+            voice_transcript TEXT,
+            voice_transcript_status TEXT,
             created_at TEXT NOT NULL,
             FOREIGN KEY(job_id) REFERENCES jobs(id) ON DELETE CASCADE,
             FOREIGN KEY(field_link_id) REFERENCES field_update_links(id) ON DELETE SET NULL
+        )
+    """)
+
+    field_link_existing = {row["name"] for row in db.execute("PRAGMA table_info(field_update_links)").fetchall()}
+    for name, sql_type in {
+        "shared_documents_json": "TEXT",
+        "share_site_contact": "INTEGER NOT NULL DEFAULT 1",
+    }.items():
+        if name not in field_link_existing:
+            db.execute(f"ALTER TABLE field_update_links ADD COLUMN {name} {sql_type}")
+
+    field_progress_existing = {row["name"] for row in db.execute("PRAGMA table_info(field_progress_entries)").fetchall()}
+    for name, sql_type in {
+        "voice_filename": "TEXT",
+        "voice_content_type": "TEXT",
+        "voice_file_size": "INTEGER",
+        "voice_transcript": "TEXT",
+        "voice_transcript_status": "TEXT",
+    }.items():
+        if name not in field_progress_existing:
+            db.execute(f"ALTER TABLE field_progress_entries ADD COLUMN {name} {sql_type}")
+
+    # V2.46: company-wide subcontractor compliance/document tracking.
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS subcontractor_documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            crew_member_id INTEGER NOT NULL,
+            document_type TEXT NOT NULL,
+            stored_filename TEXT NOT NULL UNIQUE,
+            original_filename TEXT NOT NULL,
+            file_size INTEGER NOT NULL DEFAULT 0,
+            content_type TEXT,
+            expiration_date TEXT,
+            reminder_days INTEGER NOT NULL DEFAULT 30,
+            is_required INTEGER NOT NULL DEFAULT 0,
+            notes TEXT,
+            actor_type TEXT NOT NULL,
+            actor_name TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY(crew_member_id) REFERENCES crew_members(id) ON DELETE CASCADE
         )
     """)
 
@@ -1172,6 +1229,7 @@ CONTRACTOR_TRADE_CONFIG = {
     "cleaning": {"label": "Cleaning / Janitorial", "terms": ["commercial cleaning service", "janitorial service"]},
     "low_voltage": {"label": "Data / Low Voltage", "terms": ["low voltage contractor", "data cabling contractor"]},
     "landscaping": {"label": "Landscaping", "terms": ["commercial landscaper", "landscape contractor"]},
+    "snow_removal": {"label": "Snow Plowing / Snow Removal", "terms": ["commercial snow removal service", "snow plowing contractor"]},
 }
 
 
@@ -1363,7 +1421,7 @@ def contractor_obvious_non_service_business(place, trade):
         "carpenter", "contractor", "construction", "installer", "installation",
         "repair service", "maintenance", "home service", "home improvement",
         "plumber", "electrician", "roofer", "landscaper", "janitorial service",
-        "cleaning service", "mason",
+        "cleaning service", "mason", "snow removal", "snow plowing", "snow and ice",
     ]
     retail_category_cues = [
         "retail store", "miscellaneous store", "furniture store", "hardware store",
@@ -1401,6 +1459,7 @@ def contractor_obvious_non_service_business(place, trade):
         "cleaning": ["cleaning supply", "janitorial supply", "laundromat", "dry cleaner"],
         "low_voltage": ["electronics store", "computer store", "electrical supply"],
         "landscaping": ["landscape supply", "garden center", "plant nursery"],
+        "snow_removal": ["snow plow dealer", "snow plow equipment", "snow equipment dealer", "equipment rental"],
     }
     if any(word in name for word in trade_retail_name_cues.get(trade, [])) and not any(
         word in name for word in service_name_cues
@@ -1458,6 +1517,7 @@ def contractor_trade_match_strength(place, trade):
         "cleaning": ["commercial cleaning", "janitorial service", "cleaning service", "construction cleaning", "post construction cleaning"],
         "low_voltage": ["low voltage contractor", "data cabling", "structured cabling", "network cabling", "telecommunications contractor", "security system installer"],
         "landscaping": ["landscaper", "landscape contractor", "landscaping", "grounds maintenance", "landscape installation"],
+        "snow_removal": ["snow removal", "snow plowing", "snow plow service", "snow and ice management", "snow contractor", "property maintenance"],
     }
     name_terms = {
         "millwork": ["millwork", "cabinet", "casework", "carpentry", "carpenter", "woodwork"],
@@ -1470,6 +1530,7 @@ def contractor_trade_match_strength(place, trade):
         "cleaning": ["cleaning", "janitorial", "cleaners", "clean"],
         "low_voltage": ["low voltage", "data", "cabling", "structured cabling", "network cabling", "security", "access control"],
         "landscaping": ["landscape", "landscaping", "lawn", "grounds", "irrigation"],
+        "snow_removal": ["snow removal", "snow plow", "snowplow", "snow and ice", "ice management", "winter service"],
     }
     competing = {
         "plumbing": ["electrician", "electrical contractor", "hvac", "roofing", "concrete", "flooring", "painting"],
@@ -1486,6 +1547,7 @@ def contractor_trade_match_strength(place, trade):
         "cleaning": ["plumber", "electrician", "hvac", "roofing contractor", "concrete contractor"],
         "low_voltage": ["plumber", "roofing contractor", "concrete contractor", "landscaper"],
         "landscaping": ["plumber", "electrician", "hvac", "roofing contractor"],
+        "snow_removal": ["plumber", "electrician", "hvac", "roofing contractor", "flooring contractor"],
     }
     if any(word in blob for word in competing.get(trade, [])):
         return 0
@@ -2504,6 +2566,10 @@ def init_db():
             ON field_progress_entries(job_id, work_date DESC, created_at DESC, id DESC)
         """)
         db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_subcontractor_documents_member_expiration
+            ON subcontractor_documents(crew_member_id, expiration_date, id)
+        """)
+        db.execute("""
             CREATE INDEX IF NOT EXISTS idx_project_route_plans_project_owner
             ON project_route_plans(project_id, owner_key, updated_at DESC)
         """)
@@ -2564,6 +2630,20 @@ def init_db():
                 actor_type="SYSTEM",
                 actor_name="DispatchProof",
             )
+
+        v246_migration = db.execute(
+            "SELECT 1 FROM app_migrations WHERE migration_key = ?",
+            ("v2.46_field_subcontractor_package",),
+        ).fetchone()
+        if not v246_migration:
+            db.execute("""
+                INSERT INTO app_migrations (migration_key, applied_at, details)
+                VALUES (?, ?, ?)
+            """, (
+                "v2.46_field_subcontractor_package",
+                now_iso(),
+                "Added subcontractor document expiration tracking, snow-removal search, field document access, and voice field updates.",
+            ))
 
         activity_migration = db.execute(
             "SELECT 1 FROM app_migrations WHERE migration_key = ?",
@@ -3044,8 +3124,97 @@ app.jinja_env.filters["pretty_bytes"] = pretty_bytes
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def allowed_document(filename):
+def document_allowed(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in DOCUMENT_EXTENSIONS
+
+
+def voice_audio_allowed(filename, content_type=""):
+    ext_ok = "." in str(filename or "") and str(filename).rsplit(".", 1)[1].lower() in VOICE_AUDIO_EXTENSIONS
+    type_ok = str(content_type or "").lower().startswith("audio/") or str(content_type or "").lower() in {"video/webm", "video/mp4"}
+    return ext_ok or type_ok
+
+
+def save_voice_audio(upload, job_id):
+    original = secure_filename(upload.filename or "voice-update.webm") or "voice-update.webm"
+    ext = Path(original).suffix.lower()
+    if ext.lstrip(".") not in VOICE_AUDIO_EXTENSIONS:
+        mimetype = (upload.mimetype or "").lower()
+        ext = ".m4a" if "mp4" in mimetype else ".webm"
+    stored = f"voice_{job_id}_{secrets.token_hex(10)}{ext}"
+    path = UPLOAD_DIR / stored
+    upload.save(path)
+    size = path.stat().st_size
+    if size > MAX_VOICE_AUDIO_BYTES:
+        path.unlink(missing_ok=True)
+        raise ValueError("Voice recording is too large. Keep recordings under 20 MB.")
+    return stored, size, (upload.mimetype or "audio/webm")
+
+
+def transcribe_voice_audio(stored_filename, content_type="audio/webm"):
+    if not OPENAI_TRANSCRIPTION_API_KEY:
+        return None, "NOT_CONFIGURED"
+    path = UPLOAD_DIR / stored_filename
+    if not path.is_file():
+        return None, "MISSING_FILE"
+    try:
+        with path.open("rb") as fh:
+            response = requests.post(
+                "https://api.openai.com/v1/audio/transcriptions",
+                headers={"Authorization": f"Bearer {OPENAI_TRANSCRIPTION_API_KEY}"},
+                files={"file": (path.name, fh, content_type or "application/octet-stream")},
+                data={
+                    "model": OPENAI_TRANSCRIPTION_MODEL,
+                    "prompt": "Construction field report. Preserve jobsite terms, room numbers, millwork, casework, cabinetry, subcontractor, superintendent, punch list, and trade names accurately.",
+                },
+                timeout=90,
+            )
+        if response.status_code >= 400:
+            app.logger.warning("Voice transcription failed status=%s body=%s", response.status_code, response.text[:300])
+            return None, "FAILED"
+        payload = response.json() if response.content else {}
+        text = str((payload or {}).get("text") or "").strip()
+        return (text[:12000] if text else None), ("TRANSCRIBED" if text else "EMPTY")
+    except Exception as exc:
+        app.logger.warning("Voice transcription error: %s", exc)
+        return None, "FAILED"
+
+
+def subcontractor_document_state(row):
+    expiration = str(row.get("expiration_date") if isinstance(row, dict) else row["expiration_date"] or "").strip()
+    reminder_days = int((row.get("reminder_days") if isinstance(row, dict) else row["reminder_days"]) or 30)
+    if not expiration:
+        return {"level": "none", "label": "NO EXPIRATION", "days": None}
+    try:
+        exp = date.fromisoformat(expiration)
+    except Exception:
+        return {"level": "none", "label": "DATE INVALID", "days": None}
+    days = (exp - local_today()).days
+    if days < 0:
+        return {"level": "expired", "label": f"EXPIRED {abs(days)} DAY{'S' if abs(days) != 1 else ''} AGO", "days": days}
+    if days == 0:
+        return {"level": "warning", "label": "EXPIRES TODAY", "days": 0}
+    if days <= max(0, reminder_days):
+        return {"level": "warning", "label": f"EXPIRES IN {days} DAY{'S' if days != 1 else ''}", "days": days}
+    return {"level": "current", "label": "CURRENT", "days": days}
+
+
+def field_shareable_documents(db, job):
+    items = []
+    for row in db.execute("SELECT * FROM job_documents WHERE job_id = ? ORDER BY created_at DESC, id DESC", (job["id"],)).fetchall():
+        item = dict(row); item.update({"kind": "job", "ref": f"job:{row['id']}", "scope_label": "Job Document"}); items.append(item)
+    if job["project_id"]:
+        for row in db.execute("SELECT * FROM project_documents WHERE project_id = ? ORDER BY created_at DESC, id DESC", (job["project_id"],)).fetchall():
+            item = dict(row); item.update({"kind": "project", "ref": f"project:{row['id']}", "scope_label": "Project Document"}); items.append(item)
+    if job["client_id"]:
+        for row in db.execute("SELECT * FROM client_documents WHERE client_id = ? ORDER BY created_at DESC, id DESC", (job["client_id"],)).fetchall():
+            item = dict(row); item.update({"kind": "client", "ref": f"client:{row['id']}", "scope_label": "Client Document"}); items.append(item)
+    return items
+
+
+def selected_field_documents(db, job, refs):
+    wanted = {str(x) for x in (refs or [])}
+    return [item for item in field_shareable_documents(db, job) if item["ref"] in wanted]
+
 
 def save_photos(files, prefix):
     saved = []
@@ -3888,7 +4057,7 @@ def build_field_update_email(job, field_link, public_url):
     esc_note = html_lib.escape(str(field_link["request_note"] or ""))
     esc_url = html_lib.escape(str(public_url), quote=True)
 
-    subject = f"Field Update Request: {job['job_name']}"
+    subject = f"Field Access: {job['job_name']}"
     html = f"""
     <html>
       <body style="font-family:Arial,sans-serif;background:#f5f7fb;padding:28px;color:#152033;">
@@ -3903,9 +4072,9 @@ def build_field_update_email(job, field_link, public_url):
           <div style="background:#f8fafc;border-left:4px solid {brand_accent};padding:14px 16px;margin:18px 0;line-height:1.5;">
             <strong>PM Request</strong><br>{esc_note}
           </div>
-          <p style="line-height:1.55;">Open the secure field link to respond with a note or photos. You can also use the same link to submit daily progress photos while this job is active. No DispatchProof account is required.</p>
+          <p style="line-height:1.55;">Open the secure field link to review shared job information/documents, respond with a note or photos, submit daily progress, or record a voice update while this job is active. No DispatchProof account is required.</p>
           <div style="margin:26px 0;">
-            <a href="{esc_url}" style="display:inline-block;background:{brand_accent};color:white;text-decoration:none;font-weight:700;padding:13px 18px;border-radius:9px;">Open Field Update</a>
+            <a href="{esc_url}" style="display:inline-block;background:{brand_accent};color:white;text-decoration:none;font-weight:700;padding:13px 18px;border-radius:9px;">Open Field Access</a>
           </div>
           <p style="font-size:12px;color:#6b7280;line-height:1.5;">This secure link is tied only to this job and can be revoked by the project manager.</p>
         </div>
@@ -4362,6 +4531,7 @@ def database_record_counts(db_path):
         "crew_members": 0,
         "job_crew_assignments": 0,
         "crew_unavailability": 0,
+        "subcontractor_documents": 0,
     }
 
     conn = sqlite3.connect(db_path)
@@ -4390,6 +4560,7 @@ def database_record_counts(db_path):
             ("crew_members", "crew_members"),
             ("job_crew_assignments", "job_crew_assignments"),
             ("crew_unavailability", "crew_unavailability"),
+            ("subcontractor_documents", "subcontractor_documents"),
         ):
             try:
                 counts[key] = conn.execute(
@@ -4433,6 +4604,7 @@ def create_backup_archive():
         "crew_members": 0,
         "job_crew_assignments": 0,
         "crew_unavailability": 0,
+        "subcontractor_documents": 0,
         "uploaded_files": 0,
     }
 
@@ -4462,7 +4634,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.45.2",
+        "app_version": "2.46.0",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -4566,6 +4738,7 @@ def build_workspace_export_data(db):
     crew_unavailability = _rows_as_dicts(db.execute("SELECT * FROM crew_unavailability ORDER BY crew_member_id, start_date, id").fetchall())
     client_documents = _rows_as_dicts(db.execute("SELECT * FROM client_documents ORDER BY client_id, created_at, id").fetchall())
     project_documents = _rows_as_dicts(db.execute("SELECT * FROM project_documents ORDER BY project_id, created_at, id").fetchall())
+    subcontractor_documents = _rows_as_dicts(db.execute("SELECT * FROM subcontractor_documents ORDER BY crew_member_id, expiration_date, id").fetchall())
 
     data = {
         "jobs": jobs,
@@ -4580,6 +4753,7 @@ def build_workspace_export_data(db):
         "field_progress_entries": field_progress,
         "client_documents": client_documents,
         "project_documents": project_documents,
+        "subcontractor_documents": subcontractor_documents,
         "email_events": emails,
         "activity_log": activity,
         "job_crew_assignments": crew_assignments,
@@ -4601,6 +4775,8 @@ def workspace_export_stats(db):
         evidence.update(parse_json_list(row.get("arrival_photos_json")))
     for row in data.get("field_progress_entries") or []:
         evidence.update(parse_json_list(row.get("photo_json")))
+        if row.get("voice_filename"):
+            evidence.add(row.get("voice_filename"))
     return {
         "jobs": len(data["jobs"]),
         "job_documents": len(data["job_documents"]),
@@ -4609,7 +4785,7 @@ def workspace_export_stats(db):
         "clients": len(data["clients"]),
         "projects": len(data["projects"]),
         "crew_members": len(data["crew_members"]),
-        "shared_documents": len(data["client_documents"]) + len(data["project_documents"]),
+        "shared_documents": len(data["client_documents"]) + len(data["project_documents"]) + len(data.get("subcontractor_documents") or []),
     }
 
 def create_workspace_export_archive():
@@ -4667,7 +4843,7 @@ def create_workspace_export_archive():
         "export_format": 2,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.45.2",
+        "app_version": "2.46.0",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -4685,7 +4861,7 @@ def create_workspace_export_archive():
             "DispatchProof Workspace Export\n"
             "==============================\n\n"
             "This ZIP is a personal/team workspace backup for reference and file recovery.\n"
-            "It contains jobs this account was authorized to access plus shared Clients, Projects, Crew and setup documents visible to Operators.\n"
+            "It contains jobs this account was authorized to access plus shared Clients, Projects, Crew, subcontractor paperwork, and setup documents visible to Operators.\n"
             "It does not contain other PMs' private jobs, user passwords, or the full company database.\n"
             "Only Owner/Administrator full-system backups can be restored over DispatchProof.\n\n"
             "Store this ZIP securely because it may contain customer contact information, job history, and site evidence.\n"
@@ -4725,6 +4901,14 @@ def create_workspace_export_archive():
                 doc.get("original_filename"), entity_type="project", entity_id=doc.get("project_id"), document_id=doc.get("id"),
             )
 
+        for doc in data.get("subcontractor_documents") or []:
+            safe_original = secure_filename(doc.get("original_filename") or "") or doc["stored_filename"]
+            archive_name = Path("files") / "shared" / "subcontractors" / f"crew_{doc['crew_member_id']}" / f"{doc['id']}_{safe_original}"
+            add_upload(
+                z, doc["stored_filename"], archive_name, None, "subcontractor_document",
+                doc.get("original_filename"), entity_type="crew", entity_id=doc.get("crew_member_id"), document_id=doc.get("id"),
+            )
+
         # Readiness / arrival evidence, including archived attempts.
         evidence_by_job = {job_id: set() for job_id in job_by_id}
         for job in data["jobs"]:
@@ -4737,6 +4921,8 @@ def create_workspace_export_archive():
             evidence_by_job.setdefault(row["job_id"], set()).update(parse_json_list(row.get("arrival_photos_json")))
         for row in data.get("field_progress_entries") or []:
             evidence_by_job.setdefault(row["job_id"], set()).update(parse_json_list(row.get("photo_json")))
+            if row.get("voice_filename"):
+                evidence_by_job.setdefault(row["job_id"], set()).add(row.get("voice_filename"))
 
         for job_id, filenames in evidence_by_job.items():
             for filename in sorted(name for name in filenames if name):
@@ -4884,11 +5070,25 @@ def inspect_workspace_restore_zip(zip_path):
             if not exists:
                 new_project_docs += 1
 
+        new_subcontractor_docs = 0
+        for row in data.get("subcontractor_documents") or []:
+            old_crew = next((c for c in crew_members if c.get("id") == row.get("crew_member_id")), None)
+            live_crew_id = live_crew.get(str((old_crew or {}).get("name") or "").strip().lower()) if old_crew else None
+            if not live_crew_id:
+                new_subcontractor_docs += 1
+                continue
+            exists = db.execute(
+                "SELECT 1 FROM subcontractor_documents WHERE crew_member_id = ? AND original_filename = ? COLLATE NOCASE AND file_size = ? LIMIT 1",
+                (live_crew_id, row.get("original_filename") or "", int(row.get("file_size") or 0)),
+            ).fetchone()
+            if not exists:
+                new_subcontractor_docs += 1
+
     new_jobs = [job for job in jobs if source_ids.get(job.get("id")) not in already]
     new_ids = {job.get("id") for job in new_jobs}
     available_job_files = [f for f in file_index if f.get("job_id") in new_ids and f.get("archive_path")]
-    shared_file_count = sum(1 for f in file_index if f.get("kind") in {"client_document", "project_document"} and f.get("archive_path"))
-    restorable_items = len(new_jobs) + len(new_clients) + len(new_projects) + len(new_crew) + new_client_docs + new_project_docs
+    shared_file_count = sum(1 for f in file_index if f.get("kind") in {"client_document", "project_document", "subcontractor_document"} and f.get("archive_path"))
+    restorable_items = len(new_jobs) + len(new_clients) + len(new_projects) + len(new_crew) + new_client_docs + new_project_docs + new_subcontractor_docs
 
     preview = {
         "manifest": manifest,
@@ -4906,7 +5106,7 @@ def inspect_workspace_restore_zip(zip_path):
         "new_clients": len(new_clients),
         "new_projects": len(new_projects),
         "new_crew": len(new_crew),
-        "new_shared_documents": new_client_docs + new_project_docs,
+        "new_shared_documents": new_client_docs + new_project_docs + new_subcontractor_docs,
         "setup_records_in_zip": len(clients) + len(projects) + len(crew_members),
         "restorable_items": restorable_items,
         "export_format": export_format,
@@ -5055,16 +5255,22 @@ def restore_workspace_archive(zip_path):
 
             file_by_stored = {str(item.get("stored_filename") or ""): item for item in file_index if item.get("stored_filename")}
 
-            # Restore shared Client / Project documents additively.
+            # Restore shared documents additively and keep old→new IDs so
+            # restored Field Access links can still point at the exact selected files.
+            client_document_map = {}
+            project_document_map = {}
+            subcontractor_document_map = {}
+
             for row in data.get("client_documents") or []:
                 live_client_id = client_map.get(row.get("client_id"))
                 if not live_client_id:
                     continue
-                exists = db.execute(
-                    "SELECT 1 FROM client_documents WHERE client_id = ? AND original_filename = ? COLLATE NOCASE AND file_size = ? LIMIT 1",
+                existing = db.execute(
+                    "SELECT id FROM client_documents WHERE client_id = ? AND original_filename = ? COLLATE NOCASE AND file_size = ? LIMIT 1",
                     (live_client_id, row.get("original_filename") or "", int(row.get("file_size") or 0)),
                 ).fetchone()
-                if exists:
+                if existing:
+                    client_document_map[row.get("id")] = existing["id"]
                     continue
                 item = file_by_stored.get(str(row.get("stored_filename") or ""))
                 new_stored = restore_file(item) if item else None
@@ -5073,18 +5279,20 @@ def restore_workspace_archive(zip_path):
                 restored = dict(row)
                 restored["stored_filename"] = new_stored
                 restored["file_size"] = (UPLOAD_DIR / new_stored).stat().st_size
-                _restore_insert_row(db, "client_documents", restored, exclude={"id", "client_id"}, overrides={"client_id": live_client_id})
+                new_id = _restore_insert_row(db, "client_documents", restored, exclude={"id", "client_id"}, overrides={"client_id": live_client_id})
+                client_document_map[row.get("id")] = new_id
                 stats["shared_documents"] += 1
 
             for row in data.get("project_documents") or []:
                 live_project_id = project_map.get(row.get("project_id"))
                 if not live_project_id:
                     continue
-                exists = db.execute(
-                    "SELECT 1 FROM project_documents WHERE project_id = ? AND original_filename = ? COLLATE NOCASE AND file_size = ? LIMIT 1",
+                existing = db.execute(
+                    "SELECT id FROM project_documents WHERE project_id = ? AND original_filename = ? COLLATE NOCASE AND file_size = ? LIMIT 1",
                     (live_project_id, row.get("original_filename") or "", int(row.get("file_size") or 0)),
                 ).fetchone()
-                if exists:
+                if existing:
+                    project_document_map[row.get("id")] = existing["id"]
                     continue
                 item = file_by_stored.get(str(row.get("stored_filename") or ""))
                 new_stored = restore_file(item) if item else None
@@ -5093,7 +5301,30 @@ def restore_workspace_archive(zip_path):
                 restored = dict(row)
                 restored["stored_filename"] = new_stored
                 restored["file_size"] = (UPLOAD_DIR / new_stored).stat().st_size
-                _restore_insert_row(db, "project_documents", restored, exclude={"id", "project_id"}, overrides={"project_id": live_project_id})
+                new_id = _restore_insert_row(db, "project_documents", restored, exclude={"id", "project_id"}, overrides={"project_id": live_project_id})
+                project_document_map[row.get("id")] = new_id
+                stats["shared_documents"] += 1
+
+            for row in data.get("subcontractor_documents") or []:
+                live_crew_id = crew_map.get(row.get("crew_member_id"))
+                if not live_crew_id:
+                    continue
+                existing = db.execute(
+                    "SELECT id FROM subcontractor_documents WHERE crew_member_id = ? AND original_filename = ? COLLATE NOCASE AND file_size = ? LIMIT 1",
+                    (live_crew_id, row.get("original_filename") or "", int(row.get("file_size") or 0)),
+                ).fetchone()
+                if existing:
+                    subcontractor_document_map[row.get("id")] = existing["id"]
+                    continue
+                item = file_by_stored.get(str(row.get("stored_filename") or ""))
+                new_stored = restore_file(item) if item else None
+                if not new_stored:
+                    continue
+                restored = dict(row)
+                restored["stored_filename"] = new_stored
+                restored["file_size"] = (UPLOAD_DIR / new_stored).stat().st_size
+                new_id = _restore_insert_row(db, "subcontractor_documents", restored, exclude={"id", "crew_member_id"}, overrides={"crew_member_id": live_crew_id})
+                subcontractor_document_map[row.get("id")] = new_id
                 stats["shared_documents"] += 1
 
             # Restore job-linked files under fresh storage names before rewriting JSON references.
@@ -5136,12 +5367,49 @@ def restore_workspace_archive(zip_path):
                 if job.get("team_id"):
                     stats["team_copies"] += 1
 
+            # Restore job documents before Field Access links so selected-document
+            # references can be rewritten to the newly restored document IDs.
+            job_document_map = {}
+            for row in data.get("job_documents") or []:
+                old_job_id = row.get("job_id")
+                new_stored = file_map.get(str(row.get("stored_filename") or ""))
+                if old_job_id not in job_map or not new_stored:
+                    continue
+                restored = dict(row)
+                restored["stored_filename"] = new_stored
+                target = UPLOAD_DIR / new_stored
+                restored["file_size"] = target.stat().st_size if target.exists() else int(row.get("file_size") or 0)
+                new_doc_id = _restore_insert_row(db, "job_documents", restored, exclude={"id", "job_id"}, overrides={"job_id": job_map[old_job_id]})
+                job_document_map[row.get("id")] = new_doc_id
+
+            def rewrite_shared_document_refs(value):
+                rewritten = []
+                maps = {
+                    "job": job_document_map,
+                    "project": project_document_map,
+                    "client": client_document_map,
+                }
+                for ref in parse_json_list(value):
+                    kind, sep, raw_id = str(ref).partition(":")
+                    if not sep or kind not in maps:
+                        continue
+                    try:
+                        old_doc_id = int(raw_id)
+                    except (TypeError, ValueError):
+                        continue
+                    new_doc_id = maps[kind].get(old_doc_id)
+                    if new_doc_id:
+                        rewritten.append(f"{kind}:{new_doc_id}")
+                return json.dumps(rewritten)
+
             field_link_map = {}
             for row in data.get("field_update_links") or []:
                 old_job_id = row.get("job_id")
                 if old_job_id not in job_map:
                     continue
                 restored = dict(row)
+                if "shared_documents_json" in restored:
+                    restored["shared_documents_json"] = rewrite_shared_document_refs(restored.get("shared_documents_json"))
                 old_link_id = row.get("id")
                 new_link_id = _restore_insert_row(
                     db, "field_update_links", restored,
@@ -5161,6 +5429,8 @@ def restore_workspace_archive(zip_path):
                     continue
                 restored = dict(row)
                 restored["photo_json"] = _rewrite_filename_json(restored.get("photo_json"), file_map)
+                if restored.get("voice_filename"):
+                    restored["voice_filename"] = file_map.get(str(restored.get("voice_filename")), restored.get("voice_filename"))
                 _restore_insert_row(
                     db, "field_progress_entries", restored,
                     exclude={"id", "job_id", "field_link_id"},
@@ -5190,17 +5460,6 @@ def restore_workspace_archive(zip_path):
                     exclude={"id", "job_id", "crew_member_id"},
                     overrides={"job_id": job_map[row["job_id"]], "crew_member_id": crew_map[row["crew_member_id"]]},
                 )
-
-            for row in data.get("job_documents") or []:
-                old_job_id = row.get("job_id")
-                new_stored = file_map.get(str(row.get("stored_filename") or ""))
-                if old_job_id not in job_map or not new_stored:
-                    continue
-                restored = dict(row)
-                restored["stored_filename"] = new_stored
-                target = UPLOAD_DIR / new_stored
-                restored["file_size"] = target.stat().st_size if target.exists() else int(row.get("file_size") or 0)
-                _restore_insert_row(db, "job_documents", restored, exclude={"id", "job_id"}, overrides={"job_id": job_map[old_job_id]})
 
             total_changes = stats["jobs"] + stats["clients"] + stats["projects"] + stats["crew"] + stats["shared_documents"] + stats["unavailability"]
             if total_changes:
@@ -5674,7 +5933,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.45.2",
+        "app_version": "2.46.0",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -5693,7 +5952,7 @@ def ensure_db():
 
     public_endpoints = {
         "login", "health", "static", "public_readiness", "public_arrival",
-        "public_field_update", "public_field_update_submitted",
+        "public_field_update", "public_field_update_submitted", "public_field_document",
         "public_client_report", "client_report_asset",
         "public_client_portfolio_report", "public_project_portfolio_report",
         "client_portfolio_asset", "project_portfolio_asset",
@@ -5760,7 +6019,7 @@ def ensure_db():
     # Do not make static/public requests responsible for sending reminders.
     if request.endpoint in {
         "static", "health", "public_readiness", "public_arrival",
-        "public_field_update", "public_field_update_submitted",
+        "public_field_update", "public_field_update_submitted", "public_field_document",
         "public_client_report", "client_report_asset",
         "public_client_portfolio_report", "public_project_portfolio_report",
         "client_portfolio_asset", "project_portfolio_asset",
@@ -5863,7 +6122,7 @@ def not_found(error):
 def health():
     return {
         "status": "ok",
-        "version": "2.40.2",
+        "version": "2.46.0",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -6315,7 +6574,20 @@ def crew_directory():
                     FROM crew_unavailability cu
                     WHERE cu.crew_member_id = cm.id
                       AND cu.end_date >= ?
-                ) AS upcoming_time_off_count
+                ) AS upcoming_time_off_count,
+                (
+                    SELECT COUNT(*) FROM subcontractor_documents sd
+                    WHERE sd.crew_member_id = cm.id
+                      AND sd.expiration_date IS NOT NULL AND TRIM(sd.expiration_date) <> ''
+                      AND date(sd.expiration_date) < date(?)
+                ) AS expired_document_count,
+                (
+                    SELECT COUNT(*) FROM subcontractor_documents sd
+                    WHERE sd.crew_member_id = cm.id
+                      AND sd.expiration_date IS NOT NULL AND TRIM(sd.expiration_date) <> ''
+                      AND date(sd.expiration_date) >= date(?)
+                      AND date(sd.expiration_date) <= date(?, '+' || COALESCE(sd.reminder_days, 30) || ' days')
+                ) AS expiring_document_count
             FROM crew_members cm
             LEFT JOIN job_crew_assignments jca
               ON jca.crew_member_id = cm.id
@@ -6329,7 +6601,7 @@ def crew_directory():
                 LOWER(COALESCE(cm.company_name, '')),
                 LOWER(cm.name),
                 cm.id
-        """, (today, next7, today, *visibility_params, *params)).fetchall()
+        """, (today, next7, today, today, today, today, *visibility_params, *params)).fetchall()
 
         counts = {
             "active": db.execute(
@@ -6356,6 +6628,17 @@ def crew_directory():
                 FROM crew_unavailability
                 WHERE end_date >= ?
             """, (today,)).fetchone()["c"],
+            "expired_sub_documents": db.execute("""
+                SELECT COUNT(*) AS c FROM subcontractor_documents
+                WHERE expiration_date IS NOT NULL AND TRIM(expiration_date) <> ''
+                  AND date(expiration_date) < date(?)
+            """, (today,)).fetchone()["c"],
+            "expiring_sub_documents": db.execute("""
+                SELECT COUNT(*) AS c FROM subcontractor_documents
+                WHERE expiration_date IS NOT NULL AND TRIM(expiration_date) <> ''
+                  AND date(expiration_date) >= date(?)
+                  AND date(expiration_date) <= date(?, '+' || COALESCE(reminder_days, 30) || ' days')
+            """, (today, today)).fetchone()["c"],
         }
 
     return render_template(
@@ -6520,14 +6803,132 @@ def edit_crew_member(crew_member_id):
                 start_date ASC,
                 id ASC
         """, (crew_member_id, local_today().isoformat())).fetchall()
+        sub_document_rows = db.execute("""
+            SELECT * FROM subcontractor_documents
+            WHERE crew_member_id = ?
+            ORDER BY
+                CASE WHEN expiration_date IS NULL OR TRIM(expiration_date) = '' THEN 2
+                     WHEN date(expiration_date) < date(?) THEN 0 ELSE 1 END,
+                expiration_date ASC, id DESC
+        """, (crew_member_id, local_today().isoformat())).fetchall() if member["member_type"] == "SUBCONTRACTOR" else []
+
+    sub_documents = []
+    for row in sub_document_rows:
+        item = dict(row)
+        item["expiration_state"] = subcontractor_document_state(item)
+        sub_documents.append(item)
 
     return render_template(
         "edit_crew_member.html",
         member=member,
         assignments=assignments,
         unavailability=unavailability,
+        sub_documents=sub_documents,
         today_iso=local_today().isoformat(),
     )
+
+
+@app.post("/crew/<int:crew_member_id>/documents")
+def upload_subcontractor_document(crew_member_id):
+    uploaded = request.files.get("document")
+    document_type = (request.form.get("document_type") or "Other").strip()[:120] or "Other"
+    expiration_date = (request.form.get("expiration_date") or "").strip()
+    notes = (request.form.get("notes") or "").strip()[:2000]
+    try:
+        reminder_days = max(0, min(365, int(request.form.get("reminder_days") or 30)))
+    except ValueError:
+        reminder_days = 30
+    is_required = 1 if request.form.get("is_required") else 0
+
+    with get_db() as db:
+        member = db.execute("SELECT * FROM crew_members WHERE id = ?", (crew_member_id,)).fetchone()
+        if not member:
+            abort(404)
+        if member["member_type"] != "SUBCONTRACTOR":
+            flash("Document compliance tracking is available for subcontractor records.")
+            return redirect(url_for("edit_crew_member", crew_member_id=crew_member_id))
+
+    if not uploaded or not uploaded.filename:
+        flash("Choose a document to upload.")
+        return redirect(url_for("edit_crew_member", crew_member_id=crew_member_id) + "#subcontractor-documents")
+    if not allowed_document(uploaded.filename):
+        flash("That file type is not supported for subcontractor documents.")
+        return redirect(url_for("edit_crew_member", crew_member_id=crew_member_id) + "#subcontractor-documents")
+    if expiration_date:
+        try:
+            date.fromisoformat(expiration_date)
+        except ValueError:
+            flash("Enter a valid expiration date or leave it blank.")
+            return redirect(url_for("edit_crew_member", crew_member_id=crew_member_id) + "#subcontractor-documents")
+
+    original = secure_filename(uploaded.filename) or "subcontractor-document"
+    stored = f"subdoc_{crew_member_id}_{secrets.token_hex(8)}_{original}"
+    path = UPLOAD_DIR / stored
+    uploaded.save(path)
+    size = path.stat().st_size
+    if size > MAX_JOB_DOCUMENT_BYTES:
+        path.unlink(missing_ok=True)
+        flash("Subcontractor documents can be up to 20 MB each.")
+        return redirect(url_for("edit_crew_member", crew_member_id=crew_member_id) + "#subcontractor-documents")
+
+    try:
+        with get_db() as db:
+            member = db.execute("SELECT * FROM crew_members WHERE id = ?", (crew_member_id,)).fetchone()
+            db.execute("""
+                INSERT INTO subcontractor_documents (
+                    crew_member_id, document_type, stored_filename, original_filename,
+                    file_size, content_type, expiration_date, reminder_days, is_required,
+                    notes, actor_type, actor_name, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                crew_member_id, document_type, stored, original, size, uploaded.mimetype,
+                expiration_date or None, reminder_days, is_required, notes or None,
+                current_user_role() or "USER", current_display_name() or current_username() or "Internal User",
+                now_iso(), now_iso(),
+            ))
+            record_activity(db, "Subcontractor Document Added", f"Added {document_type} for {member['name']}" + (f"; expires {expiration_date}." if expiration_date else "."))
+            db.commit()
+    except Exception:
+        path.unlink(missing_ok=True)
+        raise
+    flash(f"{document_type} added to {member['name']}.")
+    return redirect(url_for("edit_crew_member", crew_member_id=crew_member_id) + "#subcontractor-documents")
+
+
+@app.get("/crew/<int:crew_member_id>/documents/<int:document_id>/download")
+def download_subcontractor_document(crew_member_id, document_id):
+    with get_db() as db:
+        row = db.execute("""
+            SELECT sd.*, cm.name AS crew_name
+            FROM subcontractor_documents sd
+            JOIN crew_members cm ON cm.id = sd.crew_member_id
+            WHERE sd.id = ? AND sd.crew_member_id = ?
+        """, (document_id, crew_member_id)).fetchone()
+    if not row:
+        abort(404)
+    path = UPLOAD_DIR / row["stored_filename"]
+    if not path.is_file():
+        abort(404)
+    return send_file(path, as_attachment=False, download_name=row["original_filename"], mimetype=row["content_type"] or None)
+
+
+@app.post("/crew/<int:crew_member_id>/documents/<int:document_id>/delete")
+def delete_subcontractor_document(crew_member_id, document_id):
+    with get_db() as db:
+        row = db.execute("""
+            SELECT sd.*, cm.name AS crew_name
+            FROM subcontractor_documents sd
+            JOIN crew_members cm ON cm.id = sd.crew_member_id
+            WHERE sd.id = ? AND sd.crew_member_id = ?
+        """, (document_id, crew_member_id)).fetchone()
+        if not row:
+            abort(404)
+        db.execute("DELETE FROM subcontractor_documents WHERE id = ?", (document_id,))
+        record_activity(db, "Subcontractor Document Deleted", f"Deleted {row['document_type']} for {row['crew_name']}.")
+        db.commit()
+    (UPLOAD_DIR / row["stored_filename"]).unlink(missing_ok=True)
+    flash("Subcontractor document deleted.")
+    return redirect(url_for("edit_crew_member", crew_member_id=crew_member_id) + "#subcontractor-documents")
 
 
 @app.post("/crew/<int:crew_member_id>/availability/add")
@@ -6626,10 +7027,14 @@ def delete_crew_member(crew_member_id):
             return redirect(url_for("crew_directory", status="all"))
 
         try:
+            subdoc_files = [row["stored_filename"] for row in db.execute(
+                "SELECT stored_filename FROM subcontractor_documents WHERE crew_member_id = ?", (crew_member_id,)
+            ).fetchall()]
             db.execute(
                 "DELETE FROM crew_unavailability WHERE crew_member_id = ?",
                 (crew_member_id,),
             )
+            db.execute("DELETE FROM subcontractor_documents WHERE crew_member_id = ?", (crew_member_id,))
             db.execute(
                 "DELETE FROM crew_members WHERE id = ?",
                 (crew_member_id,),
@@ -6640,6 +7045,8 @@ def delete_crew_member(crew_member_id):
                 f"Permanently deleted {member['name']} from Crew Directory. The crew member had no linked job history.",
             )
             db.commit()
+            for stored in subdoc_files:
+                (UPLOAD_DIR / stored).unlink(missing_ok=True)
         except sqlite3.IntegrityError:
             db.rollback()
             flash(
@@ -9438,6 +9845,22 @@ def dashboard():
     filters_active = bool(status_filter or schedule_filter or search_query or client_filter or project_filter)
     due_reminder_count = sum(1 for j in all_jobs if reminder_due(j))
 
+    with get_db() as db:
+        today_iso = local_today().isoformat()
+        sub_document_attention = [dict(row) for row in db.execute("""
+            SELECT sd.*, cm.name AS subcontractor_name, cm.company_name
+            FROM subcontractor_documents sd
+            JOIN crew_members cm ON cm.id = sd.crew_member_id
+            WHERE cm.member_type = 'SUBCONTRACTOR'
+              AND cm.is_active = 1
+              AND sd.expiration_date IS NOT NULL AND TRIM(sd.expiration_date) <> ''
+              AND date(sd.expiration_date) <= date(?, '+' || COALESCE(sd.reminder_days, 30) || ' days')
+            ORDER BY date(sd.expiration_date) ASC, LOWER(cm.name), sd.id
+            LIMIT 8
+        """, (today_iso,)).fetchall()]
+    for item in sub_document_attention:
+        item["expiration_state"] = subcontractor_document_state(item)
+
     backup_status = None
     last_backup_at = None
     if current_user_is_admin():
@@ -9469,6 +9892,7 @@ def dashboard():
         staffing_gap_total_needed=staffing_gap_total_needed,
         backup_status=backup_status,
         last_backup_at=last_backup_at,
+        sub_document_attention=sub_document_attention,
     )
 
 
@@ -10367,13 +10791,17 @@ def field_updates(job_id):
 
         if request.method == "POST":
             if job["status"] == "COMPLETED":
-                flash("Completed jobs are locked. Existing field updates remain available as evidence.")
+                flash("Completed jobs are locked. Existing field access history remains available as evidence.")
                 return redirect(url_for("field_updates", job_id=job_id))
 
             crew_member_id = normalize_optional_id(request.form.get("crew_member_id"))
             recipient_name = (request.form.get("recipient_name") or "").strip()
             recipient_email = (request.form.get("recipient_email") or "").strip()
             request_note = (request.form.get("request_note") or "").strip()
+            share_site_contact = 1 if request.form.get("share_site_contact") else 0
+            requested_doc_refs = [str(x) for x in request.form.getlist("shared_document") if str(x).strip()]
+            allowed_doc_refs = {item["ref"] for item in field_shareable_documents(db, job)}
+            shared_doc_refs = [ref for ref in requested_doc_refs if ref in allowed_doc_refs]
 
             selected_member = None
             if crew_member_id:
@@ -10404,18 +10832,20 @@ def field_updates(job_id):
             cur = db.execute("""
                 INSERT INTO field_update_links (
                     job_id, token, crew_member_id, recipient_name, recipient_email,
-                    request_note, is_active, created_by, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+                    request_note, shared_documents_json, share_site_contact,
+                    is_active, created_by, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
             """, (
                 job_id, token, crew_member_id, recipient_name, recipient_email or None,
-                request_note, current_display_name() or current_username() or "Internal User", now_iso(),
+                request_note, json.dumps(shared_doc_refs), share_site_contact,
+                current_display_name() or current_username() or "Internal User", now_iso(),
             ))
             link_id = cur.lastrowid
             field_link = db.execute("SELECT * FROM field_update_links WHERE id = ?", (link_id,)).fetchone()
             record_activity(
                 db,
-                "Field Update Requested",
-                f"Created a secure field-update request for {recipient_name}.",
+                "Field Access Sent",
+                f"Created a secure field access link for {recipient_name}.",
                 job_id=job_id,
             )
             db.commit()
@@ -10424,15 +10854,16 @@ def field_updates(job_id):
             if recipient_email:
                 status, _error = send_field_update_email(job, field_link, public_url)
                 if status == "SENT":
-                    flash("Field update link sent and saved to Communication History.")
+                    flash("Field access link sent and saved to Communication History.")
                 elif status == "OUTBOX":
-                    flash("Field update email preview generated in Email Outbox. Copy or open the secure link below for testing.")
+                    flash("Field access email preview generated in Email Outbox. Copy or open the secure link below for testing.")
                 else:
-                    flash("Field update link created, but email delivery failed. You can still copy the secure link below.")
+                    flash("Field access link created, but email delivery failed. You can still copy the secure link below.")
             else:
-                flash("Field update link created. No email was supplied, so copy the secure link and send it directly.")
+                flash("Field access link created. No email was supplied, so copy the secure link and send it directly.")
             return redirect(url_for("field_updates", job_id=job_id, created=link_id) + f"#field-link-{link_id}")
 
+        shareable_documents = field_shareable_documents(db, job)
         assigned_crew = db.execute("""
             SELECT cm.*, jca.is_lead, jca.sort_order
             FROM job_crew_assignments jca
@@ -10465,6 +10896,8 @@ def field_updates(job_id):
     for row in links:
         item = dict(row)
         item["public_url"] = public_field_update_url(row)
+        item["shared_document_refs"] = parse_json_list(row["shared_documents_json"])
+        item["shared_document_count"] = len(item["shared_document_refs"])
         link_items.append(item)
 
     return render_template(
@@ -10474,6 +10907,8 @@ def field_updates(job_id):
         field_links=link_items,
         progress_entries=progress_entries,
         progress_days=progress_days,
+        shareable_documents=shareable_documents,
+        transcription_configured=bool(OPENAI_TRANSCRIPTION_API_KEY),
         created_link_id=normalize_optional_id(request.args.get("created")),
     )
 
@@ -10486,9 +10921,9 @@ def revoke_field_update_link(job_id, link_id):
             abort(404)
         if link["is_active"]:
             db.execute("UPDATE field_update_links SET is_active = 0, revoked_at = ? WHERE id = ?", (now_iso(), link_id))
-            record_activity(db, "Field Link Revoked", f"Revoked field update link for {link['recipient_name']}.", job_id=job_id)
+            record_activity(db, "Field Link Revoked", f"Revoked field access link for {link['recipient_name']}.", job_id=job_id)
             db.commit()
-            flash("Field update link revoked. The old URL can no longer accept submissions.")
+            flash("Field access link revoked. The old URL can no longer accept submissions.")
     return redirect(url_for("field_updates", job_id=job_id) + f"#field-link-{link_id}")
 
 
@@ -10496,23 +10931,27 @@ def revoke_field_update_link(job_id, link_id):
 def public_field_update(token):
     with get_db() as db:
         row = db.execute("""
-            SELECT ful.*, j.job_name, j.project_site, j.installation_date, j.status AS job_status
+            SELECT ful.*, j.job_name, j.project_site, j.installation_date, j.status AS job_status,
+                   j.contact_name, j.contact_email, j.contact_phone, j.client_id, j.project_id,
+                   c.name AS client_name, p.name AS project_name, p.project_number AS project_number
             FROM field_update_links ful
             JOIN jobs j ON j.id = ful.job_id
+            LEFT JOIN clients c ON c.id = j.client_id
+            LEFT JOIN projects p ON p.id = j.project_id
             WHERE ful.token = ?
         """, (token,)).fetchone()
     if not row:
         abort(404)
     field_link = dict(row)
     if not field_link["is_active"]:
-        return render_template("public_field_update_unavailable.html", field_link=field_link, reason="This field update link has been revoked."), 410
+        return render_template("public_field_update_unavailable.html", field_link=field_link, reason="This field access link has been revoked."), 410
     if field_link["job_status"] == "COMPLETED":
         return render_template("public_field_update_unavailable.html", field_link=field_link, reason="This job has been completed and field submissions are closed."), 410
 
     if request.method == "POST":
         entry_type = (request.form.get("entry_type") or "").strip().upper()
         if entry_type not in {"RESPONSE", "DAILY_PROGRESS"}:
-            flash("Choose a valid field update type.")
+            flash("Choose a valid field submission type.")
             return redirect(url_for("public_field_update", token=token))
         submitted_by = (request.form.get("submitted_by") or field_link["recipient_name"] or "Field Crew").strip()[:160]
         work_date = (request.form.get("work_date") or local_today().isoformat()).strip()
@@ -10534,47 +10973,115 @@ def public_field_update(token):
         except ValueError:
             hours_worked = None
 
+        voice_upload = request.files.get("voice_audio")
+        has_voice = bool(voice_upload and voice_upload.filename)
+        if has_voice and not voice_audio_allowed(voice_upload.filename, voice_upload.mimetype):
+            flash("That voice recording format is not supported. Try recording again or upload WebM, M4A, MP3, WAV, OGG, FLAC, or MP4 audio.")
+            return redirect(url_for("public_field_update", token=token))
+
         files = request.files.getlist("photos")
         valid_uploads = [f for f in files if f and f.filename and allowed_file(f.filename)]
         if len(valid_uploads) > 30:
             flash("Please upload no more than 30 photos in one update.")
             return redirect(url_for("public_field_update", token=token))
         if entry_type == "DAILY_PROGRESS":
-            if not work_completed:
-                flash("Please describe the work completed today.")
+            if not work_completed and not has_voice:
+                flash("Describe the work completed today or attach a voice update.")
                 return redirect(url_for("public_field_update", token=token))
             if not valid_uploads:
                 flash("Please upload at least 1 daily progress photo.")
                 return redirect(url_for("public_field_update", token=token))
-        elif not notes and not valid_uploads:
-            flash("Add a response note or at least one photo before submitting.")
+        elif not notes and not valid_uploads and not has_voice:
+            flash("Add a response note, photo, or voice update before submitting.")
             return redirect(url_for("public_field_update", token=token))
 
         saved = save_photos(valid_uploads, f"field_{field_link['job_id']}")
+        voice_filename = None
+        voice_file_size = None
+        voice_content_type = None
+        voice_transcript = None
+        voice_transcript_status = None
+        if has_voice:
+            try:
+                voice_filename, voice_file_size, voice_content_type = save_voice_audio(voice_upload, field_link["job_id"])
+                voice_transcript, voice_transcript_status = transcribe_voice_audio(voice_filename, voice_content_type)
+            except ValueError as exc:
+                flash(str(exc))
+                return redirect(url_for("public_field_update", token=token))
+            if voice_transcript:
+                if entry_type == "DAILY_PROGRESS" and not work_completed:
+                    work_completed = voice_transcript[:4000]
+                elif not notes:
+                    notes = voice_transcript[:4000]
+
         with get_db() as db:
             db.execute("""
                 INSERT INTO field_progress_entries (
                     job_id, field_link_id, entry_type, submitted_by, work_date,
                     work_completed, notes, crew_size, hours_worked, issues_delays,
-                    photo_json, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    photo_json, voice_filename, voice_content_type, voice_file_size,
+                    voice_transcript, voice_transcript_status, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 field_link["job_id"], field_link["id"], entry_type, submitted_by,
                 work_date, work_completed or None, notes or None, crew_size,
-                hours_worked, issues_delays or None, json.dumps(saved), now_iso(),
+                hours_worked, issues_delays or None, json.dumps(saved),
+                voice_filename, voice_content_type, voice_file_size,
+                voice_transcript, voice_transcript_status, now_iso(),
             ))
             db.execute("UPDATE field_update_links SET last_used_at = ? WHERE id = ?", (now_iso(), field_link["id"]))
             action = "Daily Progress Submitted" if entry_type == "DAILY_PROGRESS" else "Field Response Submitted"
             description = (
-                f"{submitted_by} submitted daily progress for {work_date} with {len(saved)} photo(s)."
+                f"{submitted_by} submitted daily progress for {work_date} with {len(saved)} photo(s)" + (" and a voice update." if voice_filename else ".")
                 if entry_type == "DAILY_PROGRESS"
-                else f"{submitted_by} responded to the PM field request with {len(saved)} photo(s)."
+                else f"{submitted_by} responded to the PM field request with {len(saved)} photo(s)" + (" and a voice update." if voice_filename else ".")
             )
             record_activity(db, action, description, job_id=field_link["job_id"], actor_type="FIELD", actor_name=submitted_by)
             db.commit()
         return redirect(url_for("public_field_update_submitted", token=token, kind=entry_type.lower()))
 
-    return render_template("public_field_update.html", field_link=field_link, today=local_today().isoformat())
+    with get_db() as db:
+        job_stub = {"id": field_link["job_id"], "client_id": field_link["client_id"], "project_id": field_link["project_id"]}
+        shared_documents = selected_field_documents(db, job_stub, parse_json_list(field_link.get("shared_documents_json")))
+    return render_template(
+        "public_field_update.html",
+        field_link=field_link,
+        shared_documents=shared_documents,
+        transcription_configured=bool(OPENAI_TRANSCRIPTION_API_KEY),
+        today=local_today().isoformat(),
+    )
+
+
+@app.get("/f/<token>/documents/<kind>/<int:document_id>")
+def public_field_document(token, kind, document_id):
+    with get_db() as db:
+        link = db.execute("""
+            SELECT ful.*, j.status AS job_status, j.client_id, j.project_id
+            FROM field_update_links ful
+            JOIN jobs j ON j.id = ful.job_id
+            WHERE ful.token = ?
+        """, (token,)).fetchone()
+        if not link:
+            abort(404)
+        if not link["is_active"] or link["job_status"] == "COMPLETED":
+            abort(410)
+        ref = f"{kind}:{document_id}"
+        if ref not in set(parse_json_list(link["shared_documents_json"])):
+            abort(404)
+        if kind == "job":
+            doc = db.execute("SELECT * FROM job_documents WHERE id = ? AND job_id = ?", (document_id, link["job_id"])).fetchone()
+        elif kind == "project" and link["project_id"]:
+            doc = db.execute("SELECT * FROM project_documents WHERE id = ? AND project_id = ?", (document_id, link["project_id"])).fetchone()
+        elif kind == "client" and link["client_id"]:
+            doc = db.execute("SELECT * FROM client_documents WHERE id = ? AND client_id = ?", (document_id, link["client_id"])).fetchone()
+        else:
+            doc = None
+    if not doc:
+        abort(404)
+    path = UPLOAD_DIR / doc["stored_filename"]
+    if not path.is_file():
+        abort(404)
+    return send_file(path, as_attachment=False, download_name=doc["original_filename"], mimetype=doc["content_type"] or None)
 
 
 @app.route("/f/<token>/submitted")
