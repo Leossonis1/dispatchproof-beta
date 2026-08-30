@@ -4849,3 +4849,210 @@ main{
   .job-head-actions{flex-wrap:wrap;justify-content:flex-start;}
   .job-actions-menu-panel{left:0;right:auto;}
 }
+
+/* DispatchProof V2.46.10 — Mobile Browser Usability
+   Keeps the existing desktop interface intact while making the same web app
+   practical on phone and tablet browsers. */
+.mobile-topbar,
+.mobile-nav-backdrop,
+.mobile-menu-close{display:none;}
+
+@media(max-width:900px){
+  html,body{max-width:100%;overflow-x:hidden;}
+  body.mobile-menu-open{overflow:hidden;}
+  .app-shell{display:block;min-height:100vh;}
+
+  .mobile-topbar{
+    position:sticky;
+    top:0;
+    z-index:900;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    min-height:62px;
+    padding:9px 12px;
+    background:var(--navy);
+    color:#fff;
+    border-bottom:1px solid rgba(255,255,255,.12);
+    box-shadow:0 2px 12px rgba(11,35,72,.18);
+  }
+  .mobile-topbar-brand{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    min-width:0;
+    color:#fff;
+  }
+  .mobile-company-logo,
+  .mobile-brand-mark{
+    width:38px;
+    height:38px;
+    flex:0 0 38px;
+    border-radius:9px;
+  }
+  .mobile-company-logo{object-fit:contain;background:#fff;padding:3px;}
+  .mobile-brand-mark{display:grid;place-items:center;background:var(--brand-accent,var(--blue));font-weight:900;}
+  .mobile-brand-copy{display:grid;min-width:0;line-height:1.1;}
+  .mobile-brand-copy strong{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:64vw;}
+  .mobile-brand-copy small{margin-top:3px;color:#b8c8df;font-size:10px;font-weight:700;}
+  .mobile-menu-toggle{
+    width:44px;
+    height:44px;
+    flex:0 0 44px;
+    display:grid;
+    place-content:center;
+    gap:5px;
+    border:1px solid rgba(255,255,255,.25);
+    border-radius:10px;
+    background:rgba(255,255,255,.08);
+    cursor:pointer;
+  }
+  .mobile-menu-toggle span{display:block;width:21px;height:2px;border-radius:999px;background:#fff;}
+
+  .mobile-nav-backdrop{
+    display:block;
+    position:fixed;
+    inset:0;
+    z-index:990;
+    background:rgba(15,23,42,.48);
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .18s ease;
+  }
+  .mobile-nav-backdrop.mobile-open{opacity:1;pointer-events:auto;}
+
+  .sidebar{
+    display:flex;
+    position:fixed;
+    top:0;
+    bottom:0;
+    left:0;
+    z-index:1000;
+    width:min(86vw,320px);
+    height:100vh;
+    height:100dvh;
+    padding:18px 14px;
+    overflow-y:auto;
+    overscroll-behavior:contain;
+    transform:translateX(-104%);
+    transition:transform .2s ease;
+    box-shadow:14px 0 36px rgba(11,35,72,.24);
+  }
+  .sidebar.mobile-open{transform:translateX(0);}
+  .sidebar .brand{position:relative;align-items:center;padding:2px 46px 18px 6px;}
+  .sidebar-company-logo{max-width:44px;max-height:44px;}
+  .brand-name-stack{min-width:0;}
+  .brand-name-stack strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .mobile-menu-close{
+    position:absolute;
+    top:1px;
+    right:0;
+    display:grid;
+    place-items:center;
+    width:40px;
+    height:40px;
+    border:1px solid rgba(255,255,255,.2);
+    border-radius:9px;
+    background:rgba(255,255,255,.08);
+    color:#fff;
+    font-size:28px;
+    line-height:1;
+    cursor:pointer;
+  }
+  .sidebar nav a{min-height:44px;display:flex;align-items:center;}
+  .sidebar-logout{min-height:44px;}
+
+  .main{padding:20px 14px 34px;}
+  .page-head{margin-bottom:18px;}
+  .page-head h1{font-size:27px;line-height:1.15;overflow-wrap:anywhere;}
+  .panel,.form-card{max-width:100%;}
+  .table-wrap{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;}
+  img,video,canvas,iframe{max-width:100%;}
+}
+
+@media(max-width:700px){
+  .main{padding:15px 10px 30px;}
+  .panel,.form-card{padding:16px;border-radius:12px;}
+  .page-head{gap:12px;}
+  .page-head h1{font-size:25px;}
+  .eyebrow{font-size:11px;}
+
+  .panel-head,
+  .section-heading-row{
+    align-items:flex-start;
+    flex-direction:column;
+    gap:10px;
+  }
+  .panel-head-actions,
+  .page-head-actions,
+  .page-actions{
+    width:100%;
+    justify-content:flex-start;
+  }
+
+  .btn,
+  button,
+  input,
+  select,
+  textarea{
+    min-height:44px;
+  }
+  input,
+  select,
+  textarea{
+    font-size:16px;
+  }
+  textarea{min-height:105px;}
+
+  .form-actions{
+    align-items:stretch;
+    flex-direction:column;
+    width:100%;
+  }
+  .form-actions .btn,
+  .form-actions button,
+  .page-head-actions>.btn,
+  .page-actions>.btn{
+    width:100%;
+  }
+  .button-row{align-items:stretch;}
+
+  .details div{grid-template-columns:1fr;gap:3px;}
+  .details dt{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;}
+  .response-row{align-items:flex-start;flex-direction:column;gap:4px;}
+
+  .table-wrap>table{min-width:680px;}
+  th,td{padding:11px 9px;}
+
+  .job-actions-menu-panel{
+    position:fixed;
+    left:12px!important;
+    right:12px!important;
+    top:auto;
+    bottom:12px;
+    width:auto;
+    max-height:72vh;
+    overflow-y:auto;
+  }
+
+  .flash{font-size:13px;line-height:1.45;}
+  .copy-box{font-size:12px;}
+  .photo-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+}
+
+@media(max-width:430px){
+  .mobile-topbar{padding-left:10px;padding-right:10px;}
+  .mobile-brand-copy strong{max-width:58vw;}
+  .main{padding-left:8px;padding-right:8px;}
+  .panel,.form-card{padding:14px;}
+  .page-head h1{font-size:23px;}
+  .photo-grid{grid-template-columns:1fr;}
+}
+
+@media(min-width:901px){
+  .mobile-topbar,
+  .mobile-nav-backdrop,
+  .mobile-menu-close{display:none!important;}
+}
+

@@ -11,7 +11,24 @@
 </head>
 <body>
 <div class="app-shell">
-  <aside class="sidebar">
+  <header class="mobile-topbar">
+    <a class="mobile-topbar-brand" href="{{ url_for('dashboard') }}" aria-label="{{ company_name }} dashboard">
+      {% if company_logo_url %}
+        <img class="mobile-company-logo" src="{{ company_logo_url }}" alt="">
+      {% else %}
+        <span class="mobile-brand-mark">✓</span>
+      {% endif %}
+      <span class="mobile-brand-copy">
+        <strong>{{ company_name }}</strong>
+        {% if company_name != product_name %}<small>DispatchProof</small>{% endif %}
+      </span>
+    </a>
+    <button class="mobile-menu-toggle" id="mobile-menu-toggle" type="button" aria-label="Open navigation" aria-controls="primary-sidebar" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </header>
+  <div class="mobile-nav-backdrop" id="mobile-nav-backdrop" aria-hidden="true"></div>
+  <aside class="sidebar" id="primary-sidebar">
     <div class="brand">
       {% if company_logo_url %}
         <img class="sidebar-company-logo" src="{{ company_logo_url }}" alt="{{ company_name }} logo">
@@ -22,6 +39,7 @@
         <strong title="{{ company_name }}">{{ company_name }}</strong>
         {% if company_name != product_name %}<small>DispatchProof</small>{% endif %}
       </div>
+      <button class="mobile-menu-close" id="mobile-menu-close" type="button" aria-label="Close navigation">×</button>
     </div>
     <nav>
       <a class="{% if request.path == '/' %}active{% endif %}" href="{{ url_for('dashboard') }}">Dashboard</a>
@@ -77,6 +95,45 @@
   </main>
 </div>
 <script>
+function dispatchProofSetMobileMenu(open) {
+  const sidebar = document.getElementById('primary-sidebar');
+  const toggle = document.getElementById('mobile-menu-toggle');
+  const backdrop = document.getElementById('mobile-nav-backdrop');
+  if (!sidebar || !toggle || !backdrop) return;
+
+  sidebar.classList.toggle('mobile-open', open);
+  backdrop.classList.toggle('mobile-open', open);
+  document.body.classList.toggle('mobile-menu-open', open);
+  toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  toggle.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
+  backdrop.setAttribute('aria-hidden', open ? 'false' : 'true');
+}
+
+function dispatchProofInitMobileMenu() {
+  const toggle = document.getElementById('mobile-menu-toggle');
+  const close = document.getElementById('mobile-menu-close');
+  const backdrop = document.getElementById('mobile-nav-backdrop');
+  const sidebar = document.getElementById('primary-sidebar');
+  if (!toggle || !backdrop || !sidebar) return;
+
+  toggle.addEventListener('click', function() {
+    dispatchProofSetMobileMenu(!sidebar.classList.contains('mobile-open'));
+  });
+  if (close) close.addEventListener('click', function() { dispatchProofSetMobileMenu(false); });
+  backdrop.addEventListener('click', function() { dispatchProofSetMobileMenu(false); });
+  sidebar.querySelectorAll('nav a').forEach(function(link) {
+    link.addEventListener('click', function() { dispatchProofSetMobileMenu(false); });
+  });
+  document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') dispatchProofSetMobileMenu(false);
+  });
+  window.addEventListener('resize', function() {
+    if (window.innerWidth > 900) dispatchProofSetMobileMenu(false);
+  });
+}
+
+window.addEventListener('DOMContentLoaded', dispatchProofInitMobileMenu);
+
 function dispatchProofUpdateContextHelp() {
   const link = document.getElementById('page-context-help-link');
   if (!link) return;
