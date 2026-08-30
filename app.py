@@ -4818,7 +4818,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.46.10",
+        "app_version": "2.46.11",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -5049,7 +5049,7 @@ def create_workspace_export_archive():
         "export_format": 2,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.46.10",
+        "app_version": "2.46.11",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -6170,6 +6170,7 @@ PAGE_HELP_ANCHORS = {
     "document_center": "documents",
     "my_account": "account-access",
     "company_settings": "help-company-settings",
+    "integrations": "help-integrations",
     "users_access": "help-users-access",
     "edit_user": "help-users-access",
     "activity_log": "help-activity-log",
@@ -6197,7 +6198,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.46.10",
+        "app_version": "2.46.11",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -6238,6 +6239,7 @@ def ensure_db():
 
     admin_only_endpoints = {
         "company_settings",
+        "integrations",
         "backup_restore",
         "download_backup",
         "restore_backup",
@@ -7798,6 +7800,11 @@ def edit_user(user_id):
         user=user,
         is_self=session.get("dispatchproof_user_id") == user_id,
     )
+
+
+@app.route("/settings/integrations")
+def integrations():
+    return render_template("integrations.html")
 
 
 @app.route("/settings/company", methods=["GET", "POST"])
