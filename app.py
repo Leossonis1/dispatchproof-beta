@@ -4634,7 +4634,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.46.1",
+        "app_version": "2.46.2",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -4843,7 +4843,7 @@ def create_workspace_export_archive():
         "export_format": 2,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.46.1",
+        "app_version": "2.46.2",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -5933,7 +5933,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.46.1",
+        "app_version": "2.46.2",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -6122,7 +6122,7 @@ def not_found(error):
 def health():
     return {
         "status": "ok",
-        "version": "2.46.1",
+        "version": "2.46.2",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -6895,8 +6895,7 @@ def upload_subcontractor_document(crew_member_id):
     return redirect(url_for("edit_crew_member", crew_member_id=crew_member_id) + "#subcontractor-documents")
 
 
-@app.get("/crew/<int:crew_member_id>/documents/<int:document_id>/download")
-def download_subcontractor_document(crew_member_id, document_id):
+def _load_subcontractor_document(crew_member_id, document_id):
     with get_db() as db:
         row = db.execute("""
             SELECT sd.*, cm.name AS crew_name
@@ -6909,7 +6908,66 @@ def download_subcontractor_document(crew_member_id, document_id):
     path = UPLOAD_DIR / row["stored_filename"]
     if not path.is_file():
         abort(404)
+    return row, path
+
+
+def _subcontractor_document_preview_kind(filename):
+    ext = Path(filename or "").suffix.lower()
+    if ext == ".pdf":
+        return "pdf"
+    if ext in {".png", ".jpg", ".jpeg", ".webp"}:
+        return "image"
+    if ext == ".csv":
+        return "csv"
+    if ext == ".txt":
+        return "text"
+    return "unavailable"
+
+
+@app.get("/crew/<int:crew_member_id>/documents/<int:document_id>/view")
+def view_subcontractor_document(crew_member_id, document_id):
+    row, path = _load_subcontractor_document(crew_member_id, document_id)
+    preview_kind = _subcontractor_document_preview_kind(row["original_filename"])
+    preview_text = None
+    csv_rows = None
+    preview_truncated = False
+
+    if preview_kind == "text":
+        raw = path.read_bytes()
+        preview_truncated = len(raw) > 1024 * 1024
+        preview_text = raw[:1024 * 1024].decode("utf-8", errors="replace")
+    elif preview_kind == "csv":
+        raw = path.read_bytes()
+        preview_truncated = len(raw) > 1024 * 1024
+        decoded = raw[:1024 * 1024].decode("utf-8-sig", errors="replace")
+        rows = list(csv.reader(io.StringIO(decoded)))
+        preview_truncated = preview_truncated or len(rows) > 200
+        csv_rows = [row[:50] for row in rows[:200]]
+
+    return render_template(
+        "subcontractor_document_view.html",
+        doc=row,
+        crew_member_id=crew_member_id,
+        preview_kind=preview_kind,
+        preview_text=preview_text,
+        csv_rows=csv_rows,
+        preview_truncated=preview_truncated,
+    )
+
+
+@app.get("/crew/<int:crew_member_id>/documents/<int:document_id>/inline")
+def inline_subcontractor_document(crew_member_id, document_id):
+    row, path = _load_subcontractor_document(crew_member_id, document_id)
+    preview_kind = _subcontractor_document_preview_kind(row["original_filename"])
+    if preview_kind not in {"pdf", "image"}:
+        abort(404)
     return send_file(path, as_attachment=False, download_name=row["original_filename"], mimetype=row["content_type"] or None)
+
+
+@app.get("/crew/<int:crew_member_id>/documents/<int:document_id>/download")
+def download_subcontractor_document(crew_member_id, document_id):
+    row, path = _load_subcontractor_document(crew_member_id, document_id)
+    return send_file(path, as_attachment=True, download_name=row["original_filename"], mimetype=row["content_type"] or None)
 
 
 @app.post("/crew/<int:crew_member_id>/documents/<int:document_id>/delete")
