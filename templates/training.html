@@ -42,7 +42,7 @@
       <select name="scenario_key" required>
         <option value="__starter__">Complete Starter Track · {{ starter_track_count }} scenarios</option>
         {% for scenario in scenario_library %}
-        <option value="{{ scenario['key'] }}">{{ scenario['title'] }} · {{ scenario['step_count'] }} steps</option>
+        <option value="{{ scenario['key'] }}">{{ scenario['title'] }} · {{ scenario['step_count'] }} questions</option>
         {% endfor %}
       </select>
     </label>
@@ -71,7 +71,7 @@
         </div>
         <div class="training-admin-scenario">
           <strong>{{ item['scenario']['title'] }}</strong>
-          <span>{{ item['completed_steps'] }}/{{ item['total_steps'] }} steps · {{ item['progress_percent'] }}%{% if item['coaching_flags'] %} · {{ item['coaching_flags'] }} coaching moment{{ '' if item['coaching_flags'] == 1 else 's' }}{% endif %}</span>
+          <span>{{ item['completed_steps'] }}/{{ item['total_steps'] }} questions · {{ item['progress_percent'] }}%{% if item['coaching_flags'] %} · {{ item['coaching_flags'] }} coaching moment{{ '' if item['coaching_flags'] == 1 else 's' }}{% endif %}</span>
         </div>
         <span class="training-status {{ item['status']|lower }}">{{ item['status'].replace('_', ' ') }}</span>
         <div class="training-admin-actions">
@@ -100,7 +100,7 @@
     <div>
       <div class="eyebrow">Your Practice</div>
       <h2>Assigned Training</h2>
-      <p>Work through each situation at your own pace. A wrong choice gives coaching and lets you try again.</p>
+      <p>Work through each situation at your own pace. Every scenario uses a larger question bank in a shuffled order. A wrong choice is clearly marked and gives coaching before you try again.</p>
     </div>
   </div>
   {% if assignments %}
@@ -115,7 +115,7 @@
         <h3>{{ item['scenario']['title'] }}</h3>
         <p>{{ item['scenario']['summary'] }}</p>
         <div class="training-progress-track"><span style="width:{{ item['progress_percent'] }}%"></span></div>
-        <div class="training-progress-meta"><span>{{ item['completed_steps'] }}/{{ item['total_steps'] }} steps</span><strong>{{ item['progress_percent'] }}%</strong></div>
+        <div class="training-progress-meta"><span>{{ item['completed_steps'] }}/{{ item['total_steps'] }} questions</span><strong>{{ item['progress_percent'] }}%</strong></div>
         <a class="btn primary wide" href="{{ url_for('training_scenario_page', assignment_id=item['id']) }}">{{ 'Review Completed Scenario' if item['status'] == 'COMPLETED' else ('Continue Training' if item['status'] == 'IN_PROGRESS' else 'Start Training') }}</a>
       </article>
       {% endif %}
@@ -144,7 +144,7 @@
     <article>
       <strong>{{ scenario['title'] }}</strong>
       <p>{{ scenario['summary'] }}</p>
-      <span>{{ scenario['step_count'] }} steps · about {{ scenario['estimated_minutes'] }} minutes</span>
+      <span>{{ scenario['step_count'] }} questions · about {{ scenario['estimated_minutes'] }} minutes</span>
     </article>
     {% endfor %}
   </div>
