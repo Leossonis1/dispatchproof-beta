@@ -1229,7 +1229,7 @@ CONTRACTOR_TRADE_CONFIG = {
     "cleaning": {"label": "Cleaning / Janitorial", "terms": ["commercial cleaning service", "janitorial service"]},
     "low_voltage": {"label": "Data / Low Voltage", "terms": ["low voltage contractor", "data cabling contractor"]},
     "landscaping": {"label": "Landscaping", "terms": ["commercial landscaper", "landscape contractor"]},
-    "snow_removal": {"label": "Snow Plowing / Snow Removal", "terms": ["commercial snow removal service", "snow plowing contractor"]},
+    "snow_removal": {"label": "Snow Plowing / Snow Removal", "terms": ["commercial snow removal service", "snow plowing contractor", "landscaper snow removal"]},
 }
 
 
@@ -1407,6 +1407,36 @@ def contractor_place_country(place):
     return names.get(country, "")
 
 
+def contractor_place_profile_text(place):
+    """Return provider/search text that can indicate services beyond the place name.
+
+    Foursquare Place Search matches query text against place content including tips
+    and tastes. Some response shapes also include descriptive/profile fields. We
+    preserve both sources so a landscaper can qualify for Snow Removal when the
+    provider matched it to a snow-specific landscaper query, without admitting
+    generic landscapers or retail stores.
+    """
+    chunks = []
+    for key in ("description", "about", "bio", "tagline", "short_description", "profile", "tips", "tastes"):
+        value = place.get(key)
+        if isinstance(value, str):
+            chunks.append(value)
+        elif isinstance(value, (list, tuple, set)):
+            for item in value:
+                if isinstance(item, str):
+                    chunks.append(item)
+                elif isinstance(item, dict):
+                    for subkey in ("text", "name", "label", "description"):
+                        if item.get(subkey):
+                            chunks.append(str(item.get(subkey)))
+        elif isinstance(value, dict):
+            for subkey in ("text", "name", "label", "description"):
+                if value.get(subkey):
+                    chunks.append(str(value.get(subkey)))
+    chunks.extend(str(x) for x in (place.get("_dp_match_queries") or []) if x)
+    return " | ".join(chunks).lower()
+
+
 def contractor_obvious_non_service_business(place, trade):
     """Reject obvious stores/showrooms/suppliers without hiding real installers.
 
@@ -1435,9 +1465,9 @@ def contractor_obvious_non_service_business(place, trade):
             "general contractor", "property maintenance", "grounds maintenance",
             "maintenance service",
         ]
-        if any(word in categories for word in snow_retail_category_cues) and not any(
-            word in categories for word in snow_service_category_cues
-        ):
+        # Snow search never returns stores/suppliers/equipment businesses, even
+        # when they also carry a landscaping or contractor category.
+        if any(word in categories for word in snow_retail_category_cues):
             return True
 
     service_category_cues = [
@@ -1522,9 +1552,25 @@ def contractor_obvious_non_service_business(place, trade):
 def contractor_trade_match_strength(place, trade):
     name = contractor_place_name(place).lower()
     categories = " | ".join(contractor_place_categories(place)).lower()
-    blob = name + " | " + categories
+    profile_text = contractor_place_profile_text(place)
+    blob = name + " | " + categories + " | " + profile_text
     if contractor_obvious_non_service_business(place, trade):
         return 0
+
+    if trade == "snow_removal":
+        snow_signals = [
+            "snow removal", "snow plow", "snowplow", "snow plowing",
+            "snow and ice", "ice management", "winter service", "winter maintenance",
+        ]
+        landscape_service = any(word in categories for word in [
+            "landscaper", "landscape contractor", "landscaping",
+            "lawn service", "lawn care", "grounds maintenance",
+        ])
+        # Allow landscaping/lawn-care contractors when Foursquare's returned
+        # profile content OR its snow-specific query match indicates winter work.
+        # Generic landscapers still do not qualify for the snow section.
+        if landscape_service and any(word in (name + " | " + profile_text) for word in snow_signals):
+            return 3
     explicit = {
         "millwork": ["carpenter", "cabinet maker", "millwork", "casework", "woodworker", "cabinet installer"],
         "plumbing": ["plumber", "plumbing contractor", "plumbing service"],
@@ -1626,9 +1672,19 @@ def run_contractor_search(location, country, trade, radius, tolerance, max_resul
     provider_calls = 0
     cache_hits = 0
 
-    def add_results(rows):
+    def add_results(rows, source_query=""):
         for place in rows or []:
-            seen.setdefault(str(contractor_place_id(place)), place)
+            if not isinstance(place, dict):
+                continue
+            place_id = str(contractor_place_id(place))
+            if place_id not in seen:
+                item = dict(place)
+                item["_dp_match_queries"] = [source_query] if source_query else []
+                seen[place_id] = item
+            elif source_query:
+                queries = seen[place_id].setdefault("_dp_match_queries", [])
+                if source_query not in queries:
+                    queries.append(source_query)
 
     def usable_count():
         total = 0
@@ -1643,18 +1699,23 @@ def run_contractor_search(location, country, trade, radius, tolerance, max_resul
     rows, cached = contractor_provider_search(terms[0], lat, lon, radius, 50, True, country)
     provider_calls += 0 if cached else 1
     cache_hits += 1 if cached else 0
-    add_results(rows)
+    add_results(rows, terms[0])
     target = min(max(1, int(max_results)), CONTRACTOR_SEARCH_FALLBACK_MIN_RESULTS)
     if usable_count() < target and len(terms) > 1:
         rows, cached = contractor_provider_search(terms[1], lat, lon, radius, 50, True, country)
         provider_calls += 0 if cached else 1
         cache_hits += 1 if cached else 0
-        add_results(rows)
+        add_results(rows, terms[1])
+    if trade == "snow_removal" and usable_count() < target and len(terms) > 2:
+        rows, cached = contractor_provider_search(terms[2], lat, lon, radius, 50, True, country)
+        provider_calls += 0 if cached else 1
+        cache_hits += 1 if cached else 0
+        add_results(rows, terms[2])
     if tolerance == "broad" and usable_count() < target:
         rows, cached = contractor_provider_search(terms[0], lat, lon, radius, 50, False, country)
         provider_calls += 0 if cached else 1
         cache_hits += 1 if cached else 0
-        add_results(rows)
+        add_results(rows, terms[0])
 
     results = []
     rejected = 0
@@ -4657,7 +4718,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.46.3",
+        "app_version": "2.46.4",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -4866,7 +4927,7 @@ def create_workspace_export_archive():
         "export_format": 2,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.46.3",
+        "app_version": "2.46.4",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -5956,7 +6017,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.46.3",
+        "app_version": "2.46.4",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -6145,7 +6206,7 @@ def not_found(error):
 def health():
     return {
         "status": "ok",
-        "version": "2.46.3",
+        "version": "2.46.4",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
