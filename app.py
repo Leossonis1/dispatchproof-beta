@@ -1417,6 +1417,29 @@ def contractor_obvious_non_service_business(place, trade):
     name = contractor_place_name(place).lower()
     categories = " | ".join(contractor_place_categories(place)).lower()
 
+    # Snow-removal searches need a stricter category-first retail guard.
+    # Foursquare can return businesses whose NAME says "Snow Removal" while the
+    # actual place category is a supplies/equipment store.  For this trade, a
+    # generic "construction" word must not rescue an obvious retail category.
+    if trade == "snow_removal":
+        snow_retail_category_cues = [
+            "construction supplies store", "building supplies store",
+            "building supply", "supply store", "retail store",
+            "miscellaneous store", "hardware store", "home improvement store",
+            "equipment dealer", "equipment rental", "truck dealer",
+            "auto parts", "automotive parts", "garden center", "nursery",
+        ]
+        snow_service_category_cues = [
+            "snow removal", "snow plowing", "snow and ice",
+            "landscaper", "landscape contractor", "landscaping",
+            "general contractor", "property maintenance", "grounds maintenance",
+            "maintenance service",
+        ]
+        if any(word in categories for word in snow_retail_category_cues) and not any(
+            word in categories for word in snow_service_category_cues
+        ):
+            return True
+
     service_category_cues = [
         "carpenter", "contractor", "construction", "installer", "installation",
         "repair service", "maintenance", "home service", "home improvement",
@@ -4634,7 +4657,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.46.2",
+        "app_version": "2.46.3",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -4843,7 +4866,7 @@ def create_workspace_export_archive():
         "export_format": 2,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.46.2",
+        "app_version": "2.46.3",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -5933,7 +5956,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.46.2",
+        "app_version": "2.46.3",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -6122,7 +6145,7 @@ def not_found(error):
 def health():
     return {
         "status": "ok",
-        "version": "2.46.2",
+        "version": "2.46.3",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
