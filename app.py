@@ -7,6 +7,7 @@ from pathlib import Path
 import sqlite3
 import json
 import secrets
+import random
 import os
 import smtplib
 import shutil
@@ -4718,7 +4719,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.46.6",
+        "app_version": "2.46.7",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -4927,7 +4928,7 @@ def create_workspace_export_archive():
         "export_format": 2,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.46.6",
+        "app_version": "2.46.7",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -5771,6 +5772,64 @@ def new_training_question_order(scenario):
     return order
 
 
+def _training_balanced_answer_slots(total, choice_count, seed_value):
+    """Return a stable, well-distributed correct-answer position for each question.
+
+    The order is deterministic for one assignment/run so refreshing or retrying a
+    question never moves the answers. Resetting the scenario changes the question
+    order, which also changes this answer-position plan.
+    """
+    if total <= 0 or choice_count <= 0:
+        return []
+    slots = [index % choice_count for index in range(total)]
+    rng = random.Random(seed_value)
+    # Keep the distribution balanced while avoiding obvious three-in-a-row streaks.
+    for _ in range(40):
+        rng.shuffle(slots)
+        if not any(
+            slots[index] == slots[index - 1] == slots[index - 2]
+            for index in range(2, len(slots))
+        ):
+            break
+    return slots
+
+
+def training_display_choices(step, assignment, question_order, step_index):
+    """Shuffle visible answer choices without changing answer keys or grading.
+
+    Correct answers are intentionally spread across the available positions rather
+    than relying on the authoring order in TRAINING_SCENARIOS. Incorrect answers are
+    also shuffled. The result stays stable for the current assignment/run.
+    """
+    choices = list(step.get("choices") or [])
+    if len(choices) <= 1:
+        return choices
+
+    assignment_data = dict(assignment)
+    seed_material = "|".join([
+        str(assignment_data.get("id") or ""),
+        str(assignment_data.get("scenario_key") or ""),
+        json.dumps(list(question_order or []), separators=(",", ":")),
+    ])
+    base_seed = int(hashlib.sha256(seed_material.encode("utf-8")).hexdigest(), 16)
+    slots = _training_balanced_answer_slots(len(question_order), len(choices), base_seed)
+    correct_slot = slots[step_index] if 0 <= step_index < len(slots) else (base_seed % len(choices))
+
+    correct_key = step.get("correct")
+    correct_choice = next((choice for choice in choices if choice[0] == correct_key), None)
+    if correct_choice is None:
+        return choices
+
+    incorrect_choices = [choice for choice in choices if choice[0] != correct_key]
+    wrong_seed_material = f"{seed_material}|{step_index}|incorrect"
+    wrong_seed = int(hashlib.sha256(wrong_seed_material.encode("utf-8")).hexdigest(), 16)
+    random.Random(wrong_seed).shuffle(incorrect_choices)
+
+    ordered = list(incorrect_choices)
+    ordered.insert(min(correct_slot, len(ordered)), correct_choice)
+    return ordered
+
+
 def training_question_order_from_value(value, scenario):
     total = len(scenario.get("steps") or []) if scenario else 0
     fallback = list(range(total))
@@ -6017,7 +6076,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.46.6",
+        "app_version": "2.46.7",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -6206,7 +6265,7 @@ def not_found(error):
 def health():
     return {
         "status": "ok",
-        "version": "2.46.6",
+        "version": "2.46.7",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -9390,6 +9449,11 @@ def training_scenario_page(assignment_id):
             LIMIT 12
         """, (assignment_id,)).fetchall()
         answer_feedback = training_answer_feedback(scenario, question_order, attempts[0] if attempts else None)
+        display_choices = (
+            training_display_choices(step, assignment, question_order, step_index)
+            if step is not None
+            else []
+        )
 
     return render_template(
         "training_scenario.html",
@@ -9399,6 +9463,7 @@ def training_scenario_page(assignment_id):
         step_index=step_index,
         attempts=attempts,
         answer_feedback=answer_feedback,
+        display_choices=display_choices,
         can_practice=user_can_practice_training_assignment(assignment),
     )
 
