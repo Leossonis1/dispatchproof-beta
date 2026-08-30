@@ -153,7 +153,8 @@
         {% if doc['notes'] %}<small>{{ doc['notes'] }}</small>{% endif %}
       </div>
       <div class="subdoc-actions">
-        <a class="btn action-blue small-btn" target="_blank" rel="noopener" href="{{ url_for('download_subcontractor_document', crew_member_id=member['id'], document_id=doc['id']) }}">View / Download</a>
+        <a class="btn action-blue small-btn" target="_blank" rel="noopener" href="{{ url_for('view_subcontractor_document', crew_member_id=member['id'], document_id=doc['id']) }}">View</a>
+        <a class="btn ghost small-btn" href="{{ url_for('download_subcontractor_document', crew_member_id=member['id'], document_id=doc['id']) }}">Download</a>
         <form method="post" action="{{ url_for('delete_subcontractor_document', crew_member_id=member['id'], document_id=doc['id']) }}" onsubmit="return confirm('Delete {{ doc['document_type']|e }} from this subcontractor?');">
           <button class="btn danger small-btn" type="submit">Delete</button>
         </form>

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{{ doc['document_type'] }} · {{ doc['crew_name'] }} · DispatchProof{% endblock %}
+{% block content %}
+<div class="page-head subdoc-view-head">
+  <div>
+    <a class="back-link" href="{{ url_for('edit_crew_member', crew_member_id=crew_member_id) }}#subcontractor-documents">← Back to {{ doc['crew_name'] }}</a>
+    <div class="eyebrow">Subcontractor Document</div>
+    <h1>{{ doc['document_type'] }}</h1>
+    <p>{{ doc['original_filename'] }} · {{ doc['file_size']|pretty_bytes }}</p>
+  </div>
+  <div class="subdoc-view-actions">
+    <span class="internal-badge">Internal Only</span>
+    <a class="btn primary" href="{{ url_for('download_subcontractor_document', crew_member_id=crew_member_id, document_id=doc['id']) }}">Download</a>
+  </div>
+</div>
+
+<section class="panel subdoc-view-panel">
+  {% if preview_kind == 'pdf' %}
+    <iframe class="subdoc-pdf-frame" title="{{ doc['original_filename']|e }}" src="{{ url_for('inline_subcontractor_document', crew_member_id=crew_member_id, document_id=doc['id']) }}"></iframe>
+  {% elif preview_kind == 'image' %}
+    <div class="subdoc-image-wrap"><img src="{{ url_for('inline_subcontractor_document', crew_member_id=crew_member_id, document_id=doc['id']) }}" alt="{{ doc['original_filename']|e }}"></div>
+  {% elif preview_kind == 'csv' %}
+    {% if csv_rows %}
+      <div class="subdoc-table-wrap">
+        <table class="subdoc-preview-table">
+          <tbody>
+          {% for row in csv_rows %}
+            <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if preview_truncated %}<p class="muted subdoc-preview-note">Preview limited to the first 200 rows / 1 MB. Download the file to see everything.</p>{% endif %}
+    {% else %}
+      <div class="empty-state">This CSV file is empty.</div>
+    {% endif %}
+  {% elif preview_kind == 'text' %}
+    <pre class="subdoc-text-preview">{{ preview_text }}</pre>
+    {% if preview_truncated %}<p class="muted subdoc-preview-note">Preview limited to the first 1 MB. Download the file to see everything.</p>{% endif %}
+  {% else %}
+    <div class="empty-state subdoc-preview-unavailable">
+      <strong>Browser preview is not available for this file type.</strong>
+      <p>Download the document to open it in the appropriate application. PDFs, images, CSV, and text files can be previewed directly in DispatchProof.</p>
+      <a class="btn primary" href="{{ url_for('download_subcontractor_document', crew_member_id=crew_member_id, document_id=doc['id']) }}">Download {{ doc['original_filename'] }}</a>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}
