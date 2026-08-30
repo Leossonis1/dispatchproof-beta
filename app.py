@@ -3124,7 +3124,7 @@ app.jinja_env.filters["pretty_bytes"] = pretty_bytes
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def document_allowed(filename):
+def allowed_document(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in DOCUMENT_EXTENSIONS
 
 
@@ -4634,7 +4634,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.46.0",
+        "app_version": "2.46.1",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -4843,7 +4843,7 @@ def create_workspace_export_archive():
         "export_format": 2,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.46.0",
+        "app_version": "2.46.1",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -5933,7 +5933,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.46.0",
+        "app_version": "2.46.1",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -6122,7 +6122,7 @@ def not_found(error):
 def health():
     return {
         "status": "ok",
-        "version": "2.46.0",
+        "version": "2.46.1",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
