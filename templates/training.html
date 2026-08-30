@@ -59,8 +59,19 @@
       <h2>Assigned Training</h2>
       <p>Review progress without entering or changing the trainee's answers.</p>
     </div>
+    {% if assignments %}
+    <a class="btn small-btn" href="{{ url_for('download_all_training_results_csv') }}">Download All Results CSV</a>
+    {% endif %}
   </div>
   {% if assignments %}
+  {% if training_export_users %}
+  <div class="button-row" style="margin-top:0;margin-bottom:14px;">
+    <strong style="font-size:13px;">Individual results:</strong>
+    {% for user in training_export_users %}
+    <a class="btn small-btn" href="{{ url_for('download_user_training_results_csv', user_id=user['id']) }}">{{ user['full_name'] }} CSV</a>
+    {% endfor %}
+  </div>
+  {% endif %}
   <div class="training-admin-list">
     {% for item in assignments %}
       {% if item['scenario'] %}
