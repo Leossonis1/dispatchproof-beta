@@ -11,13 +11,18 @@
       · Owner: {% if job_owner %}{{ job_owner['full_name'] }}{% elif job['owner_user_id'] %}User #{{ job['owner_user_id'] }}{% else %}Owner / legacy job{% endif %}
     </p>
   </div>
-  <div class="page-head-actions">
+  <div class="page-head-actions job-head-actions">
     <a class="btn action-blue" href="{{ url_for('field_updates', job_id=job['id']) }}">Field Access</a>
-    <a class="btn action-blue" href="#job-documents">Job Documents</a>
-    {% if job['status'] != 'COMPLETED' %}
-    <a class="btn action-blue" href="{{ url_for('edit_job', job_id=job['id']) }}">Edit Job Details</a>
-    {% endif %}
-    <a class="btn action-blue" href="{{ url_for('new_job', duplicate_from=job['id']) }}" title="Create a separate new job using this setup. For a return trip to this same installation, use Start Return Visit / Next Mobilization instead.">Duplicate as New Job</a>
+    <details class="job-actions-menu">
+      <summary class="btn ghost">Job Actions <span aria-hidden="true">▾</span></summary>
+      <div class="job-actions-menu-panel">
+        <a href="#job-documents" onclick="this.closest('details').removeAttribute('open')"><strong>Job Documents</strong><span>View or upload job-specific files</span></a>
+        {% if job['status'] != 'COMPLETED' %}
+        <a href="{{ url_for('edit_job', job_id=job['id']) }}"><strong>Edit Job Details</strong><span>Schedule, contacts, crew, and job setup</span></a>
+        {% endif %}
+        <a href="{{ url_for('new_job', duplicate_from=job['id']) }}" title="Create a separate new job using this setup. For a return trip to this same installation, use Start Return Visit / Next Mobilization instead."><strong>Duplicate as New Job</strong><span>Create a separate job from this setup</span></a>
+      </div>
+    </details>
     <span class="badge {{ job['status']|lower|replace(' ', '-') }}">{{ job['status'] }}</span>
   </div>
 </div>

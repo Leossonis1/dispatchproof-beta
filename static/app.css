@@ -4780,3 +4780,72 @@ main{
 .subdoc-text-preview{margin:0;max-height:72vh;overflow:auto;white-space:pre-wrap;word-break:break-word;background:#f7f9fc;border:1px solid var(--border);border-radius:10px;padding:16px;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
 .subdoc-preview-note{margin:12px 0 0;}
 .subdoc-preview-unavailable p{max-width:680px;margin:8px auto 16px;}
+
+
+/* DispatchProof V2.46.6 — compact job actions + clearer PM field requests */
+.job-head-actions{
+  flex-wrap:nowrap;
+}
+.job-actions-menu{
+  position:relative;
+}
+.job-actions-menu>summary{
+  list-style:none;
+  cursor:pointer;
+  user-select:none;
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+}
+.job-actions-menu>summary::-webkit-details-marker{display:none;}
+.job-actions-menu[open]>summary{
+  background:#eef4ff;
+  border-color:#b9d0ff;
+}
+.job-actions-menu-panel{
+  position:absolute;
+  z-index:40;
+  top:calc(100% + 8px);
+  right:0;
+  width:min(310px,80vw);
+  padding:7px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:#fff;
+  box-shadow:0 14px 34px rgba(16,24,40,.16);
+}
+.job-actions-menu-panel a{
+  display:grid;
+  gap:2px;
+  padding:10px 11px;
+  border-radius:8px;
+  color:var(--text);
+  text-decoration:none;
+}
+.job-actions-menu-panel a:hover{background:#f5f8ff;}
+.job-actions-menu-panel a strong{font-size:13px;}
+.job-actions-menu-panel a span{font-size:11px;color:var(--muted);line-height:1.35;}
+.field-request-helper{
+  display:block;
+  margin-top:6px;
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.45;
+  font-weight:500;
+}
+.field-task-reminder{
+  display:grid;
+  gap:5px;
+  margin:10px 0 15px;
+  padding:12px 14px;
+  border:1px solid #cfe0ff;
+  border-left:4px solid var(--brand-accent,#0f62fe);
+  border-radius:10px;
+  background:#f6f9ff;
+}
+.field-task-reminder strong{font-size:12px;color:#0b2348;}
+.field-task-reminder span{font-size:13px;line-height:1.5;white-space:pre-wrap;color:#344054;}
+@media(max-width:760px){
+  .job-head-actions{flex-wrap:wrap;justify-content:flex-start;}
+  .job-actions-menu-panel{left:0;right:auto;}
+}

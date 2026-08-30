@@ -53,8 +53,9 @@
       </label>
     </div>
 
-    <label>PM Instructions / Request
-      <textarea required name="request_note" rows="4" maxlength="4000" placeholder="Example: Review the attached drawings before starting. Please send progress photos after the uppers are installed."></textarea>
+    <label>What I Need From You
+      <textarea required name="request_note" rows="4" maxlength="4000" placeholder="Example: Mike, please take a clear picture of the double doors in the lobby and include it with your field response."></textarea>
+      <span class="field-request-helper">This instruction appears inside the secure Field Access page and in the Field Access email, so you do not need to send a separate text or email.</span>
     </label>
 
     <div class="field-access-options">
@@ -102,7 +103,7 @@
         </div>
         <span class="email-status {{ 'sent' if link['is_active'] else 'failed' }}">{{ 'ACTIVE' if link['is_active'] else 'REVOKED' }}</span>
       </div>
-      <div class="field-link-note"><strong>PM Instructions / Request</strong><p>{{ link['request_note'] }}</p></div>
+      <div class="field-link-note"><strong>What I Need From You</strong><p>{{ link['request_note'] }}</p></div>
       <div class="small muted">Shared access: {{ link['shared_document_count'] }} document{{ '' if link['shared_document_count'] == 1 else 's' }} · Site contact {{ 'shared' if link['share_site_contact'] else 'hidden' }}</div>
       <div class="small muted">Created by {{ link['created_by'] }} · {{ link['created_at']|pretty_datetime }}{% if link['last_used_at'] %} · Last submission {{ link['last_used_at']|pretty_datetime }}{% endif %}</div>
       {% if link['is_active'] %}

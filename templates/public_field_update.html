@@ -24,7 +24,7 @@
       <div class="date-chip">Scheduled installation: {{ field_link['installation_date']|pretty_date }}</div>
 
       <div class="why-box field-request-box">
-        <strong>Instructions / Request from the Project Manager</strong>
+        <strong>What the Project Manager Needs From You</strong>
         <span>{{ field_link['request_note'] }}</span>
       </div>
 
@@ -55,7 +55,8 @@
 
       <div class="public-section">
         <h2>Respond to PM Request</h2>
-        <p>Use this for a requested note or photos. You can return to this link later while the job is active.</p>
+        <div class="field-task-reminder"><strong>PM request for this link</strong><span>{{ field_link['request_note'] }}</span></div>
+        <p>Use this for the requested note or photos. You can return to this link later while the job is active.</p>
         <form method="post" enctype="multipart/form-data" class="field-public-form">
           <input type="hidden" name="entry_type" value="RESPONSE">
           <label>Your Name
@@ -65,9 +66,10 @@
             <textarea name="notes" rows="4" maxlength="4000" placeholder="Example: Uppers are complete. Added close-up photos of the damaged panel."></textarea>
           </label>
           <div class="field-photo-capture" data-photo-capture data-min="0">
+            <div class="field-photo-purpose"><strong>Add Photos to This Update</strong><span>These photos stay with your PM-request response.</span></div>
             <div class="field-photo-actions">
-              <label class="field-photo-action camera-action"><span class="field-photo-action-icon">●</span><span><strong>Take Photo</strong><small>Open the phone camera</small></span><input class="photo-camera-input" type="file" accept="image/*" capture="environment"></label>
-              <label class="field-photo-action"><span class="field-photo-action-icon gallery-icon">▣</span><span><strong>Choose Existing Photos</strong><small>Select from this device</small></span><input class="photo-gallery-input" type="file" accept="image/*" multiple></label>
+              <label class="field-photo-action camera-action"><span class="field-photo-action-icon">●</span><span><strong>Take Update Photo</strong><small>Open the phone camera</small></span><input class="photo-camera-input" type="file" accept="image/*" capture="environment"></label>
+              <label class="field-photo-action"><span class="field-photo-action-icon gallery-icon">▣</span><span><strong>Choose Update Photos</strong><small>Select from this device</small></span><input class="photo-gallery-input" type="file" accept="image/*" multiple></label>
             </div>
             <input class="photo-submit-input" type="file" name="photos" accept="image/*" multiple hidden>
             <div class="field-photo-status"><span class="field-photo-counter">No photos added yet</span></div>
@@ -89,6 +91,7 @@
 
       <div class="public-section daily-progress-public-section">
         <h2>Daily Progress Log</h2>
+        <div class="field-task-reminder"><strong>Before you submit today</strong><span>{{ field_link['request_note'] }}</span></div>
         <p>For multi-day work, submit one progress entry each workday. DispatchProof keeps the days and photos in order for the PM and Client Report.</p>
         <form method="post" enctype="multipart/form-data" class="field-public-form" id="dailyProgressForm">
           <input type="hidden" name="entry_type" value="DAILY_PROGRESS">
@@ -116,9 +119,10 @@
             <textarea name="notes" rows="3" maxlength="4000" placeholder="Anything else the PM should know today."></textarea>
           </label>
           <div class="field-photo-capture" id="dailyProgressPhotos" data-photo-capture data-min="1">
+            <div class="field-photo-purpose"><strong>Add Daily Progress Photos</strong><span>These photos stay with today's Daily Progress Log.</span></div>
             <div class="field-photo-actions">
-              <label class="field-photo-action camera-action"><span class="field-photo-action-icon">●</span><span><strong>Take Progress Photo</strong><small>Open the phone camera</small></span><input class="photo-camera-input" type="file" accept="image/*" capture="environment"></label>
-              <label class="field-photo-action"><span class="field-photo-action-icon gallery-icon">▣</span><span><strong>Choose Existing Photos</strong><small>Select one or more photos</small></span><input class="photo-gallery-input" type="file" accept="image/*" multiple></label>
+              <label class="field-photo-action camera-action"><span class="field-photo-action-icon">●</span><span><strong>Take Daily Progress Photo</strong><small>Open the phone camera</small></span><input class="photo-camera-input" type="file" accept="image/*" capture="environment"></label>
+              <label class="field-photo-action"><span class="field-photo-action-icon gallery-icon">▣</span><span><strong>Choose Daily Progress Photos</strong><small>Select one or more photos</small></span><input class="photo-gallery-input" type="file" accept="image/*" multiple></label>
             </div>
             <input class="photo-submit-input" type="file" name="photos" accept="image/*" multiple hidden>
             <div class="field-photo-status"><span class="field-photo-counter">0 of 1 required photos added</span></div>
