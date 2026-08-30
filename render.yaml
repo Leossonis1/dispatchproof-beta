@@ -1,15 +1,23 @@
 services:
   - type: web
-    name: dispatchproof-beta
+    name: dispatchproof
     runtime: python
-    plan: free
+    plan: 0.5c-512mb
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app --workers 1 --threads 4 --timeout 120 --bind 0.0.0.0:$PORT
     healthCheckPath: /health
     autoDeployTrigger: commit
+    disk:
+      name: dispatchproof-data
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - key: DISPATCHPROOF_SECRET_KEY
         generateValue: true
+      - key: DISPATCHPROOF_DATA_DIR
+        value: /var/data/dispatchproof
+      - key: DISPATCHPROOF_DEPLOYMENT_MODE
+        value: isolated-company
       - key: DISPATCHPROOF_COMPANY_NAME
         value: DispatchProof
       - key: DISPATCHPROOF_EMAIL_MODE

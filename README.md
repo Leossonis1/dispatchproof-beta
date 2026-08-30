@@ -1,62 +1,23 @@
-# DispatchProof V2.44
+# DispatchProof V2.46.12 — Launch & Operations Baseline
 
-Project-level Route Optimization for retail rollouts and other multi-location work.
-
-V2.44 keeps the existing DispatchProof job lifecycle intact and adds a focused routing tool inside **Clients & Projects → Project**. It is intentionally a planning feature, not a separate logistics application.
+V2.46.12 is the commercial-launch operations baseline built from the approved V2.46.11 release.
 
 ## What changed
 
-- Added **Route Optimization** to each Project page.
-- Select 2–40 active jobs from the current project.
-- Enter the crew's starting location and optionally return to that location after the final stop.
-- Each selected job's route address is editable for planning without changing the job's saved Site / Project field.
-- Uses road-routing optimization to calculate an efficient stop sequence.
-- Saves total road mileage and estimated drive time.
-- Displays the saved route on an interactive OpenStreetMap/Leaflet map.
-- Saves a numbered stop list with mileage and drive time from the prior stop.
-- Manual up/down reordering is local until **Save Manual Order & Recalculate** is clicked, avoiding unnecessary routing calls.
-- Saved route plans are private to the user who creates them, preventing route data from leaking another PM's private job access.
-- Route plans and stops are included in Owner/Admin full-system database backups.
-- Existing readiness, arrival, failed mobilization, Field Updates, Daily Progress, subcontractor search, Schedule, and Client Reports are unchanged.
+- Public launch price is locked at **$50/month per company** (initial offer: up to 10 office users; all core features included).
+- Corrected Render Blueprint from `free` to the current `0.5c-512mb` production compute plan.
+- Blueprint now documents a 1 GB persistent disk at `/var/data` and `DISPATCHPROOF_DATA_DIR=/var/data/dispatchproof` for new isolated-company deployments.
+- Added `DISPATCHPROOF_DEPLOYMENT_MODE=isolated-company` metadata so the intended early-customer architecture is explicit.
+- Centralized app version metadata at `2.46.12`; `/health` now reports the correct version plus deployment mode and public monthly price.
+- Replaced stale user-visible **Free Beta** email wording with **Email Outbox Mode** / testing wording. Email behavior itself is unchanged.
+- Added launch marketing, customer deployment, and IT scaling documents.
 
-## One-time Render setup
+## Architecture decision
 
-Create an openrouteservice / HeiGIT API key and add either of these environment variables to the DispatchProof Render service:
+This release intentionally remains **one company per deployment/database**. Do not place unrelated customer companies into one V2.46.12 database. Early customers should receive isolated deployments.
 
-- `OPENROUTESERVICE_API_KEY` (recommended)
-- `DISPATCHPROOF_ORS_API_KEY` (DispatchProof-specific override)
+True shared multi-tenant/PostgreSQL/object-storage architecture is a planned scaling milestone after real customer traction proves the need. See `IT_UPGRADE_PLAN_V2_46_12.md`.
 
-This is separate from `FOURSQUARE_SERVICE_API_KEY`; route optimization does not consume Contractor Finder/Foursquare credits.
+## No behavior migration
 
-V2.44 uses the current HeiGIT endpoints (`api.heigit.org`) rather than the deprecated `api.openrouteservice.org` host.
-
-## Database migration
-
-Automatic and additive. V2.44 creates:
-
-- `project_route_plans`
-- `project_route_stops`
-- `route_geocode_cache`
-
-No reset is required.
-
-## First QA pass
-
-1. Open a Project with at least 3 active jobs.
-2. Click **Route Optimization**.
-3. Confirm only jobs visible to the signed-in user appear.
-4. Enter a real starting address.
-5. Select 3 jobs and verify/correct each route address.
-6. Leave **Return to starting location** off and click **Optimize Selected Jobs**.
-7. Confirm a numbered stop order, total mileage, drive time, and route map appear.
-8. Move one stop with the arrow buttons and click **Save Manual Order & Recalculate**.
-9. Confirm the new order persists and mileage/time refresh.
-10. Return to the Project, reopen Route Optimization, and confirm the saved route remains.
-11. As a second normal PM, confirm the first PM's private saved route is not visible.
-
-## Design limits in V2.44
-
-- One saved route plan per user per Project.
-- One crew / one route at a time.
-- Maximum 40 selected jobs, intentionally below the routing provider's 50-waypoint directions limit.
-- Route Optimization does not automatically rewrite installation dates. It plans the recommended sequence; scheduling stays under PM control.
+No job, crew, readiness, permissions, training, document, integration, or mobile workflow logic was changed in this release.
