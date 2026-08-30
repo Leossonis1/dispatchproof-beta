@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Field Updates · {{ job['job_name'] }} · DispatchProof{% endblock %}
+{% block title %}Field Access · {{ job['job_name'] }} · DispatchProof{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
     <a class="text-link" href="{{ url_for('job_detail', job_id=job['id']) }}">← Back to Job</a>
     <div class="eyebrow">Field Communication</div>
-    <h1>Field Updates & Daily Progress</h1>
+    <h1>Field Access & Daily Progress</h1>
     <p>{{ job['job_name'] }}{% if job['project_site'] %} · {{ job['project_site'] }}{% endif %}</p>
   </div>
   <span class="badge {{ job['status']|lower|replace(' ', '-') }}">{{ job['status'] }}</span>
@@ -27,8 +27,8 @@
   <div class="panel-head">
     <div>
       <div class="eyebrow">PM → Installer / Subcontractor</div>
-      <h2>Create Field Request</h2>
-      <p>Send one secure job-specific link for a note, requested photos, or ongoing daily progress. No DispatchProof login is required.</p>
+      <h2>Create Field Access Link</h2>
+      <p>Send one secure job-specific link for PM instructions, selected job documents, field responses, photos, voice updates, and ongoing daily progress. No DispatchProof login is required.</p>
     </div>
     <span class="secure-link-badge">SECURE FIELD LINK</span>
   </div>
@@ -53,13 +53,30 @@
       </label>
     </div>
 
-    <label>PM Request / Note
-      <textarea required name="request_note" rows="4" maxlength="4000" placeholder="Example: Please send progress photos after the uppers are installed, including a close-up of the damaged panel."></textarea>
+    <label>PM Instructions / Request
+      <textarea required name="request_note" rows="4" maxlength="4000" placeholder="Example: Review the attached drawings before starting. Please send progress photos after the uppers are installed."></textarea>
     </label>
+
+    <div class="field-access-options">
+      <label class="field-access-contact-check"><input type="checkbox" name="share_site_contact" value="1" checked> <span>Share site contact information on this field link</span></label>
+      <div class="field-access-documents">
+        <strong>Documents Available to This Link <span class="muted">(optional)</span></strong>
+        <p>Select only the drawings, instructions, scope, or reference documents this installer/subcontractor should be able to open.</p>
+        {% if shareable_documents %}
+        <div class="field-doc-choice-list">
+          {% for doc in shareable_documents %}
+          <label class="field-doc-choice"><input type="checkbox" name="shared_document" value="{{ doc.ref }}"><span><strong>{{ doc['original_filename'] }}</strong><small>{{ doc.scope_label }} · {{ doc['file_size']|pretty_bytes }}</small></span></label>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-mini">No Job, Project, or Client documents are available yet. Upload documents first if the field person needs drawings or instructions.</div>
+        {% endif %}
+      </div>
+    </div>
 
     <div class="job-note-form-footer">
       <span>If an email is supplied, DispatchProof sends it in live email mode or records a preview in Outbox Mode. You can always copy the secure link manually.</span>
-      <button class="btn primary" type="submit">Generate Field Link</button>
+      <button class="btn primary" type="submit">Generate Field Access Link</button>
     </div>
   </form>
 </section>
@@ -69,8 +86,8 @@
   <div class="panel-head">
     <div>
       <div class="eyebrow">Secure Access</div>
-      <h2>Field Links</h2>
-      <p>Each link is limited to this job. Revoke a link at any time without changing readiness or installer-arrival links.</p>
+      <h2>Field Access Links</h2>
+      <p>Each link is limited to this job and only exposes the documents selected when it was created. Revoke it at any time without changing readiness or installer-arrival links.</p>
     </div>
   </div>
 
@@ -85,13 +102,14 @@
         </div>
         <span class="email-status {{ 'sent' if link['is_active'] else 'failed' }}">{{ 'ACTIVE' if link['is_active'] else 'REVOKED' }}</span>
       </div>
-      <div class="field-link-note"><strong>PM Request</strong><p>{{ link['request_note'] }}</p></div>
+      <div class="field-link-note"><strong>PM Instructions / Request</strong><p>{{ link['request_note'] }}</p></div>
+      <div class="small muted">Shared access: {{ link['shared_document_count'] }} document{{ '' if link['shared_document_count'] == 1 else 's' }} · Site contact {{ 'shared' if link['share_site_contact'] else 'hidden' }}</div>
       <div class="small muted">Created by {{ link['created_by'] }} · {{ link['created_at']|pretty_datetime }}{% if link['last_used_at'] %} · Last submission {{ link['last_used_at']|pretty_datetime }}{% endif %}</div>
       {% if link['is_active'] %}
       <div class="copy-box" id="fieldLink{{ link['id'] }}">{{ link['public_url'] }}</div>
       <div class="button-row">
         <button class="btn action-blue" type="button" data-dispatch-copy data-copy-href-source="openFieldLink{{ link['id'] }}">Copy Link</button>
-        <a class="btn action-blue" id="openFieldLink{{ link['id'] }}" target="_blank" rel="noopener" href="{{ link['public_url'] }}">Open Field Page</a>
+        <a class="btn action-blue" id="openFieldLink{{ link['id'] }}" target="_blank" rel="noopener" href="{{ link['public_url'] }}">Open Field Access</a>
         <form method="post" action="{{ url_for('revoke_field_update_link', job_id=job['id'], link_id=link['id']) }}" onsubmit="return confirm('Revoke this field link? The installer/sub will no longer be able to submit through this URL.');">
           <button class="btn danger" type="submit">Revoke</button>
         </form>
@@ -132,6 +150,15 @@
       <div class="report-stat-grid compact">
         {% if entry['crew_size'] is not none %}<div><span>Crew</span><strong>{{ entry['crew_size'] }}</strong></div>{% endif %}
         {% if entry['hours_worked'] is not none %}<div><span>Hours</span><strong>{{ entry['hours_worked']|pretty_number }}</strong></div>{% endif %}
+      </div>
+      {% endif %}
+      {% if entry['voice_filename'] %}
+      <div class="field-progress-copy voice-progress-block">
+        <strong>Voice Update</strong>
+        <audio controls preload="metadata" src="{{ url_for('uploaded_file', filename=entry['voice_filename']) }}"></audio>
+        {% if entry['voice_transcript'] %}<p class="voice-transcript"><strong>Transcript:</strong> {{ entry['voice_transcript'] }}</p>
+        {% elif entry['voice_transcript_status'] == 'NOT_CONFIGURED' %}<p class="muted">Audio saved. Automatic transcription is not configured yet.</p>
+        {% elif entry['voice_transcript_status'] %}<p class="muted">Audio saved. Automatic transcription was unavailable for this recording.</p>{% endif %}
       </div>
       {% endif %}
       {% if entry['photos'] %}

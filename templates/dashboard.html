@@ -28,6 +28,28 @@
 </div>
 {% endif %}
 
+{% if sub_document_attention %}
+<section class="panel subdoc-dashboard-panel">
+  <div class="panel-head">
+    <div>
+      <div class="eyebrow">Subcontractor Compliance</div>
+      <h2>Subcontractor Documents Needing Attention</h2>
+      <p>Expired paperwork and documents inside their configured warning window.</p>
+    </div>
+    <span class="attention-count">{{ sub_document_attention|length }}</span>
+  </div>
+  <div class="subdoc-dashboard-list">
+    {% for doc in sub_document_attention %}
+    <a class="subdoc-dashboard-row subdoc-{{ doc.expiration_state.level }}" href="{{ url_for('edit_crew_member', crew_member_id=doc['crew_member_id']) }}#subcontractor-documents">
+      <div><strong>{{ doc['subcontractor_name'] }}</strong>{% if doc['company_name'] %}<span>{{ doc['company_name'] }}</span>{% endif %}</div>
+      <div><strong>{{ doc['document_type'] }}</strong><span>{{ doc['original_filename'] }}</span></div>
+      <div><span class="status-pill subdoc-status-{{ doc.expiration_state.level }}">{{ doc.expiration_state.label }}</span><small>{{ doc['expiration_date']|pretty_date }}</small></div>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 {% if due_reminder_count %}
 <div class="reminder-banner">
   <div>

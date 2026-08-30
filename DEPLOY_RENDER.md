@@ -1,25 +1,36 @@
-# V2.44 Render Deploy
+# DispatchProof V2.46 Render Deploy
 
-Deploy normally over V2.43.2.
+Deploy normally over V2.45.2. The migration is automatic and additive; do not reset the database.
 
-## New environment variable
+## Existing Render storage
+Keep the current persistent storage setting unchanged:
 
-Add one routing key to the DispatchProof Render service:
+`DISPATCHPROOF_DATA_DIR=/var/data/dispatchproof`
 
-`OPENROUTESERVICE_API_KEY=<your key>`
+Subcontractor documents and voice recordings are stored in the normal DispatchProof uploads directory and therefore use the same persistent disk.
 
-`DISPATCHPROOF_ORS_API_KEY` is accepted as an alternate DispatchProof-specific variable.
+## Optional automatic voice transcription
+Voice recording/audio storage works without any new environment variable. To enable automatic transcription, add either:
 
-Do not change `FOURSQUARE_SERVICE_API_KEY`; subcontractor discovery continues using Foursquare separately.
+`OPENAI_API_KEY=<your API key>`
 
-## Migration
+or:
 
-Automatic/additive on first request after deployment. No database reset is required.
+`DISPATCHPROOF_OPENAI_API_KEY=<your API key>`
 
-## Verify after deploy
+Optional model override:
 
-1. Footer shows Version 2.44.
-2. Open Clients & Projects → a Project.
-3. Click Route Optimization.
-4. The yellow setup warning disappears once the routing key is configured.
-5. Optimize a small 3-stop route first.
+`DISPATCHPROOF_TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe`
+
+Do not commit API keys to GitHub. Add them directly in Render Environment settings. Saving an environment variable may trigger a redeploy.
+
+## Existing provider keys
+Do not change the existing Foursquare or openrouteservice/HeiGIT keys. V2.46 does not alter those integrations.
+
+## First QA after deploy
+1. Confirm footer/version shows 2.46.0.
+2. Test one subcontractor document with an expiration inside its warning window.
+3. Test Snow Plowing / Snow Removal search.
+4. Create one Field Access link with a selected document.
+5. Open it from a phone and record a short voice update.
+6. Confirm audio reaches the PM; if transcription is configured, confirm the transcript appears too.

@@ -123,6 +123,7 @@
         <li>Add each reusable person once and choose <strong>Internal Crew</strong> or <strong>Subcontractor</strong>. Subcontractors can also have an optional Company Name.</li>
         <li>On <strong>New Job</strong> or <strong>Edit Job Details</strong>, pick internal crew and subcontractors from the same field-assignment picker.</li>
         <li>Use <strong>Custom Crew</strong> only for temporary people or subs you do not need to save and schedule again.</li>
+        <li>For subcontractors, open the directory record to store insurance, W-9s, MSAs, licenses, and other paperwork. Add expiration dates and warning windows so DispatchProof can flag documents that need attention.</li>
         <li>Deactivate a directory record when it should stop appearing on new-job pickers. Existing assignments stay preserved. Permanently delete only when there is no linked job history.</li>
       </ol>
       <div class="tutorial-tip">V2.41 keeps all existing records as Internal Crew. Subcontractors use the same availability, conflict detection, job history, and scheduling rules as internal crew.</div>
@@ -133,7 +134,7 @@
       <h3>Find a Subcontractor</h3>
       <ol>
         <li>From an active job, open <strong>Find a Subcontractor</strong> in Field Assignment, or open it from Crew & Subcontractors.</li>
-        <li>Choose the trade, verify the location, set the radius, and use <strong>Balanced</strong> tolerance first.</li>
+        <li>Choose the trade — including <strong>Snow Plowing / Snow Removal</strong> — verify the location, set the radius, and use <strong>Balanced</strong> tolerance first.</li>
         <li>Review the nearby businesses and their Search Match score. This is a trade-fit search score, not a quality rating.</li>
         <li>Use <strong>Save & Assign to This Job</strong> when searching from a job, or save the business to the directory only.</li>
         <li>The saved business becomes a normal Subcontractor record and uses the existing schedule, conflict, availability, Field Update, and job-assignment workflows.</li>
@@ -401,9 +402,10 @@
       <ol>
         <li>Open the job and click <strong>Field Updates</strong>.</li>
         <li>Choose an assigned installer/subcontractor or enter a recipient manually.</li>
-        <li>Type the PM request and generate the secure field link.</li>
-        <li>The field person can respond with a note/photos or submit a <strong>Daily Progress Log</strong>.</li>
-        <li>Daily Progress keeps work dates, progress notes, optional crew/hours/issues, and photos in chronological job history.</li>
+        <li>Type the PM instructions/request, choose whether to share the site contact, and select only the Job/Project/Client documents the field person should be able to open.</li>
+        <li>Generate the secure <strong>Field Access Link</strong>. The field person can review shared drawings/instructions, respond with notes/photos, record a voice update, or submit a <strong>Daily Progress Log</strong>.</li>
+        <li>Voice updates keep the original audio with the job. When an OpenAI transcription API key is configured, DispatchProof also converts the recording to text automatically.</li>
+        <li>Daily Progress keeps work dates, progress notes, optional crew/hours/issues, photos, and voice evidence in chronological job history.</li>
         <li>Daily Progress is automatically available in the job's Client Report.</li>
       </ol>
       <div class="tutorial-tip">Field Updates are separate from Readiness and Installer Arrival. A field response never changes or unlocks mobilization evidence.</div>

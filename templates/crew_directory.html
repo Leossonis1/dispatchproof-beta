@@ -31,6 +31,12 @@
   <div class="crew-directory-stat crew-timeoff-stat">
     <span>Upcoming Unavailability</span><strong>{{ counts.upcoming_time_off }}</strong>
   </div>
+  <div class="crew-directory-stat crew-doc-warning-stat">
+    <span>Expired Sub Documents</span><strong>{{ counts.expired_sub_documents }}</strong>
+  </div>
+  <div class="crew-directory-stat crew-doc-warning-stat">
+    <span>Expiring Soon</span><strong>{{ counts.expiring_sub_documents }}</strong>
+  </div>
 </section>
 
 <section class="panel crew-add-panel" id="add-crew">
@@ -141,6 +147,12 @@
           </small>
           {% endif %}
           {% if member['source_address'] %}<small class="crew-source-location">{{ member['source_address'] }}</small>{% endif %}
+          {% if member['member_type'] == 'SUBCONTRACTOR' and (member['expired_document_count'] or member['expiring_document_count']) %}
+          <div class="subdoc-directory-alerts">
+            {% if member['expired_document_count'] %}<span class="status-pill subdoc-status-expired">{{ member['expired_document_count'] }} EXPIRED DOC{{ '' if member['expired_document_count'] == 1 else 'S' }}</span>{% endif %}
+            {% if member['expiring_document_count'] %}<span class="status-pill subdoc-status-warning">{{ member['expiring_document_count'] }} EXPIRING SOON</span>{% endif %}
+          </div>
+          {% endif %}
         </div>
       </div>
 

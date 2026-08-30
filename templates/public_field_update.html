@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Field Update · DispatchProof</title>
+  <title>Field Access · DispatchProof</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
   <style>:root{--brand-accent: {{ company_accent_color }};}</style>
@@ -18,14 +18,39 @@
     {% with messages = get_flashed_messages() %}{% if messages %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
 
     <section class="public-card">
-      <div class="eyebrow">Secure Field Update</div>
+      <div class="eyebrow">Secure Field Access</div>
       <h1>{{ field_link['job_name'] }}</h1>
       <p>{{ field_link['project_site'] or '' }}</p>
       <div class="date-chip">Scheduled installation: {{ field_link['installation_date']|pretty_date }}</div>
 
       <div class="why-box field-request-box">
-        <strong>Request from the Project Manager</strong>
+        <strong>Instructions / Request from the Project Manager</strong>
         <span>{{ field_link['request_note'] }}</span>
+      </div>
+
+      <div class="public-section field-job-info-section">
+        <h2>Job Information</h2>
+        <div class="field-job-info-grid">
+          {% if field_link['client_name'] %}<div><span>Client</span><strong>{{ field_link['client_name'] }}</strong></div>{% endif %}
+          {% if field_link['project_name'] %}<div><span>Project</span><strong>{{ field_link['project_name'] }}{% if field_link['project_number'] %} · {{ field_link['project_number'] }}{% endif %}</strong></div>{% endif %}
+          <div><span>Job / Site</span><strong>{{ field_link['project_site'] or field_link['job_name'] }}</strong></div>
+          <div><span>Installation Date</span><strong>{{ field_link['installation_date']|pretty_date }}</strong></div>
+          {% if field_link['share_site_contact'] %}
+          <div><span>Site Contact</span><strong>{{ field_link['contact_name'] or '—' }}</strong></div>
+          {% if field_link['contact_phone'] %}<div><span>Site Phone</span><strong><a href="tel:{{ field_link['contact_phone'] }}">{{ field_link['contact_phone'] }}</a></strong></div>{% endif %}
+          {% if field_link['contact_email'] %}<div><span>Site Email</span><strong><a href="mailto:{{ field_link['contact_email'] }}">{{ field_link['contact_email'] }}</a></strong></div>{% endif %}
+          {% endif %}
+        </div>
+        {% if shared_documents %}
+        <div class="field-shared-docs">
+          <h3>Documents & Drawings</h3>
+          {% for doc in shared_documents %}
+          <a class="field-shared-doc" target="_blank" rel="noopener" href="{{ url_for('public_field_document', token=field_link['token'], kind=doc.kind, document_id=doc['id']) }}">
+            <span><strong>{{ doc['original_filename'] }}</strong><small>{{ doc.scope_label }} · {{ doc['file_size']|pretty_bytes }}</small></span><b>Open ↗</b>
+          </a>
+          {% endfor %}
+        </div>
+        {% endif %}
       </div>
 
       <div class="public-section">
@@ -47,6 +72,16 @@
             <input class="photo-submit-input" type="file" name="photos" accept="image/*" multiple hidden>
             <div class="field-photo-status"><span class="field-photo-counter">No photos added yet</span></div>
             <div class="field-photo-preview" aria-live="polite"></div>
+          </div>
+          <div class="field-voice-recorder" data-voice-recorder>
+            <div class="field-voice-copy"><strong>Prefer to talk instead?</strong><span>Record a voice update from your phone. The original audio is saved for the PM{% if transcription_configured %} and DispatchProof will transcribe it automatically{% endif %}.</span></div>
+            <div class="field-voice-actions">
+              <button class="btn action-blue" type="button" data-voice-start>🎤 Record Voice Update</button>
+              <button class="btn danger" type="button" data-voice-stop hidden>■ Stop Recording</button>
+              <label class="btn ghost voice-file-label">Choose Audio File<input type="file" name="voice_audio" accept="audio/*,.webm,.m4a,.mp3,.wav,.ogg,.flac,.mp4" data-voice-file></label>
+            </div>
+            <div class="field-voice-status" data-voice-status>No voice recording attached.</div>
+            <audio controls data-voice-preview hidden></audio>
           </div>
           <button class="btn primary wide" type="submit">Submit Response</button>
         </form>
@@ -71,8 +106,8 @@
               <input type="number" min="0" max="24" step="0.25" name="hours_worked" inputmode="decimal" placeholder="8">
             </label>
           </div>
-          <label>Work Completed Today
-            <textarea required name="work_completed" rows="4" maxlength="4000" placeholder="Example: Set all lower cabinets and installed countertops in Rooms 101–104."></textarea>
+          <label>Work Completed Today <span class="muted">(type or record a voice update)</span>
+            <textarea name="work_completed" rows="4" maxlength="4000" placeholder="Example: Set all lower cabinets and installed countertops in Rooms 101–104."></textarea>
           </label>
           <label>Issues / Delays <span class="muted">(optional)</span>
             <textarea name="issues_delays" rows="3" maxlength="4000" placeholder="Example: Waiting on electrician at Room 104. No impact to other areas."></textarea>
@@ -89,7 +124,17 @@
             <div class="field-photo-status"><span class="field-photo-counter">0 of 1 required photos added</span></div>
             <div class="field-photo-preview" aria-live="polite"></div>
           </div>
-          <p class="legal-note">Daily progress is saved to this job with the work date, submission time, your name, notes, and photos.</p>
+          <div class="field-voice-recorder" data-voice-recorder>
+            <div class="field-voice-copy"><strong>Voice Daily Update</strong><span>Don’t want to type? Record what was completed, what is holding you up, and what the PM needs to know. The original recording stays with the job{% if transcription_configured %} and is transcribed automatically{% endif %}.</span></div>
+            <div class="field-voice-actions">
+              <button class="btn action-blue" type="button" data-voice-start>🎤 Record Daily Update</button>
+              <button class="btn danger" type="button" data-voice-stop hidden>■ Stop Recording</button>
+              <label class="btn ghost voice-file-label">Choose Audio File<input type="file" name="voice_audio" accept="audio/*,.webm,.m4a,.mp3,.wav,.ogg,.flac,.mp4" data-voice-file></label>
+            </div>
+            <div class="field-voice-status" data-voice-status>No voice recording attached.</div>
+            <audio controls data-voice-preview hidden></audio>
+          </div>
+          <p class="legal-note">Daily progress is saved to this job with the work date, submission time, your name, notes, photos, and any attached voice update.</p>
           <button class="btn primary wide" type="submit">Submit Daily Progress</button>
         </form>
       </div>
@@ -107,5 +152,61 @@ if (dailyForm) dailyForm.addEventListener('submit', (e) => {
   }
 });
 </script>
+
+<script>
+(function(){
+  document.querySelectorAll('[data-voice-recorder]').forEach((box) => {
+    const start = box.querySelector('[data-voice-start]');
+    const stop = box.querySelector('[data-voice-stop]');
+    const fileInput = box.querySelector('[data-voice-file]');
+    const status = box.querySelector('[data-voice-status]');
+    const preview = box.querySelector('[data-voice-preview]');
+    let recorder = null, stream = null, chunks = [], timer = null;
+
+    function showFile(file) {
+      if (!file) { status.textContent = 'No voice recording attached.'; preview.hidden = true; return; }
+      status.textContent = 'Voice update attached: ' + file.name;
+      try { preview.src = URL.createObjectURL(file); preview.hidden = false; } catch(e) {}
+    }
+    fileInput.addEventListener('change', () => showFile(fileInput.files && fileInput.files[0]));
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+      start.hidden = true;
+      status.textContent = 'Tap “Choose Audio File” to record or attach audio on this device.';
+      return;
+    }
+
+    start.addEventListener('click', async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({audio:true});
+        chunks = [];
+        const preferred = ['audio/webm;codecs=opus','audio/webm','audio/mp4'];
+        const mime = preferred.find(t => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t));
+        recorder = mime ? new MediaRecorder(stream, {mimeType:mime}) : new MediaRecorder(stream);
+        recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+        recorder.onstop = () => {
+          clearTimeout(timer);
+          const type = recorder.mimeType || 'audio/webm';
+          const ext = type.includes('mp4') ? 'm4a' : 'webm';
+          const blob = new Blob(chunks, {type});
+          const file = new File([blob], 'field-voice-' + Date.now() + '.' + ext, {type});
+          const dt = new DataTransfer(); dt.items.add(file); fileInput.files = dt.files;
+          showFile(file);
+          if (stream) stream.getTracks().forEach(t => t.stop());
+          start.hidden = false; stop.hidden = true;
+        };
+        recorder.start(1000);
+        start.hidden = true; stop.hidden = false;
+        status.textContent = 'Recording… tap Stop when finished. Maximum 5 minutes.';
+        timer = setTimeout(() => { if (recorder && recorder.state === 'recording') recorder.stop(); }, 300000);
+      } catch (err) {
+        status.textContent = 'Microphone access was not available. Use “Choose Audio File” instead.';
+      }
+    });
+    stop.addEventListener('click', () => { if (recorder && recorder.state === 'recording') recorder.stop(); });
+  });
+})();
+</script>
+
 </body>
 </html>

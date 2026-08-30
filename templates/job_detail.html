@@ -12,7 +12,7 @@
     </p>
   </div>
   <div class="page-head-actions">
-    <a class="btn action-blue" href="{{ url_for('field_updates', job_id=job['id']) }}">Field Updates</a>
+    <a class="btn action-blue" href="{{ url_for('field_updates', job_id=job['id']) }}">Field Access</a>
     <a class="btn action-blue" href="#job-documents">Job Documents</a>
     {% if job['status'] != 'COMPLETED' %}
     <a class="btn action-blue" href="{{ url_for('edit_job', job_id=job['id']) }}">Edit Job Details</a>
@@ -254,13 +254,13 @@
   <div class="panel-head">
     <div>
       <div class="eyebrow">Field Communication</div>
-      <h2>Field Updates & Daily Progress</h2>
-      <p>Send a secure note/photo request to an installer or subcontractor and collect date-organized daily progress photos without relying on text-message threads.</p>
+      <h2>Field Access & Daily Progress</h2>
+      <p>Give installers/subcontractors one secure mobile link for selected job documents, PM instructions, voice or typed updates, photos, and date-organized daily progress.</p>
     </div>
     <span class="secure-link-badge">FIELD LINK</span>
   </div>
   <div class="button-row">
-    <a class="btn primary" href="{{ url_for('field_updates', job_id=job['id']) }}">Open Field Updates</a>
+    <a class="btn primary" href="{{ url_for('field_updates', job_id=job['id']) }}">Open Field Access</a>
     {% if field_progress_count %}<span class="small muted">{{ field_progress_count }} field entr{{ 'y' if field_progress_count == 1 else 'ies' }} · {{ field_progress_day_count }} progress day{{ '' if field_progress_day_count == 1 else 's' }}</span>{% endif %}
   </div>
 </section>

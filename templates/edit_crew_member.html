@@ -89,6 +89,84 @@
 </section>
 {% endif %}
 
+{% if member['member_type'] == 'SUBCONTRACTOR' %}
+<section class="panel" id="subcontractor-documents">
+  <div class="section-heading-row">
+    <div>
+      <div class="eyebrow">Compliance & Agreements</div>
+      <h2>Subcontractor Documents</h2>
+      <p>Store insurance, W-9s, MSAs, licenses, safety paperwork, or other internal subcontractor records. Add an expiration date when DispatchProof should warn the team.</p>
+    </div>
+    <span class="internal-badge">Internal Only</span>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" action="{{ url_for('upload_subcontractor_document', crew_member_id=member['id']) }}" class="subdoc-upload-form">
+    <div class="form-grid two">
+      <label>Document Type
+        <input name="document_type" required list="subdocTypes" placeholder="Certificate of Insurance">
+        <datalist id="subdocTypes">
+          <option value="Certificate of Insurance">
+          <option value="W-9">
+          <option value="MSA / Master Service Agreement">
+          <option value="Contract / Subcontract Agreement">
+          <option value="License / Certification">
+          <option value="Safety Document">
+          <option value="Other">
+        </datalist>
+      </label>
+      <label>Document File
+        <input type="file" name="document" required accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.webp,.dwg,.dxf">
+      </label>
+      <label>Expiration Date <span class="muted">(optional)</span>
+        <input type="date" name="expiration_date">
+      </label>
+      <label>Warn Before Expiration
+        <select name="reminder_days">
+          <option value="7">7 days</option>
+          <option value="14">14 days</option>
+          <option value="30" selected>30 days</option>
+          <option value="60">60 days</option>
+          <option value="90">90 days</option>
+          <option value="120">120 days</option>
+        </select>
+      </label>
+      <label class="subdoc-required-check"><input type="checkbox" name="is_required" value="1"> <span>Required paperwork</span></label>
+      <label>Notes <span class="muted">(optional)</span>
+        <input name="notes" maxlength="2000" placeholder="Coverage limits, agreement notes, renewal contact...">
+      </label>
+    </div>
+    <div class="form-actions"><button class="btn primary" type="submit">Upload Subcontractor Document</button></div>
+  </form>
+
+  {% if sub_documents %}
+  <div class="subdoc-list">
+    {% for doc in sub_documents %}
+    <article class="subdoc-row subdoc-{{ doc.expiration_state.level }}">
+      <div class="subdoc-main">
+        <div class="subdoc-title-line">
+          <strong>{{ doc['document_type'] }}</strong>
+          {% if doc['is_required'] %}<span class="status-pill subdoc-required">REQUIRED</span>{% endif %}
+          <span class="status-pill subdoc-status-{{ doc.expiration_state.level }}">{{ doc.expiration_state.label }}</span>
+        </div>
+        <span>{{ doc['original_filename'] }} · {{ doc['file_size']|pretty_bytes }}</span>
+        {% if doc['expiration_date'] %}<small>Expires {{ doc['expiration_date']|pretty_date }} · warning starts {{ doc['reminder_days'] }} days before</small>{% endif %}
+        {% if doc['notes'] %}<small>{{ doc['notes'] }}</small>{% endif %}
+      </div>
+      <div class="subdoc-actions">
+        <a class="btn action-blue small-btn" target="_blank" rel="noopener" href="{{ url_for('download_subcontractor_document', crew_member_id=member['id'], document_id=doc['id']) }}">View / Download</a>
+        <form method="post" action="{{ url_for('delete_subcontractor_document', crew_member_id=member['id'], document_id=doc['id']) }}" onsubmit="return confirm('Delete {{ doc['document_type']|e }} from this subcontractor?');">
+          <button class="btn danger small-btn" type="submit">Delete</button>
+        </form>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">No subcontractor paperwork has been uploaded yet.</div>
+  {% endif %}
+</section>
+{% endif %}
+
 <section class="panel" id="availability">
   <div class="section-heading-row">
     <div>
