@@ -4154,7 +4154,7 @@ def build_field_update_email(job, field_link, public_url):
           <h2 style="margin-bottom:4px;">{esc_job}</h2>
           {f'<div style="color:#667085;margin-bottom:18px;">{esc_site}</div>' if esc_site else ''}
           <div style="background:#f8fafc;border-left:4px solid {brand_accent};padding:14px 16px;margin:18px 0;line-height:1.5;">
-            <strong>PM Request</strong><br>{esc_note}
+            <strong>What I Need From You</strong><br>{esc_note}
           </div>
           <p style="line-height:1.55;">Open the secure field link to review shared job information/documents, respond with a note or photos, submit daily progress, or record a voice update while this job is active. No DispatchProof account is required.</p>
           <div style="margin:26px 0;">
@@ -4718,7 +4718,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.46.5",
+        "app_version": "2.46.6",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -4927,7 +4927,7 @@ def create_workspace_export_archive():
         "export_format": 2,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.46.5",
+        "app_version": "2.46.6",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -6017,7 +6017,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.46.5",
+        "app_version": "2.46.6",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -6206,7 +6206,7 @@ def not_found(error):
 def health():
     return {
         "status": "ok",
-        "version": "2.46.5",
+        "version": "2.46.6",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
