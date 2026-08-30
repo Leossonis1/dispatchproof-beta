@@ -1,9 +1,6 @@
-# Deploy DispatchProof V2.46.2
+# Deploy DispatchProof V2.46.3
 
-Deploy over V2.46.1. No database migration or environment changes are required.
+Deploy the PATCH_ONLY archive over V2.46.2.
 
-## Quick QA
-1. Open a subcontractor record with an uploaded document.
-2. Click **View**. PDF/image/CSV/TXT should preview in DispatchProof.
-3. Click **Download** and confirm the file downloads.
-4. For DOCX/XLSX/DWG/DXF, View should show a preview-unavailable message and Download should still work.
+No database migration and no Render environment changes are required.
+After deployment, rerun the same Snow Plowing / Snow Removal search and confirm supply-store/equipment results are removed.
