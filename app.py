@@ -631,7 +631,7 @@ TRAINING_SCENARIOS = {
 }
 
 # V2.45.1: larger question banks. Each assigned/reset scenario gets a fresh shuffled order.
-TRAINING_EXTRA_QUESTIONS = {'new-pm-basics': [{'title': 'Follow up on no response', 'screen': 'Readiness Request · Store 118', 'facts': ['Installation: 2 days away', 'Readiness request: sent', 'Response: NO RESPONSE', 'Site contact email: available'], 'question': 'What is the best next step before assuming the site is ready?', 'correct': 'send_reminder', 'success': 'Correct. A readiness reminder keeps the request documented without treating silence as approval.', 'choices': [('send_reminder', 'Generate a readiness reminder', ''), ('assume_ready', 'Treat no response as ready', 'No response is not documented readiness.'), ('complete_job', 'Mark the job complete', 'The installation has not occurred.')]}, {'title': 'Use the right field link', 'screen': 'Job · Store 122', 'facts': ['Crew is already on site', 'PM needs a photo of completed casework', 'Arrival has already been submitted', 'Job is still active'], 'question': 'Which tool should the PM use to ask the field for the photo?', 'correct': 'field_update', 'success': 'Correct. A Field Update request is designed for PM-to-field questions and photo requests during the job.', 'choices': [('field_update', 'Send a Field Update request', ''), ('arrival_again', 'Create another Installer Arrival submission', 'Arrival is one-time for the current mobilization.'), ('readiness_again', 'Send a new readiness request', 'Readiness is a pre-dispatch workflow, not a mid-job photo request.')]}, {'title': 'Keep job documents private', 'screen': 'Documents · Store 130', 'facts': ['PM has a job-specific marked-up drawing', 'Other PMs should not see this private job', 'Client reference documents are company-wide'], 'question': 'Where should the marked-up drawing be stored?', 'correct': 'job_docs', 'success': "Correct. Job Documents follow the job's access rules, unlike company-wide Client/Project reference documents.", 'choices': [('job_docs', 'Job Documents', ''), ('client_docs', 'Client Documents', 'Client documents are company-wide internal references.'), ('email_only', 'Keep it only in email', 'That makes the job record incomplete and harder to hand off.')]}, {'title': 'Respect the completion gate', 'screen': 'Job Closeout · Store 135', 'facts': ['Readiness: JOB IS READY', 'Crew assigned: yes', 'Installer Arrival: not submitted', 'Work status: unknown'], 'question': 'Should the PM mark this job complete yet?', 'correct': 'wait_arrival', 'success': 'Correct. DispatchProof requires successful site-arrival proof before normal completion.', 'choices': [('wait_arrival', 'No — collect successful arrival proof first', ''), ('complete_anyway', 'Yes — readiness is enough', 'Readiness confirms pre-dispatch conditions; it does not prove the crew arrived successfully.'), ('delete_job', 'Delete the job instead', 'A missing arrival submission is not a reason to delete the job.')]}, {'title': 'Use a return visit correctly', 'screen': 'Job · Store 141', 'facts': ['Prior mobilization: archived', 'A return visit is required', 'Original job history should stay together'], 'question': 'What keeps the return trip tied to the same job history?', 'correct': 'next_mob', 'success': 'Correct. Start Return Visit / Next Mobilization creates a fresh attempt while preserving prior evidence.', 'choices': [('next_mob', 'Start Return Visit / Next Mobilization', ''), ('duplicate', 'Duplicate as New Job', 'That creates a separate job instead of preserving the mobilization history together.'), ('erase', 'Reset by deleting prior evidence', 'Prior evidence should be preserved, not erased.')]}], 'blocked-site': [{'title': 'Treat silence differently from a block', 'screen': 'Readiness Summary · Store 208', 'facts': ['Readiness request: sent yesterday', 'Response: NO RESPONSE', 'Crew departure: tomorrow morning'], 'question': 'What does NO RESPONSE prove about site readiness?', 'correct': 'proves_nothing', 'success': 'Correct. No response is neither a ready confirmation nor a documented blocking response.', 'choices': [('proves_nothing', 'Nothing yet — follow up for documented readiness', ''), ('ready', 'It proves the site is ready', 'Silence is not a readiness confirmation.'), ('failed', 'It is already a failed mobilization', 'The crew has not mobilized.')]}, {'title': 'Stop on any required NO', 'screen': 'Readiness Summary · Store 211', 'facts': ['Flooring: YES', 'Power: YES', 'Install area cleared: NO', 'Status: BLOCKED'], 'question': 'What should the PM do with the planned dispatch?', 'correct': 'hold', 'success': 'Correct. One required NO is enough to keep the readiness gate blocked until corrected and re-confirmed.', 'choices': [('hold', 'Hold dispatch and resolve the blocked item', ''), ('majority', 'Dispatch because most items are YES', 'Readiness is not a majority vote when a required condition is blocked.'), ('ignore', 'Ignore the response', 'That defeats the pre-mobilization control.')]}, {'title': 'Do not call it a failed mobilization too early', 'screen': 'Office Status · Store 214', 'facts': ['Readiness: BLOCKED', 'Crew has not left the shop', 'No travel or field hours have been incurred'], 'question': 'Which record fits this situation?', 'correct': 'blocked_readiness', 'success': 'Correct. Keep it as blocked readiness and follow up; failed mobilization is for a crew that actually arrived to a site that was not ready.', 'choices': [('blocked_readiness', 'Blocked readiness / pre-dispatch follow-up', ''), ('failed_mob', 'Failed Mobilization report', 'No mobilization has happened yet.'), ('arrival_ready', 'Successful Installer Arrival', 'The crew has not arrived.')]}, {'title': 'Preserve the original proof', 'screen': 'Readiness History · Store 218', 'facts': ['First response: Power NO', 'Site later corrected power', 'Historical proof should remain auditable'], 'question': 'How should the corrected condition be documented?', 'correct': 'fresh_response', 'success': 'Correct. Preserve the first response and collect a fresh readiness submission showing the corrected condition.', 'choices': [('fresh_response', 'Collect a new readiness response', ''), ('edit_history', 'Edit the original NO into YES', 'That destroys the historical record.'), ('phone_note', 'Rely only on a phone note', 'A phone note is weaker than a fresh documented readiness response.')]}, {'title': 'Release the crew only after the gate clears', 'screen': 'Updated Readiness · Store 221', 'facts': ['Previous blocker: corrected', 'Fresh response: all required items YES', 'Status: JOB IS READY', 'Crew schedule: still valid'], 'question': 'What should happen now?', 'correct': 'release', 'success': 'Correct. With fresh documented readiness and a valid crew plan, the PM can proceed with dispatch.', 'choices': [('release', 'Proceed with planned dispatch', ''), ('permanent_hold', 'Keep the job blocked permanently', 'The blocking condition has been corrected and documented.'), ('new_job', 'Create a duplicate job', 'The current job record already contains the readiness history.')]}], 'crew-conflict': [{'title': 'Understand deactivated crew', 'screen': 'Crew Directory', 'facts': ['Installer: Sam Reed', 'Status: INACTIVE', 'Past job history: retained', 'New assignment picker: Sam absent'], 'question': 'Why is Sam missing from new job assignments?', 'correct': 'inactive', 'success': 'Correct. Deactivated crew stay in historical records but are removed from new assignments.', 'choices': [('inactive', 'Because Sam is inactive', ''), ('deleted_history', "Because all of Sam's history was deleted", 'Deactivation preserves historical references.'), ('private', 'Because Sam belongs to another PM', 'Crew Directory is company-wide.')]}, {'title': 'Handle a subcontractor conflict', 'screen': 'Schedule · Crew Conflicts', 'facts': ['Subcontractor: Apex Install', 'Assigned to your job on Oct 6', 'Conflict warning: assigned elsewhere on Oct 6'], 'question': 'Does a subcontractor conflict need the same scheduling attention as internal crew?', 'correct': 'same_rules', 'success': 'Correct. Internal crew and subcontractors use the same scheduling/conflict protection.', 'choices': [('same_rules', 'Yes — resolve the conflict before relying on that assignment', ''), ('subs_ignore', 'No — subcontractors cannot conflict', 'Subcontractors participate in the same scheduling system.'), ('double_book', 'Keep both assignments and hope one cancels', 'That leaves both jobs exposed.')]}, {'title': "Protect another PM's private job", 'screen': 'Conflict Warning', 'facts': ['Your job: Store 415', 'Conflict: Taylor assigned to another private job', 'Other job name: hidden'], 'question': 'What information should the PM use to resolve the conflict?', 'correct': 'use_warning', 'success': "Correct. The conflict warning is enough to take action without exposing another PM's private job details.", 'choices': [('use_warning', 'Use the warning and reassign/coordinate crew', ''), ('reveal_job', 'Find a way to reveal the private job name', 'Private workspace details should remain private.'), ('ignore_privacy', 'Ask the trainee to disable privacy', 'Privacy is a product rule, not a conflict workaround.')]}, {'title': 'Match named crew to planned crew size', 'screen': 'Field Assignment · Store 420', 'facts': ['Planned crew size: 4', 'Named internal crew: 2', 'Named subcontractors: 1', 'No conflicts'], 'question': 'What staffing condition remains?', 'correct': 'one_short', 'success': 'Correct. Three named field resources against a planned crew size of four leaves one open position.', 'choices': [('one_short', 'The job is still one person short', ''), ('fully_staffed', 'The job is fully staffed', 'Two internal plus one subcontractor equals three, not four.'), ('conflict', 'There must be a schedule conflict', 'A staffing gap and a schedule conflict are different checks.')]}, {'title': 'Use availability before assigning', 'screen': 'Crew Directory · Availability', 'facts': ['Install date: Oct 9', 'Several active crew members', 'One person already booked', 'Availability tools are available'], 'question': 'What is the efficient way to choose the replacement?', 'correct': 'check_availability', 'success': 'Correct. Check availability/conflicts before assigning so the fix does not create a second problem.', 'choices': [('check_availability', 'Use crew availability/conflict information before assigning', ''), ('random', 'Pick any active name at random', 'Active does not necessarily mean available on that date.'), ('notes', 'Type a name in job notes only', 'Notes do not create a real schedulable assignment.')]}], 'failed-mobilization': [{'title': 'Separate a blocked site from a failed trip', 'screen': 'Readiness · Store 515', 'facts': ['Required item: NO', 'Crew has not departed', 'PM caught the issue before mobilization'], 'question': 'Should the PM create a Failed Mobilization report?', 'correct': 'no_failed', 'success': 'Correct. Catching the issue before dispatch is a readiness block, not a failed mobilization.', 'choices': [('no_failed', 'No — keep it as blocked readiness', ''), ('yes_failed', 'Yes — every blocked site is a failed mobilization', 'Failed mobilization requires an actual mobilization/arrival.'), ('arrival', 'Submit a successful arrival', 'The crew is not on site.')]}, {'title': 'Capture the cost of a failed trip', 'screen': 'Failed Mobilization · Store 519', 'facts': ['Crew arrived', 'Site not ready', '3 installers affected', '2.5 hours lost', 'Arrival photos available'], 'question': 'What should the failed-mobilization record include?', 'correct': 'document_impact', 'success': 'Correct. Record the crew impact, lost hours, issue details, and supporting arrival evidence.', 'choices': [('document_impact', 'Crew size, hours lost, issue details, notes/photos', ''), ('only_title', 'Only the job name', 'That would not document the operational impact.'), ('delete_arrival', 'Delete the arrival evidence', 'Arrival proof supports the failed-mobilization record.')]}, {'title': 'Create a fresh return attempt', 'screen': 'Mobilization History · Store 522', 'facts': ['Attempt #1: failed and archived', 'Return date: scheduled', 'New arrival proof will be needed'], 'question': 'What should the PM start for the return trip?', 'correct': 'return_visit', 'success': 'Correct. Start Return Visit / Next Mobilization to preserve Attempt #1 and create fresh readiness/arrival evidence for the return.', 'choices': [('return_visit', 'Start Return Visit / Next Mobilization', ''), ('reuse_arrival', 'Reuse the old arrival submission', 'Each mobilization needs its own current arrival evidence.'), ('delete_attempt', 'Delete Attempt #1', 'The failed attempt is part of the job history.')]}, {'title': 'Show the full story at closeout', 'screen': 'Client Report · Store 522', 'facts': ['Attempt #1: failed mobilization', 'Attempt #2: site ready and completed', 'Both attempts are preserved'], 'question': 'What should the final report communicate?', 'correct': 'history', 'success': 'Correct. The report should distinguish the successful current/last attempt while preserving prior mobilization history.', 'choices': [('history', 'Show the successful closeout plus prior mobilization history', ''), ('hide_failure', 'Erase the failed attempt from history', 'That removes useful documented proof.'), ('failure_only', 'Show only the failed attempt', 'That omits the successful return and completion.')]}], 'multi-day-progress': [{'title': 'Use Daily Progress for completed work', 'screen': 'Field Link · Store 610', 'facts': ['Day 2 work is complete', 'Crew needs to report what was installed', 'Photos are available', 'Client report should reflect progress'], 'question': 'Which submission type fits this update?', 'correct': 'daily_progress', 'success': 'Correct. Daily Progress is the structured record for work completed by date and can flow into the Client Report.', 'choices': [('daily_progress', 'Submit a Daily Progress Log', ''), ('arrival', 'Submit another Installer Arrival', 'Arrival is not a daily production log.'), ('readiness', 'Submit a readiness response', 'Readiness belongs before dispatch.')]}, {'title': 'Keep PM requests separate from client progress', 'screen': 'Field Updates · Store 614', 'facts': ['PM asks: “Send a photo of damaged wall.”', 'Field person replies with note and photo', 'This is troubleshooting, not daily production'], 'question': 'How is this different from a Daily Progress Log?', 'correct': 'internal_request', 'success': 'Correct. Field Update responses support PM communication and remain separate from the structured Daily Progress evidence used in client reporting.', 'choices': [('internal_request', 'It is a PM-request response, not a Daily Progress entry', ''), ('same_record', 'They are exactly the same record', 'DispatchProof keeps the two workflows separate.'), ('client_auto', 'Every PM request automatically becomes client-facing', 'PM-request responses remain internal unless handled separately.')]}, {'title': 'Reuse the active field link', 'screen': 'Field Update Link · Store 618', 'facts': ['Secure field link: active', 'Day 1 update: submitted', 'Day 2 update is now needed', 'Job remains active'], 'question': 'Does the PM need to generate a brand-new field link for every daily update?', 'correct': 'reuse_link', 'success': 'Correct. The active field link can be reused for repeated field responses and Daily Progress submissions while the job is active.', 'choices': [('reuse_link', 'No — reuse the active secure field link', ''), ('new_every_day', 'Yes — a new token is required every day', 'The current field link is designed for repeated use while active.'), ('arrival_token', 'Use the Installer Arrival token instead', 'Arrival and field-update links serve different purposes.')]}, {'title': 'Know what happens at completion', 'screen': 'Completed Job · Store 621', 'facts': ['Job marked complete', 'Field links were active before closeout', 'PM later reopens the job'], 'question': 'What happens to the old field links?', 'correct': 'stay_closed', 'success': 'Correct. Completing the job closes active field links, and reopening the job does not silently reactivate the old links.', 'choices': [('stay_closed', 'They stay closed; create a new link if needed', ''), ('reactivate', 'They automatically reactivate on reopen', 'Reopening does not reactivate old field links.'), ('public_forever', 'They remain public forever', 'Field links are controlled and can be closed/revoked.')]}], 'subcontractor-sourcing': [{'title': 'Start with a focused search', 'screen': 'Find a Subcontractor · Store 708', 'facts': ['Trade needed: Electrical', 'Job location: Dayton, OH', 'Local coverage preferred', 'Radius control available'], 'question': 'What search setup gives the most useful first pass?', 'correct': 'focused', 'success': 'Correct. Start with the needed trade and job location/radius, then widen only if the results are too thin.', 'choices': [('focused', 'Search the required trade around the job location', ''), ('nationwide', 'Search the entire country first', 'That creates noise when the need is local.'), ('wrong_trade', 'Search an unrelated trade', 'The trade filter should match the work needed.')]}, {'title': 'Treat search results as leads, not endorsements', 'screen': 'Subcontractor Search Results', 'facts': ['Several possible matches returned', 'Ratings/contact data may be available', 'DispatchProof did not interview or qualify them'], 'question': 'What responsibility still belongs to the PM/company?', 'correct': 'vet', 'success': 'Correct. Search results are leads; the company still verifies fit, qualifications, scope, insurance, pricing, and availability as appropriate.', 'choices': [('vet', 'Vet the subcontractor before relying on them', ''), ('guaranteed', 'Assume every result is qualified by DispatchProof', 'Search results are not a qualification guarantee.'), ('auto_hire', 'Automatically hire the top result', 'Ranking alone is not a hiring decision.')]}, {'title': 'Save without assigning when appropriate', 'screen': 'Find a Subcontractor · Results', 'facts': ['Candidate looks useful for future work', 'Current job is already staffed', 'Crew Directory can store the contact'], 'question': 'Which action makes sense?', 'correct': 'save_only', 'success': 'Correct. Save to Directory Only keeps the subcontractor reusable without adding them to a job that does not need them.', 'choices': [('save_only', 'Save to Directory Only', ''), ('assign_anyway', 'Save & Assign to This Job', 'That would create an unnecessary assignment.'), ('discard', 'Do nothing and lose the lead', 'Saving the useful contact avoids repeating the search later.')]}, {'title': 'Assign through the normal field workflow', 'screen': 'Crew Directory · Subcontractor', 'facts': ['Apex Electric is saved', 'Type: SUB', 'Current job needs one electrician', 'Install date is known'], 'question': 'How should the saved subcontractor be put on the job?', 'correct': 'field_assignment', 'success': 'Correct. Saved subcontractors are assigned through the same Field Assignment workflow used for crew.', 'choices': [('field_assignment', 'Assign the subcontractor through Field Assignment', ''), ('notes_only', 'Mention them only in notes', 'Notes do not create a schedulable assignment.'), ('new_user', 'Create a DispatchProof office-user account for them', 'A field subcontractor does not need to become an office user just to be assigned.')]}, {'title': 'Check availability after saving', 'screen': 'Schedule · Store 716', 'facts': ['Subcontractor saved and assigned', 'Same subcontractor appears on another job that day', 'Conflict warning displayed'], 'question': 'What should the PM do?', 'correct': 'resolve_sub_conflict', 'success': 'Correct. Subcontractors participate in the same scheduling/conflict system, so resolve the overlap before dispatch.', 'choices': [('resolve_sub_conflict', 'Resolve the conflict or choose another resource', ''), ('ignore_sub', 'Ignore it because the resource is a subcontractor', 'Subcontractors can be double-booked just like internal crew.'), ('delete_directory', 'Delete the subcontractor from the directory', 'A schedule conflict does not require deleting a valid contact.')]}], 'rollout-route': [{'title': 'Correct a route address safely', 'screen': 'Route Optimization · Rollout West', 'facts': ['Job record address: incomplete', 'Route planner offers an editable Route Address field', 'PM only needs a routing correction'], 'question': 'What happens if the PM corrects the Route Address here?', 'correct': 'route_only', 'success': 'Correct. The correction is used for routing and does not overwrite the underlying job record.', 'choices': [('route_only', 'It changes routing only, not the job itself', ''), ('job_overwrite', 'It permanently rewrites the job address', 'The route-address correction is intentionally non-destructive.'), ('delete_job', 'It requires recreating the job', 'A route correction does not require a new job.')]}, {'title': 'Plan a round trip', 'screen': 'Route Optimization · Crew Start', 'facts': ['Crew starts at the warehouse', 'Crew must return to the same warehouse after the last stop', 'Return to Starting Location option is available'], 'question': 'Which setting matches this plan?', 'correct': 'return_on', 'success': 'Correct. Turn on Return to Starting Location when the final leg back to the crew start should be included.', 'choices': [('return_on', 'Enable Return to Starting Location', ''), ('return_off', 'Leave it off', 'Leaving it off ends the route at the final job.'), ('fake_stop', 'Create a sample job for the warehouse', 'The dedicated return option handles this cleanly.')]}, {'title': 'Adjust the optimized sequence', 'screen': 'Saved Route · Rollout West', 'facts': ['Automatic route: calculated', 'PM knows Stop 4 must happen before Stop 3', 'Move Up / Move Down controls available'], 'question': 'What should the PM do after changing the stop order?', 'correct': 'recalculate', 'success': 'Correct. Move the stop, then Save Manual Order & Recalculate so mileage, time, and the route line match the chosen sequence.', 'choices': [('recalculate', 'Save Manual Order & Recalculate', ''), ('assume_totals', 'Move the stop but keep the old mileage/time', 'The totals need to be recalculated for the new sequence.'), ('optimize_again', 'Run automatic optimization and expect the manual order to stay', 'Automatic optimization may choose a different sequence.')]}, {'title': 'Keep completed work out of the active route', 'screen': 'Route Optimization · Project Jobs', 'facts': ['Project contains 18 jobs', '2 jobs are already completed', 'Route selector shows active jobs'], 'question': 'Should completed jobs be included in the new active route plan?', 'correct': 'exclude_completed', 'success': 'Correct. Completed jobs are excluded so the route focuses on work that still needs mobilization.', 'choices': [('exclude_completed', 'No — route the remaining active jobs', ''), ('include_completed', 'Yes — completed jobs should be routed again', 'Completed work should not add unnecessary stops.'), ('reopen_all', 'Reopen every completed job first', 'There is no reason to reopen completed work just for routing.')]}]}
+TRAINING_EXTRA_QUESTIONS = {'new-pm-basics': [{'title': 'Follow up on no response', 'screen': 'Readiness Request · Store 118', 'facts': ['Installation: 2 days away', 'Readiness request: sent', 'Response: NO RESPONSE', 'Site contact email: available'], 'question': 'What is the best next step before assuming the site is ready?', 'correct': 'send_reminder', 'success': 'Correct. A readiness reminder keeps the request documented without treating silence as approval.', 'choices': [('send_reminder', 'Generate a readiness reminder', ''), ('assume_ready', 'Treat no response as ready', 'No response is not documented readiness.'), ('complete_job', 'Mark the job complete', 'The installation has not occurred.')]}, {'title': 'Use the right field link', 'screen': 'Job · Store 122', 'facts': ['Crew is already on site', 'PM needs a photo of completed casework', 'Arrival has already been submitted', 'Job is still active'], 'question': 'Which tool should the PM use to ask the field for the photo?', 'correct': 'field_update', 'success': 'Correct. A Field Update request is designed for PM-to-field questions and photo requests during the job.', 'choices': [('field_update', 'Send a Field Update request', ''), ('arrival_again', 'Create another Installer Arrival submission', 'Arrival is one-time for the current mobilization.'), ('readiness_again', 'Send a new readiness request', 'Readiness is a pre-dispatch workflow, not a mid-job photo request.')]}, {'title': 'Keep job documents private', 'screen': 'Documents · Store 130', 'facts': ['PM has a job-specific marked-up drawing', 'Other PMs should not see this private job', 'Client/Project reference documents follow workspace access'], 'question': 'Where should the marked-up drawing be stored?', 'correct': 'job_docs', 'success': "Correct. Job Documents stay with the job, and Client/Project reference documents are visible only inside workspaces the user can access.", 'choices': [('job_docs', 'Job Documents', ''), ('client_docs', 'Client Documents', 'Client documents are only visible when the user has access to that client workspace.'), ('email_only', 'Keep it only in email', 'That makes the job record incomplete and harder to hand off.')]}, {'title': 'Respect the completion gate', 'screen': 'Job Closeout · Store 135', 'facts': ['Readiness: JOB IS READY', 'Crew assigned: yes', 'Installer Arrival: not submitted', 'Work status: unknown'], 'question': 'Should the PM mark this job complete yet?', 'correct': 'wait_arrival', 'success': 'Correct. DispatchProof requires successful site-arrival proof before normal completion.', 'choices': [('wait_arrival', 'No — collect successful arrival proof first', ''), ('complete_anyway', 'Yes — readiness is enough', 'Readiness confirms pre-dispatch conditions; it does not prove the crew arrived successfully.'), ('delete_job', 'Delete the job instead', 'A missing arrival submission is not a reason to delete the job.')]}, {'title': 'Use a return visit correctly', 'screen': 'Job · Store 141', 'facts': ['Prior mobilization: archived', 'A return visit is required', 'Original job history should stay together'], 'question': 'What keeps the return trip tied to the same job history?', 'correct': 'next_mob', 'success': 'Correct. Start Return Visit / Next Mobilization creates a fresh attempt while preserving prior evidence.', 'choices': [('next_mob', 'Start Return Visit / Next Mobilization', ''), ('duplicate', 'Duplicate as New Job', 'That creates a separate job instead of preserving the mobilization history together.'), ('erase', 'Reset by deleting prior evidence', 'Prior evidence should be preserved, not erased.')]}], 'blocked-site': [{'title': 'Treat silence differently from a block', 'screen': 'Readiness Summary · Store 208', 'facts': ['Readiness request: sent yesterday', 'Response: NO RESPONSE', 'Crew departure: tomorrow morning'], 'question': 'What does NO RESPONSE prove about site readiness?', 'correct': 'proves_nothing', 'success': 'Correct. No response is neither a ready confirmation nor a documented blocking response.', 'choices': [('proves_nothing', 'Nothing yet — follow up for documented readiness', ''), ('ready', 'It proves the site is ready', 'Silence is not a readiness confirmation.'), ('failed', 'It is already a failed mobilization', 'The crew has not mobilized.')]}, {'title': 'Stop on any required NO', 'screen': 'Readiness Summary · Store 211', 'facts': ['Flooring: YES', 'Power: YES', 'Install area cleared: NO', 'Status: BLOCKED'], 'question': 'What should the PM do with the planned dispatch?', 'correct': 'hold', 'success': 'Correct. One required NO is enough to keep the readiness gate blocked until corrected and re-confirmed.', 'choices': [('hold', 'Hold dispatch and resolve the blocked item', ''), ('majority', 'Dispatch because most items are YES', 'Readiness is not a majority vote when a required condition is blocked.'), ('ignore', 'Ignore the response', 'That defeats the pre-mobilization control.')]}, {'title': 'Do not call it a failed mobilization too early', 'screen': 'Office Status · Store 214', 'facts': ['Readiness: BLOCKED', 'Crew has not left the shop', 'No travel or field hours have been incurred'], 'question': 'Which record fits this situation?', 'correct': 'blocked_readiness', 'success': 'Correct. Keep it as blocked readiness and follow up; failed mobilization is for a crew that actually arrived to a site that was not ready.', 'choices': [('blocked_readiness', 'Blocked readiness / pre-dispatch follow-up', ''), ('failed_mob', 'Failed Mobilization report', 'No mobilization has happened yet.'), ('arrival_ready', 'Successful Installer Arrival', 'The crew has not arrived.')]}, {'title': 'Preserve the original proof', 'screen': 'Readiness History · Store 218', 'facts': ['First response: Power NO', 'Site later corrected power', 'Historical proof should remain auditable'], 'question': 'How should the corrected condition be documented?', 'correct': 'fresh_response', 'success': 'Correct. Preserve the first response and collect a fresh readiness submission showing the corrected condition.', 'choices': [('fresh_response', 'Collect a new readiness response', ''), ('edit_history', 'Edit the original NO into YES', 'That destroys the historical record.'), ('phone_note', 'Rely only on a phone note', 'A phone note is weaker than a fresh documented readiness response.')]}, {'title': 'Release the crew only after the gate clears', 'screen': 'Updated Readiness · Store 221', 'facts': ['Previous blocker: corrected', 'Fresh response: all required items YES', 'Status: JOB IS READY', 'Crew schedule: still valid'], 'question': 'What should happen now?', 'correct': 'release', 'success': 'Correct. With fresh documented readiness and a valid crew plan, the PM can proceed with dispatch.', 'choices': [('release', 'Proceed with planned dispatch', ''), ('permanent_hold', 'Keep the job blocked permanently', 'The blocking condition has been corrected and documented.'), ('new_job', 'Create a duplicate job', 'The current job record already contains the readiness history.')]}], 'crew-conflict': [{'title': 'Understand deactivated crew', 'screen': 'Crew Directory', 'facts': ['Installer: Sam Reed', 'Status: INACTIVE', 'Past job history: retained', 'New assignment picker: Sam absent'], 'question': 'Why is Sam missing from new job assignments?', 'correct': 'inactive', 'success': 'Correct. Deactivated crew stay in historical records but are removed from new assignments.', 'choices': [('inactive', 'Because Sam is inactive', ''), ('deleted_history', "Because all of Sam's history was deleted", 'Deactivation preserves historical references.'), ('private', 'Because Sam belongs to another PM', 'Crew Directory is company-wide.')]}, {'title': 'Handle a subcontractor conflict', 'screen': 'Schedule · Crew Conflicts', 'facts': ['Subcontractor: Apex Install', 'Assigned to your job on Oct 6', 'Conflict warning: assigned elsewhere on Oct 6'], 'question': 'Does a subcontractor conflict need the same scheduling attention as internal crew?', 'correct': 'same_rules', 'success': 'Correct. Internal crew and subcontractors use the same scheduling/conflict protection.', 'choices': [('same_rules', 'Yes — resolve the conflict before relying on that assignment', ''), ('subs_ignore', 'No — subcontractors cannot conflict', 'Subcontractors participate in the same scheduling system.'), ('double_book', 'Keep both assignments and hope one cancels', 'That leaves both jobs exposed.')]}, {'title': "Protect another PM's private job", 'screen': 'Conflict Warning', 'facts': ['Your job: Store 415', 'Conflict: Taylor assigned to another private job', 'Other job name: hidden'], 'question': 'What information should the PM use to resolve the conflict?', 'correct': 'use_warning', 'success': "Correct. The conflict warning is enough to take action without exposing another PM's private job details.", 'choices': [('use_warning', 'Use the warning and reassign/coordinate crew', ''), ('reveal_job', 'Find a way to reveal the private job name', 'Private workspace details should remain private.'), ('ignore_privacy', 'Ask the trainee to disable privacy', 'Privacy is a product rule, not a conflict workaround.')]}, {'title': 'Match named crew to planned crew size', 'screen': 'Field Assignment · Store 420', 'facts': ['Planned crew size: 4', 'Named internal crew: 2', 'Named subcontractors: 1', 'No conflicts'], 'question': 'What staffing condition remains?', 'correct': 'one_short', 'success': 'Correct. Three named field resources against a planned crew size of four leaves one open position.', 'choices': [('one_short', 'The job is still one person short', ''), ('fully_staffed', 'The job is fully staffed', 'Two internal plus one subcontractor equals three, not four.'), ('conflict', 'There must be a schedule conflict', 'A staffing gap and a schedule conflict are different checks.')]}, {'title': 'Use availability before assigning', 'screen': 'Crew Directory · Availability', 'facts': ['Install date: Oct 9', 'Several active crew members', 'One person already booked', 'Availability tools are available'], 'question': 'What is the efficient way to choose the replacement?', 'correct': 'check_availability', 'success': 'Correct. Check availability/conflicts before assigning so the fix does not create a second problem.', 'choices': [('check_availability', 'Use crew availability/conflict information before assigning', ''), ('random', 'Pick any active name at random', 'Active does not necessarily mean available on that date.'), ('notes', 'Type a name in job notes only', 'Notes do not create a real schedulable assignment.')]}], 'failed-mobilization': [{'title': 'Separate a blocked site from a failed trip', 'screen': 'Readiness · Store 515', 'facts': ['Required item: NO', 'Crew has not departed', 'PM caught the issue before mobilization'], 'question': 'Should the PM create a Failed Mobilization report?', 'correct': 'no_failed', 'success': 'Correct. Catching the issue before dispatch is a readiness block, not a failed mobilization.', 'choices': [('no_failed', 'No — keep it as blocked readiness', ''), ('yes_failed', 'Yes — every blocked site is a failed mobilization', 'Failed mobilization requires an actual mobilization/arrival.'), ('arrival', 'Submit a successful arrival', 'The crew is not on site.')]}, {'title': 'Capture the cost of a failed trip', 'screen': 'Failed Mobilization · Store 519', 'facts': ['Crew arrived', 'Site not ready', '3 installers affected', '2.5 hours lost', 'Arrival photos available'], 'question': 'What should the failed-mobilization record include?', 'correct': 'document_impact', 'success': 'Correct. Record the crew impact, lost hours, issue details, and supporting arrival evidence.', 'choices': [('document_impact', 'Crew size, hours lost, issue details, notes/photos', ''), ('only_title', 'Only the job name', 'That would not document the operational impact.'), ('delete_arrival', 'Delete the arrival evidence', 'Arrival proof supports the failed-mobilization record.')]}, {'title': 'Create a fresh return attempt', 'screen': 'Mobilization History · Store 522', 'facts': ['Attempt #1: failed and archived', 'Return date: scheduled', 'New arrival proof will be needed'], 'question': 'What should the PM start for the return trip?', 'correct': 'return_visit', 'success': 'Correct. Start Return Visit / Next Mobilization to preserve Attempt #1 and create fresh readiness/arrival evidence for the return.', 'choices': [('return_visit', 'Start Return Visit / Next Mobilization', ''), ('reuse_arrival', 'Reuse the old arrival submission', 'Each mobilization needs its own current arrival evidence.'), ('delete_attempt', 'Delete Attempt #1', 'The failed attempt is part of the job history.')]}, {'title': 'Show the full story at closeout', 'screen': 'Client Report · Store 522', 'facts': ['Attempt #1: failed mobilization', 'Attempt #2: site ready and completed', 'Both attempts are preserved'], 'question': 'What should the final report communicate?', 'correct': 'history', 'success': 'Correct. The report should distinguish the successful current/last attempt while preserving prior mobilization history.', 'choices': [('history', 'Show the successful closeout plus prior mobilization history', ''), ('hide_failure', 'Erase the failed attempt from history', 'That removes useful documented proof.'), ('failure_only', 'Show only the failed attempt', 'That omits the successful return and completion.')]}], 'multi-day-progress': [{'title': 'Use Daily Progress for completed work', 'screen': 'Field Link · Store 610', 'facts': ['Day 2 work is complete', 'Crew needs to report what was installed', 'Photos are available', 'Client report should reflect progress'], 'question': 'Which submission type fits this update?', 'correct': 'daily_progress', 'success': 'Correct. Daily Progress is the structured record for work completed by date and can flow into the Client Report.', 'choices': [('daily_progress', 'Submit a Daily Progress Log', ''), ('arrival', 'Submit another Installer Arrival', 'Arrival is not a daily production log.'), ('readiness', 'Submit a readiness response', 'Readiness belongs before dispatch.')]}, {'title': 'Keep PM requests separate from client progress', 'screen': 'Field Updates · Store 614', 'facts': ['PM asks: “Send a photo of damaged wall.”', 'Field person replies with note and photo', 'This is troubleshooting, not daily production'], 'question': 'How is this different from a Daily Progress Log?', 'correct': 'internal_request', 'success': 'Correct. Field Update responses support PM communication and remain separate from the structured Daily Progress evidence used in client reporting.', 'choices': [('internal_request', 'It is a PM-request response, not a Daily Progress entry', ''), ('same_record', 'They are exactly the same record', 'DispatchProof keeps the two workflows separate.'), ('client_auto', 'Every PM request automatically becomes client-facing', 'PM-request responses remain internal unless handled separately.')]}, {'title': 'Reuse the active field link', 'screen': 'Field Update Link · Store 618', 'facts': ['Secure field link: active', 'Day 1 update: submitted', 'Day 2 update is now needed', 'Job remains active'], 'question': 'Does the PM need to generate a brand-new field link for every daily update?', 'correct': 'reuse_link', 'success': 'Correct. The active field link can be reused for repeated field responses and Daily Progress submissions while the job is active.', 'choices': [('reuse_link', 'No — reuse the active secure field link', ''), ('new_every_day', 'Yes — a new token is required every day', 'The current field link is designed for repeated use while active.'), ('arrival_token', 'Use the Installer Arrival token instead', 'Arrival and field-update links serve different purposes.')]}, {'title': 'Know what happens at completion', 'screen': 'Completed Job · Store 621', 'facts': ['Job marked complete', 'Field links were active before closeout', 'PM later reopens the job'], 'question': 'What happens to the old field links?', 'correct': 'stay_closed', 'success': 'Correct. Completing the job closes active field links, and reopening the job does not silently reactivate the old links.', 'choices': [('stay_closed', 'They stay closed; create a new link if needed', ''), ('reactivate', 'They automatically reactivate on reopen', 'Reopening does not reactivate old field links.'), ('public_forever', 'They remain public forever', 'Field links are controlled and can be closed/revoked.')]}], 'subcontractor-sourcing': [{'title': 'Start with a focused search', 'screen': 'Find a Subcontractor · Store 708', 'facts': ['Trade needed: Electrical', 'Job location: Dayton, OH', 'Local coverage preferred', 'Radius control available'], 'question': 'What search setup gives the most useful first pass?', 'correct': 'focused', 'success': 'Correct. Start with the needed trade and job location/radius, then widen only if the results are too thin.', 'choices': [('focused', 'Search the required trade around the job location', ''), ('nationwide', 'Search the entire country first', 'That creates noise when the need is local.'), ('wrong_trade', 'Search an unrelated trade', 'The trade filter should match the work needed.')]}, {'title': 'Treat search results as leads, not endorsements', 'screen': 'Subcontractor Search Results', 'facts': ['Several possible matches returned', 'Ratings/contact data may be available', 'DispatchProof did not interview or qualify them'], 'question': 'What responsibility still belongs to the PM/company?', 'correct': 'vet', 'success': 'Correct. Search results are leads; the company still verifies fit, qualifications, scope, insurance, pricing, and availability as appropriate.', 'choices': [('vet', 'Vet the subcontractor before relying on them', ''), ('guaranteed', 'Assume every result is qualified by DispatchProof', 'Search results are not a qualification guarantee.'), ('auto_hire', 'Automatically hire the top result', 'Ranking alone is not a hiring decision.')]}, {'title': 'Save without assigning when appropriate', 'screen': 'Find a Subcontractor · Results', 'facts': ['Candidate looks useful for future work', 'Current job is already staffed', 'Crew Directory can store the contact'], 'question': 'Which action makes sense?', 'correct': 'save_only', 'success': 'Correct. Save to Directory Only keeps the subcontractor reusable without adding them to a job that does not need them.', 'choices': [('save_only', 'Save to Directory Only', ''), ('assign_anyway', 'Save & Assign to This Job', 'That would create an unnecessary assignment.'), ('discard', 'Do nothing and lose the lead', 'Saving the useful contact avoids repeating the search later.')]}, {'title': 'Assign through the normal field workflow', 'screen': 'Crew Directory · Subcontractor', 'facts': ['Apex Electric is saved', 'Type: SUB', 'Current job needs one electrician', 'Install date is known'], 'question': 'How should the saved subcontractor be put on the job?', 'correct': 'field_assignment', 'success': 'Correct. Saved subcontractors are assigned through the same Field Assignment workflow used for crew.', 'choices': [('field_assignment', 'Assign the subcontractor through Field Assignment', ''), ('notes_only', 'Mention them only in notes', 'Notes do not create a schedulable assignment.'), ('new_user', 'Create a DispatchProof office-user account for them', 'A field subcontractor does not need to become an office user just to be assigned.')]}, {'title': 'Check availability after saving', 'screen': 'Schedule · Store 716', 'facts': ['Subcontractor saved and assigned', 'Same subcontractor appears on another job that day', 'Conflict warning displayed'], 'question': 'What should the PM do?', 'correct': 'resolve_sub_conflict', 'success': 'Correct. Subcontractors participate in the same scheduling/conflict system, so resolve the overlap before dispatch.', 'choices': [('resolve_sub_conflict', 'Resolve the conflict or choose another resource', ''), ('ignore_sub', 'Ignore it because the resource is a subcontractor', 'Subcontractors can be double-booked just like internal crew.'), ('delete_directory', 'Delete the subcontractor from the directory', 'A schedule conflict does not require deleting a valid contact.')]}], 'rollout-route': [{'title': 'Correct a route address safely', 'screen': 'Route Optimization · Rollout West', 'facts': ['Job record address: incomplete', 'Route planner offers an editable Route Address field', 'PM only needs a routing correction'], 'question': 'What happens if the PM corrects the Route Address here?', 'correct': 'route_only', 'success': 'Correct. The correction is used for routing and does not overwrite the underlying job record.', 'choices': [('route_only', 'It changes routing only, not the job itself', ''), ('job_overwrite', 'It permanently rewrites the job address', 'The route-address correction is intentionally non-destructive.'), ('delete_job', 'It requires recreating the job', 'A route correction does not require a new job.')]}, {'title': 'Plan a round trip', 'screen': 'Route Optimization · Crew Start', 'facts': ['Crew starts at the warehouse', 'Crew must return to the same warehouse after the last stop', 'Return to Starting Location option is available'], 'question': 'Which setting matches this plan?', 'correct': 'return_on', 'success': 'Correct. Turn on Return to Starting Location when the final leg back to the crew start should be included.', 'choices': [('return_on', 'Enable Return to Starting Location', ''), ('return_off', 'Leave it off', 'Leaving it off ends the route at the final job.'), ('fake_stop', 'Create a sample job for the warehouse', 'The dedicated return option handles this cleanly.')]}, {'title': 'Adjust the optimized sequence', 'screen': 'Saved Route · Rollout West', 'facts': ['Automatic route: calculated', 'PM knows Stop 4 must happen before Stop 3', 'Move Up / Move Down controls available'], 'question': 'What should the PM do after changing the stop order?', 'correct': 'recalculate', 'success': 'Correct. Move the stop, then Save Manual Order & Recalculate so mileage, time, and the route line match the chosen sequence.', 'choices': [('recalculate', 'Save Manual Order & Recalculate', ''), ('assume_totals', 'Move the stop but keep the old mileage/time', 'The totals need to be recalculated for the new sequence.'), ('optimize_again', 'Run automatic optimization and expect the manual order to stay', 'Automatic optimization may choose a different sequence.')]}, {'title': 'Keep completed work out of the active route', 'screen': 'Route Optimization · Project Jobs', 'facts': ['Project contains 18 jobs', '2 jobs are already completed', 'Route selector shows active jobs'], 'question': 'Should completed jobs be included in the new active route plan?', 'correct': 'exclude_completed', 'success': 'Correct. Completed jobs are excluded so the route focuses on work that still needs mobilization.', 'choices': [('exclude_completed', 'No — route the remaining active jobs', ''), ('include_completed', 'Yes — completed jobs should be routed again', 'Completed work should not add unnecessary stops.'), ('reopen_all', 'Reopen every completed job first', 'There is no reason to reopen completed work just for routing.')]}]}
 for _training_key, _extra_steps in TRAINING_EXTRA_QUESTIONS.items():
     TRAINING_SCENARIOS[_training_key]["steps"].extend(_extra_steps)
     TRAINING_SCENARIOS[_training_key]["estimated_minutes"] = 8
@@ -682,6 +682,15 @@ def ensure_columns(db):
     for name, sql_type in needed.items():
         if name not in existing:
             db.execute(f"ALTER TABLE jobs ADD COLUMN {name} {sql_type}")
+
+    # V2.46.9: Client and Project workspaces follow the same PM privacy model
+    # as jobs. Existing records intentionally keep owner_user_id NULL; they
+    # become visible to an Operator only through an authorized job, while
+    # Owner/Admin continues to see everything.
+    for table_name in ("clients", "projects"):
+        table_columns = {row["name"] for row in db.execute(f"PRAGMA table_info({table_name})").fetchall()}
+        if "owner_user_id" not in table_columns:
+            db.execute(f"ALTER TABLE {table_name} ADD COLUMN owner_user_id INTEGER")
 
     # V2.41: crew records can represent either internal crew or a subcontractor.
     # Existing records stay Internal Crew so upgrades do not change scheduling behavior.
@@ -2440,6 +2449,7 @@ def init_db():
             contact_email TEXT,
             contact_phone TEXT,
             notes TEXT,
+            owner_user_id INTEGER,
             created_at TEXT NOT NULL,
             updated_at TEXT
         );
@@ -2452,6 +2462,7 @@ def init_db():
             project_number TEXT,
             location TEXT,
             notes TEXT,
+            owner_user_id INTEGER,
             created_at TEXT NOT NULL,
             updated_at TEXT,
             FOREIGN KEY(client_id) REFERENCES clients(id)
@@ -2578,6 +2589,14 @@ def init_db():
         db.execute("""
             CREATE INDEX IF NOT EXISTS idx_projects_client_id
             ON projects(client_id, name)
+        """)
+        db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_clients_owner_user_id
+            ON clients(owner_user_id, name)
+        """)
+        db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_projects_owner_user_id
+            ON projects(owner_user_id, client_id, name)
         """)
         db.execute("""
             CREATE INDEX IF NOT EXISTS idx_jobs_client_id
@@ -4402,6 +4421,80 @@ def user_can_access_job(db, job_id):
     return bool(row)
 
 
+def project_visibility_sql(alias="p"):
+    """Return a SQL predicate + params for Projects visible to this user."""
+    if current_user_is_admin():
+        return "1=1", []
+
+    user_id = current_user_id()
+    if not user_id:
+        return "0=1", []
+
+    alias = re.sub(r"[^A-Za-z0-9_]", "", alias or "p") or "p"
+    job_clause, job_params = job_visibility_sql("vpj")
+    clause = f"""(
+        {alias}.owner_user_id = ?
+        OR EXISTS (
+            SELECT 1
+            FROM jobs vpj
+            WHERE vpj.project_id = {alias}.id
+              AND ({job_clause})
+        )
+    )"""
+    return clause, [user_id, *job_params]
+
+
+def client_visibility_sql(alias="c"):
+    """Return a SQL predicate + params for Clients visible to this user."""
+    if current_user_is_admin():
+        return "1=1", []
+
+    user_id = current_user_id()
+    if not user_id:
+        return "0=1", []
+
+    alias = re.sub(r"[^A-Za-z0-9_]", "", alias or "c") or "c"
+    job_clause, job_params = job_visibility_sql("vcj")
+    clause = f"""(
+        {alias}.owner_user_id = ?
+        OR EXISTS (
+            SELECT 1
+            FROM projects vcp
+            WHERE vcp.client_id = {alias}.id
+              AND vcp.owner_user_id = ?
+        )
+        OR EXISTS (
+            SELECT 1
+            FROM jobs vcj
+            WHERE vcj.client_id = {alias}.id
+              AND ({job_clause})
+        )
+    )"""
+    return clause, [user_id, user_id, *job_params]
+
+
+def user_can_access_project(db, project_id):
+    if current_user_is_admin():
+        return True
+    clause, params = project_visibility_sql("p")
+    row = db.execute(
+        f"SELECT 1 FROM projects p WHERE p.id = ? AND ({clause})",
+        (project_id, *params),
+    ).fetchone()
+    return bool(row)
+
+
+def user_can_access_client(db, client_id):
+    if current_user_is_admin():
+        return True
+    clause, params = client_visibility_sql("c")
+    row = db.execute(
+        f"SELECT 1 FROM clients c WHERE c.id = ? AND ({clause})",
+        (client_id, *params),
+    ).fetchone()
+    return bool(row)
+
+
 def user_team_options(db, include_disabled=False):
     """Teams the current user may choose for a job."""
     if current_user_is_admin():
@@ -4462,17 +4555,21 @@ def normalize_optional_id(value):
     return int(value) if value.isdigit() and int(value) > 0 else None
 
 def get_clients_and_projects(db):
-    clients = db.execute("""
-        SELECT *
-        FROM clients
-        ORDER BY LOWER(name), id
-    """).fetchall()
-    projects = db.execute("""
+    client_clause, client_params = client_visibility_sql("c")
+    project_clause, project_params = project_visibility_sql("p")
+    clients = db.execute(f"""
+        SELECT c.*
+        FROM clients c
+        WHERE ({client_clause})
+        ORDER BY LOWER(c.name), c.id
+    """, client_params).fetchall()
+    projects = db.execute(f"""
         SELECT p.*, c.name AS client_name
         FROM projects p
         JOIN clients c ON c.id = p.client_id
+        WHERE ({project_clause})
         ORDER BY LOWER(c.name), LOWER(p.name), p.id
-    """).fetchall()
+    """, project_params).fetchall()
     return clients, projects
 
 def resolve_job_assignment(db, raw_client_id, raw_project_id):
@@ -4484,8 +4581,10 @@ def resolve_job_assignment(db, raw_client_id, raw_project_id):
             "SELECT id, client_id FROM projects WHERE id = ?",
             (project_id,),
         ).fetchone()
-        if not project:
-            return None, None, "The selected project could not be found."
+        if not project or not user_can_access_project(db, project_id):
+            return None, None, "The selected project is not available in your workspace."
+        if not user_can_access_client(db, project["client_id"]):
+            return None, None, "The selected client is not available in your workspace."
         return project["client_id"], project["id"], None
 
     if client_id:
@@ -4493,8 +4592,8 @@ def resolve_job_assignment(db, raw_client_id, raw_project_id):
             "SELECT id FROM clients WHERE id = ?",
             (client_id,),
         ).fetchone()
-        if not client:
-            return None, None, "The selected client could not be found."
+        if not client or not user_can_access_client(db, client_id):
+            return None, None, "The selected client is not available in your workspace."
 
     return client_id, None, None
 
@@ -4719,7 +4818,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.46.8",
+        "app_version": "2.46.9",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -4778,11 +4877,9 @@ def _csv_text(rows):
 def build_workspace_export_data(db):
     """Build an Operator-safe workspace snapshot.
 
-    Private job data remains limited by job_visibility_sql(). Shared setup masters
-    (Clients, Projects, Crew and their shared documents) are included because
-    Operators can already access and maintain those company-wide records in the UI.
-    This lets a workspace backup preserve useful setup progress even before a job
-    has successfully been created.
+    Jobs, Clients, Projects, and their documents are limited to the current
+    Operator's authorized workspace. Crew/Subcontractors remain shared company
+    resources, so those directory records and subcontractor paperwork are included.
     """
     visibility_clause, visibility_params = job_visibility_sql("j")
     jobs = _rows_as_dicts(db.execute(f"""
@@ -4814,15 +4911,39 @@ def build_workspace_export_data(db):
             tuple(ids),
         ).fetchall())
 
-    # Clients, Projects and Crew are shared company setup records in DispatchProof.
-    # Including them does not expose another PM's private jobs, and it protects work
-    # done before the first job exists.
-    clients = _rows_as_dicts(db.execute("SELECT * FROM clients ORDER BY LOWER(name), id").fetchall())
-    projects = _rows_as_dicts(db.execute("SELECT * FROM projects ORDER BY client_id, LOWER(name), id").fetchall())
+    client_clause, client_params = client_visibility_sql("c")
+    project_clause, project_params = project_visibility_sql("p")
+    clients = _rows_as_dicts(db.execute(f"""
+        SELECT c.* FROM clients c
+        WHERE ({client_clause})
+        ORDER BY LOWER(c.name), c.id
+    """, client_params).fetchall())
+    projects = _rows_as_dicts(db.execute(f"""
+        SELECT p.* FROM projects p
+        WHERE ({project_clause})
+        ORDER BY p.client_id, LOWER(p.name), p.id
+    """, project_params).fetchall())
+    client_ids = [row["id"] for row in clients]
+    project_ids = [row["id"] for row in projects]
     crew_members = _rows_as_dicts(db.execute("SELECT * FROM crew_members ORDER BY LOWER(name), id").fetchall())
     crew_unavailability = _rows_as_dicts(db.execute("SELECT * FROM crew_unavailability ORDER BY crew_member_id, start_date, id").fetchall())
-    client_documents = _rows_as_dicts(db.execute("SELECT * FROM client_documents ORDER BY client_id, created_at, id").fetchall())
-    project_documents = _rows_as_dicts(db.execute("SELECT * FROM project_documents ORDER BY project_id, created_at, id").fetchall())
+
+    if client_ids:
+        marks = ",".join("?" for _ in client_ids)
+        client_documents = _rows_as_dicts(db.execute(
+            f"SELECT * FROM client_documents WHERE client_id IN ({marks}) ORDER BY client_id, created_at, id",
+            tuple(client_ids),
+        ).fetchall())
+    else:
+        client_documents = []
+    if project_ids:
+        marks = ",".join("?" for _ in project_ids)
+        project_documents = _rows_as_dicts(db.execute(
+            f"SELECT * FROM project_documents WHERE project_id IN ({marks}) ORDER BY project_id, created_at, id",
+            tuple(project_ids),
+        ).fetchall())
+    else:
+        project_documents = []
     subcontractor_documents = _rows_as_dicts(db.execute("SELECT * FROM subcontractor_documents ORDER BY crew_member_id, expiration_date, id").fetchall())
 
     data = {
@@ -4928,13 +5049,13 @@ def create_workspace_export_archive():
         "export_format": 2,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.46.8",
+        "app_version": "2.46.9",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
             "role": current_user_role(),
         },
-        "scope_note": "Contains this account's authorized jobs plus shared Clients, Projects, Crew, and shared setup documents visible to Operators. It never includes another PM's private jobs. Full-system restore remains Owner/Administrator-only.",
+        "scope_note": "Contains this account's authorized Jobs, Clients, Projects, and related documents, plus the shared Crew/Subcontractor directory. It never includes another PM's private client/project/job workspace. Full-system restore remains Owner/Administrator-only.",
         "counts": {key: len(rows) for key, rows in data.items()},
     }
 
@@ -4946,8 +5067,8 @@ def create_workspace_export_archive():
             "DispatchProof Workspace Export\n"
             "==============================\n\n"
             "This ZIP is a personal/team workspace backup for reference and file recovery.\n"
-            "It contains jobs this account was authorized to access plus shared Clients, Projects, Crew, subcontractor paperwork, and setup documents visible to Operators.\n"
-            "It does not contain other PMs' private jobs, user passwords, or the full company database.\n"
+            "It contains Jobs, Clients, Projects, and related documents this account is authorized to access, plus the shared Crew/Subcontractor directory and subcontractor paperwork.\n"
+            "It does not contain other PMs' private client/project/job workspaces, user passwords, or the full company database.\n"
             "Only Owner/Administrator full-system backups can be restored over DispatchProof.\n\n"
             "Store this ZIP securely because it may contain customer contact information, job history, and site evidence.\n"
         )
@@ -5267,8 +5388,8 @@ def restore_workspace_archive(zip_path):
                     client_map[old_id] = existing["id"]
                 else:
                     client_map[old_id] = _restore_insert_row(
-                        db, "clients", row, exclude={"id", "report_token"},
-                        overrides={"report_token": secrets.token_urlsafe(24), "created_at": row.get("created_at") or now_iso(), "updated_at": now_iso()},
+                        db, "clients", row, exclude={"id", "report_token", "owner_user_id"},
+                        overrides={"report_token": secrets.token_urlsafe(24), "owner_user_id": user_id, "created_at": row.get("created_at") or now_iso(), "updated_at": now_iso()},
                     )
                     stats["clients"] += 1
 
@@ -5288,8 +5409,8 @@ def restore_workspace_archive(zip_path):
                     project_map[old_id] = existing["id"]
                 else:
                     project_map[old_id] = _restore_insert_row(
-                        db, "projects", row, exclude={"id", "report_token", "client_id"},
-                        overrides={"report_token": secrets.token_urlsafe(24), "client_id": live_client_id, "created_at": row.get("created_at") or now_iso(), "updated_at": now_iso()},
+                        db, "projects", row, exclude={"id", "report_token", "client_id", "owner_user_id"},
+                        overrides={"report_token": secrets.token_urlsafe(24), "client_id": live_client_id, "owner_user_id": user_id, "created_at": row.get("created_at") or now_iso(), "updated_at": now_iso()},
                     )
                     stats["projects"] += 1
 
@@ -6076,7 +6197,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.46.8",
+        "app_version": "2.46.9",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -6157,6 +6278,23 @@ def ensure_db():
             if not exists:
                 abort(404)
             if not user_can_access_job(db, job_id):
+                abort(404)
+
+    # V2.46.9: Client/Project URLs are protected just like job URLs. Operators
+    # can open them only when they own that workspace or have an authorized job
+    # under it. Owner/Admin remains company-wide.
+    client_id = (request.view_args or {}).get("client_id") if request.view_args else None
+    if client_id and request.endpoint not in public_endpoints:
+        with get_db() as db:
+            exists = db.execute("SELECT 1 FROM clients WHERE id = ?", (client_id,)).fetchone()
+            if not exists or not user_can_access_client(db, client_id):
+                abort(404)
+
+    project_id = (request.view_args or {}).get("project_id") if request.view_args else None
+    if project_id and request.endpoint not in public_endpoints:
+        with get_db() as db:
+            exists = db.execute("SELECT 1 FROM projects WHERE id = ?", (project_id,)).fetchone()
+            if not exists or not user_can_access_project(db, project_id):
                 abort(404)
 
     # Do not make static/public requests responsible for sending reminders.
@@ -6265,7 +6403,7 @@ def not_found(error):
 def health():
     return {
         "status": "ok",
-        "version": "2.46.8",
+        "version": "2.46.9",
         "data_dir": str(DATA_DIR),
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -8246,6 +8384,8 @@ def project_portfolio_asset(token, job_id, filename):
 def clients():
     with get_db() as db:
         visibility_clause, visibility_params = job_visibility_sql("j")
+        client_clause, client_params = client_visibility_sql("c")
+        project_clause, project_params = project_visibility_sql("p")
         rows = db.execute(f"""
             SELECT c.*,
                    COUNT(DISTINCT p.id) AS project_count,
@@ -8253,11 +8393,12 @@ def clients():
                    COUNT(DISTINCT CASE WHEN j.status = 'COMPLETED' THEN j.id END) AS completed_job_count,
                    COUNT(DISTINCT CASE WHEN j.status != 'COMPLETED' THEN j.id END) AS active_job_count
             FROM clients c
-            LEFT JOIN projects p ON p.client_id = c.id
+            LEFT JOIN projects p ON p.client_id = c.id AND ({project_clause})
             LEFT JOIN jobs j ON j.client_id = c.id AND ({visibility_clause})
+            WHERE ({client_clause})
             GROUP BY c.id
             ORDER BY LOWER(c.name), c.id
-        """, visibility_params).fetchall()
+        """, (*project_params, *visibility_params, *client_params)).fetchall()
     return render_template("clients.html", clients=rows)
 
 
@@ -8280,17 +8421,20 @@ def new_client():
                 "SELECT id FROM clients WHERE name = ? COLLATE NOCASE", (name,)
             ).fetchone()
             if duplicate:
-                flash("A client with that name already exists.")
-                return redirect(url_for("client_detail", client_id=duplicate["id"]))
+                if user_can_access_client(db, duplicate["id"]):
+                    flash("A client with that name already exists.")
+                    return redirect(url_for("client_detail", client_id=duplicate["id"]))
+                flash("A client with that name already exists outside your workspace. Ask an administrator to grant access through an assigned job/team.")
+                return redirect(url_for("clients"))
 
             cur = db.execute("""
                 INSERT INTO clients (
                     report_token, name, contact_name, contact_email, contact_phone,
-                    notes, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    notes, owner_user_id, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 report_token, name, contact_name, contact_email, contact_phone,
-                notes, now_iso(), now_iso()
+                notes, current_user_id(), now_iso(), now_iso()
             ))
             client_id = cur.lastrowid
             record_activity(db, "Client Added", f"Added client {name}.")
@@ -8340,6 +8484,7 @@ def client_detail(client_id):
             flash(f"Client {name} updated.")
             return redirect(url_for("client_detail", client_id=client_id))
 
+        project_clause, project_params = project_visibility_sql("p")
         projects = db.execute(f"""
             SELECT p.*,
                    COUNT(DISTINCT j.id) AS job_count,
@@ -8348,9 +8493,10 @@ def client_detail(client_id):
             FROM projects p
             LEFT JOIN jobs j ON j.project_id = p.id AND ({visibility_clause})
             WHERE p.client_id = ?
+              AND ({project_clause})
             GROUP BY p.id
             ORDER BY LOWER(p.name), p.id
-        """, (*visibility_params, client_id)).fetchall()
+        """, (*visibility_params, client_id, *project_params)).fetchall()
 
         jobs = db.execute(f"""
             SELECT j.*, p.name AS project_name
@@ -8403,17 +8549,20 @@ def new_project(client_id):
                 WHERE client_id = ? AND name = ? COLLATE NOCASE
             """, (client_id, name)).fetchone()
             if duplicate:
-                flash("That client already has a project with this name.")
-                return redirect(url_for("project_detail", project_id=duplicate["id"]))
+                if user_can_access_project(db, duplicate["id"]):
+                    flash("That client already has a project with this name.")
+                    return redirect(url_for("project_detail", project_id=duplicate["id"]))
+                flash("That project already exists outside your workspace. Ask an administrator to grant access through an assigned job/team.")
+                return redirect(url_for("client_detail", client_id=client_id))
 
             cur = db.execute("""
                 INSERT INTO projects (
                     report_token, client_id, name, project_number, location,
-                    notes, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    notes, owner_user_id, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 report_token, client_id, name, project_number, location,
-                notes, now_iso(), now_iso()
+                notes, current_user_id(), now_iso(), now_iso()
             ))
             project_id = cur.lastrowid
             record_activity(db, "Project Added", f"Added project {name} for client {client['name']}.")
@@ -8953,7 +9102,9 @@ def document_center():
         # Keep these as three simple queries instead of one compound UNION.
         # This is more tolerant of restored/upgraded beta databases and avoids
         # SQLite compound-query edge cases while preserving the same result set.
-        client_rows = db.execute("""
+        client_clause, client_params = client_visibility_sql("c")
+        project_clause, project_params = project_visibility_sql("p")
+        client_rows = db.execute(f"""
             SELECT
                 'CLIENT' AS document_scope,
                 cd.id AS document_id,
@@ -8970,9 +9121,10 @@ def document_center():
                 NULL AS project_site
             FROM client_documents cd
             JOIN clients c ON c.id = cd.client_id
-        """).fetchall()
+            WHERE ({client_clause})
+        """, client_params).fetchall()
 
-        project_rows = db.execute("""
+        project_rows = db.execute(f"""
             SELECT
                 'PROJECT' AS document_scope,
                 pd.id AS document_id,
@@ -8990,7 +9142,8 @@ def document_center():
             FROM project_documents pd
             JOIN projects p ON p.id = pd.project_id
             JOIN clients c ON c.id = p.client_id
-        """).fetchall()
+            WHERE ({project_clause})
+        """, project_params).fetchall()
 
         job_rows = db.execute(f"""
             SELECT
@@ -9110,7 +9263,7 @@ def document_center_upload():
                 "SELECT * FROM clients WHERE id = ?",
                 (client_id,),
             ).fetchone()
-            if not parent:
+            if not parent or not user_can_access_client(db, client_id):
                 abort(404)
 
             stored_filename = f"clientdoc_{client_id}_{secrets.token_hex(8)}_{original_filename}"
@@ -9169,7 +9322,7 @@ def document_center_upload():
                 JOIN clients c ON c.id = p.client_id
                 WHERE p.id = ?
             """, (project_id,)).fetchone()
-            if not parent:
+            if not parent or not user_can_access_project(db, project_id):
                 abort(404)
 
             stored_filename = f"projdoc_{project_id}_{secrets.token_hex(8)}_{original_filename}"
