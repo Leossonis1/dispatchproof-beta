@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Integrations · DispatchProof{% endblock %}
+{% block content %}
+<div class="page-head integrations-page-head">
+  <div>
+    <div class="eyebrow">Settings</div>
+    <h1>Integrations</h1>
+    <p>Connect DispatchProof to the back-office systems your company already uses without turning field execution into another ERP project.</p>
+  </div>
+</div>
+
+<section class="panel integrations-hero">
+  <div class="integration-hero-copy">
+    <div class="eyebrow">The DispatchProof Role</div>
+    <h2>Your back office tracks the job. DispatchProof runs it.</h2>
+    <p>DispatchProof is built for the operational handoff between the office and the jobsite: deployment, crews, subcontractors, readiness, documents, field updates, conflicts, and completion.</p>
+  </div>
+  <div class="integration-flow" aria-label="Back office to DispatchProof and back office workflow">
+    <span>Back Office</span>
+    <b>→</b>
+    <span class="integration-flow-primary">DispatchProof</span>
+    <b>→</b>
+    <span>Back Office</span>
+  </div>
+  <div class="integration-boundary-grid">
+    <div>
+      <strong>Keep in your back office</strong>
+      <span>Estimating · POs · Accounting · Invoicing · Financial closeout</span>
+    </div>
+    <div>
+      <strong>Run in DispatchProof</strong>
+      <span>Deployment · PM execution · Crews · Subs · Readiness · Documents · Completion</span>
+    </div>
+  </div>
+</section>
+
+<div class="settings-grid integrations-grid">
+  <section class="panel integration-card">
+    <div class="panel-head">
+      <div>
+        <div class="integration-card-title-row">
+          <h2>Quickbase</h2>
+          <span class="badge review">Private Beta Planned</span>
+        </div>
+        <p>A future companion connector for companies that already use Quickbase as a back-office system of record.</p>
+      </div>
+    </div>
+
+    <div class="integration-status-note">
+      <strong>Not active in this release</strong>
+      <p>No Quickbase connection, credentials, or live synchronization is enabled in V2.46.11.</p>
+    </div>
+
+    <h3>Planned handoff</h3>
+    <ol class="integration-step-list">
+      <li><strong>Bring in the job essentials.</strong><span>Job number, client/project/site, address, PM, install date, and operational scope/notes.</span></li>
+      <li><strong>Run field execution in DispatchProof.</strong><span>Use the same workflows already in the app for readiness, crews, subcontractors, documents, conflicts, and completion.</span></li>
+      <li><strong>Return a clean completion signal.</strong><span>Send completion status/date and other agreed closeout fields back to the originating record.</span></li>
+    </ol>
+
+    <div class="integration-safety-note">
+      <strong>No credentials needed yet.</strong>
+      <span>Do not enter or store Quickbase API tokens until a future connector has been tested against a real Quickbase account.</span>
+    </div>
+  </section>
+
+  <section class="panel integration-card">
+    <div class="panel-head">
+      <div>
+        <h2>DispatchProof Works Standalone</h2>
+        <p>Quickbase—or any other ERP/back-office platform—is optional.</p>
+      </div>
+    </div>
+
+    <div class="integration-standalone-copy">
+      <p>If your company does not use Quickbase, nothing changes. DispatchProof remains a complete field-execution workspace for the operational side of installation work.</p>
+      <p>The integration framework is intentionally separate from everyday job execution so future connectors do not add clutter for companies that do not need them.</p>
+    </div>
+
+    <div class="integration-future-box">
+      <div class="eyebrow">Future Connectors</div>
+      <h3>Built to stay vendor-neutral.</h3>
+      <p>The same handoff model can support other back-office systems later when real customer demand justifies a connector.</p>
+    </div>
+  </section>
+</div>
+
+<section class="panel integrations-principle-panel">
+  <div>
+    <strong>Product boundary</strong>
+    <p>DispatchProof will not try to become your accounting package, estimating system, or ERP. Integrations should move operational job information in and completion information out—not recreate the mothership inside the field tool.</p>
+  </div>
+</section>
+
+<p class="third-party-note">Quickbase is a third-party product. DispatchProof is not affiliated with or endorsed by Quickbase.</p>
+{% endblock %}

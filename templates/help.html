@@ -31,6 +31,20 @@
   </div>
 </section>
 
+<section class="panel product-positioning-panel">
+  <div class="panel-head">
+    <div>
+      <div class="eyebrow">Where DispatchProof Fits</div>
+      <h2>Your back office tracks the job. DispatchProof runs it.</h2>
+      <p>DispatchProof is the field-execution layer for deployment, crews, subcontractors, readiness, documents, conflicts, and job completion. It is designed to work on its own or beside the accounting, estimating, ERP, or business system your company already uses.</p>
+    </div>
+  </div>
+  <div class="integration-flow compact-flow" aria-label="Typical DispatchProof workflow">
+    <span>Back Office</span><b>→</b><span>DispatchProof</span><b>→</b><span>Back Office</span>
+  </div>
+  <p class="muted integration-boundary-copy">Keep estimating, purchase orders, invoicing, accounting, and financial closeout in the system where they already belong. DispatchProof owns the operational work in the middle.</p>
+</section>
+
 <div class="help-jump-grid">
   <a href="#getting-started">Getting Started</a>
   <a href="#everyday-workflows">Everyday Workflows</a>
@@ -42,6 +56,7 @@
   <a href="#account-access">My Account</a>
   {% if current_user_is_admin %}
   <a href="#admin-tools">Admin Tools</a>
+  <a href="#integrations">Integrations</a>
   <a href="#backup-restore">Backup & Restore</a>
   {% endif %}
 </div>
@@ -816,6 +831,30 @@
   </div>
 </section>
 
+<section id="integrations" class="help-section admin-help-section" data-help-section>
+  <div class="help-section-head">
+    <div>
+      <div class="eyebrow">Administrator</div>
+      <h2>Integrations</h2>
+      <p>Understand how DispatchProof can sit beside the systems your company already uses.</p>
+    </div>
+  </div>
+
+  <div class="tutorial-grid">
+    <article class="tutorial-card" data-help-card data-search="integrations quickbase back office ERP accounting companion field execution private beta" id="help-integrations">
+      <div class="tutorial-number">48</div>
+      <h3>Use the Integrations Page</h3>
+      <ol>
+        <li>Open <strong>Integrations</strong> from the administrator navigation.</li>
+        <li>Review the field-execution handoff model: back-office system → DispatchProof → back-office system.</li>
+        <li>Quickbase is currently shown as a <strong>planned private-beta connector</strong>; no Quickbase connection is active in this release.</li>
+        <li>No external back-office system is required. DispatchProof continues to work as a standalone field-execution platform.</li>
+      </ol>
+      <div class="tutorial-tip">Do not enter API tokens or credentials until a connector is explicitly enabled in a future tested release.</div>
+    </article>
+  </div>
+</section>
+
 <section id="backup-restore" class="help-section admin-help-section" data-help-section>
   <div class="help-section-head">
     <div>
@@ -827,7 +866,7 @@
 
   <div class="tutorial-grid">
     <article class="tutorial-card important-tutorial" data-help-card data-search="backup reminder stale overdue dashboard back up now three seven days">
-      <div class="tutorial-number">48</div>
+      <div class="tutorial-number">49</div>
       <h3>Respond to a Backup Reminder</h3>
       <ol>
         <li>When the Dashboard shows <strong>Backup recommended</strong> or <strong>Backup overdue</strong>, click <strong>Back Up Now</strong>.</li>
@@ -840,7 +879,7 @@
     </article>
 
     <article class="tutorial-card important-tutorial" data-help-card data-search="backup download zip before deploy save live data restore">
-      <div class="tutorial-number">49</div>
+      <div class="tutorial-number">50</div>
       <h3>Download a Backup</h3>
       <ol>
         <li>Open <strong>Backup & Restore</strong>.</li>
@@ -852,7 +891,7 @@
     </article>
 
     <article class="tutorial-card important-tutorial" data-help-card data-search="restore backup zip render reset deploy verify jobs uploads history">
-      <div class="tutorial-number">50</div>
+      <div class="tutorial-number">51</div>
       <h3>Restore After a Render Reset</h3>
       <ol>
         <li>Open <strong>Backup & Restore</strong>.</li>

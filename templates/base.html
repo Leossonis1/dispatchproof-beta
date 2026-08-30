@@ -55,6 +55,7 @@
       <a class="{% if request.path == '/account' %}active{% endif %}" href="{{ url_for('my_account') }}">My Account</a>
       {% if current_user_is_admin %}
       <a class="{% if request.path.startswith('/settings/company') %}active{% endif %}" href="{{ url_for('company_settings') }}">Company Settings</a>
+      <a class="{% if request.path.startswith('/settings/integrations') %}active{% endif %}" href="{{ url_for('integrations') }}">Integrations</a>
       <a class="{% if request.path.startswith('/settings/users') %}active{% endif %}" href="{{ url_for('users_access') }}">Users & Access</a>
       <a class="{% if request.path.startswith('/activity') %}active{% endif %}" href="{{ url_for('activity_log') }}">Activity Log</a>
       <a class="{% if request.path.startswith('/backup') %}active{% endif %}" href="{{ url_for('backup_restore') }}">Backup & Restore</a>
