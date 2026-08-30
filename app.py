@@ -28,11 +28,13 @@ from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 BASE_DIR = Path(__file__).resolve().parent
+APP_VERSION = "2.46.12"
+PUBLIC_PRICE_MONTHLY = 50.00
+DEPLOYMENT_MODE = os.getenv("DISPATCHPROOF_DEPLOYMENT_MODE", "isolated-company").strip() or "isolated-company"
 
 # Local runs default to the project folder.
-# On Render's free beta tier we use /tmp, which is intentionally disposable.
-# For a paid Render persistent disk later, set:
-#   DISPATCHPROOF_DATA_DIR=/var/data/dispatchproof
+# Local/ephemeral Render runs fall back to /tmp. Production deployments should
+# set DISPATCHPROOF_DATA_DIR=/var/data/dispatchproof on a persistent disk.
 _configured_data_dir = os.getenv("DISPATCHPROOF_DATA_DIR", "").strip()
 if _configured_data_dir:
     DATA_DIR = Path(_configured_data_dir)
@@ -4035,7 +4037,7 @@ def build_readiness_email(job, public_url, reminder=False):
 
 def send_smtp_message(recipient_email, recipient_name, subject, html_body):
     if EMAIL_MODE != "smtp":
-        return False, "Free beta Outbox Mode is enabled. Message generated locally and not delivered."
+        return False, "Email Outbox Mode is enabled. Message generated locally and not delivered."
 
     if not smtp_is_configured():
         return False, "SMTP mode is enabled, but SMTP is not fully configured."
@@ -4818,7 +4820,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.46.11",
+        "app_version": APP_VERSION,
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -5049,7 +5051,7 @@ def create_workspace_export_archive():
         "export_format": 2,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.46.11",
+        "app_version": APP_VERSION,
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -6198,7 +6200,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.46.11",
+        "app_version": APP_VERSION,
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -6405,8 +6407,10 @@ def not_found(error):
 def health():
     return {
         "status": "ok",
-        "version": "2.46.10",
+        "version": APP_VERSION,
         "data_dir": str(DATA_DIR),
+        "deployment_mode": DEPLOYMENT_MODE,
+        "public_price_monthly": PUBLIC_PRICE_MONTHLY,
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
         "email_delivery_enabled": email_delivery_enabled(),
