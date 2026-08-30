@@ -166,7 +166,7 @@ ARRIVAL_ISSUES = [
 ]
 
 
-# V2.45: completely isolated practice scenarios. Training actions write only to
+# V2.45/V2.45.1: completely isolated practice scenarios. Training actions write only to
 # training_* tables; they never call production job, email, crew, routing, or
 # public-link workflows.
 TRAINING_SCENARIOS = {
@@ -619,6 +619,13 @@ TRAINING_SCENARIOS = {
         ],
     },
 }
+
+# V2.45.1: larger question banks. Each assigned/reset scenario gets a fresh shuffled order.
+TRAINING_EXTRA_QUESTIONS = {'new-pm-basics': [{'title': 'Follow up on no response', 'screen': 'Readiness Request · Store 118', 'facts': ['Installation: 2 days away', 'Readiness request: sent', 'Response: NO RESPONSE', 'Site contact email: available'], 'question': 'What is the best next step before assuming the site is ready?', 'correct': 'send_reminder', 'success': 'Correct. A readiness reminder keeps the request documented without treating silence as approval.', 'choices': [('send_reminder', 'Generate a readiness reminder', ''), ('assume_ready', 'Treat no response as ready', 'No response is not documented readiness.'), ('complete_job', 'Mark the job complete', 'The installation has not occurred.')]}, {'title': 'Use the right field link', 'screen': 'Job · Store 122', 'facts': ['Crew is already on site', 'PM needs a photo of completed casework', 'Arrival has already been submitted', 'Job is still active'], 'question': 'Which tool should the PM use to ask the field for the photo?', 'correct': 'field_update', 'success': 'Correct. A Field Update request is designed for PM-to-field questions and photo requests during the job.', 'choices': [('field_update', 'Send a Field Update request', ''), ('arrival_again', 'Create another Installer Arrival submission', 'Arrival is one-time for the current mobilization.'), ('readiness_again', 'Send a new readiness request', 'Readiness is a pre-dispatch workflow, not a mid-job photo request.')]}, {'title': 'Keep job documents private', 'screen': 'Documents · Store 130', 'facts': ['PM has a job-specific marked-up drawing', 'Other PMs should not see this private job', 'Client reference documents are company-wide'], 'question': 'Where should the marked-up drawing be stored?', 'correct': 'job_docs', 'success': "Correct. Job Documents follow the job's access rules, unlike company-wide Client/Project reference documents.", 'choices': [('job_docs', 'Job Documents', ''), ('client_docs', 'Client Documents', 'Client documents are company-wide internal references.'), ('email_only', 'Keep it only in email', 'That makes the job record incomplete and harder to hand off.')]}, {'title': 'Respect the completion gate', 'screen': 'Job Closeout · Store 135', 'facts': ['Readiness: JOB IS READY', 'Crew assigned: yes', 'Installer Arrival: not submitted', 'Work status: unknown'], 'question': 'Should the PM mark this job complete yet?', 'correct': 'wait_arrival', 'success': 'Correct. DispatchProof requires successful site-arrival proof before normal completion.', 'choices': [('wait_arrival', 'No — collect successful arrival proof first', ''), ('complete_anyway', 'Yes — readiness is enough', 'Readiness confirms pre-dispatch conditions; it does not prove the crew arrived successfully.'), ('delete_job', 'Delete the job instead', 'A missing arrival submission is not a reason to delete the job.')]}, {'title': 'Use a return visit correctly', 'screen': 'Job · Store 141', 'facts': ['Prior mobilization: archived', 'A return visit is required', 'Original job history should stay together'], 'question': 'What keeps the return trip tied to the same job history?', 'correct': 'next_mob', 'success': 'Correct. Start Return Visit / Next Mobilization creates a fresh attempt while preserving prior evidence.', 'choices': [('next_mob', 'Start Return Visit / Next Mobilization', ''), ('duplicate', 'Duplicate as New Job', 'That creates a separate job instead of preserving the mobilization history together.'), ('erase', 'Reset by deleting prior evidence', 'Prior evidence should be preserved, not erased.')]}], 'blocked-site': [{'title': 'Treat silence differently from a block', 'screen': 'Readiness Summary · Store 208', 'facts': ['Readiness request: sent yesterday', 'Response: NO RESPONSE', 'Crew departure: tomorrow morning'], 'question': 'What does NO RESPONSE prove about site readiness?', 'correct': 'proves_nothing', 'success': 'Correct. No response is neither a ready confirmation nor a documented blocking response.', 'choices': [('proves_nothing', 'Nothing yet — follow up for documented readiness', ''), ('ready', 'It proves the site is ready', 'Silence is not a readiness confirmation.'), ('failed', 'It is already a failed mobilization', 'The crew has not mobilized.')]}, {'title': 'Stop on any required NO', 'screen': 'Readiness Summary · Store 211', 'facts': ['Flooring: YES', 'Power: YES', 'Install area cleared: NO', 'Status: BLOCKED'], 'question': 'What should the PM do with the planned dispatch?', 'correct': 'hold', 'success': 'Correct. One required NO is enough to keep the readiness gate blocked until corrected and re-confirmed.', 'choices': [('hold', 'Hold dispatch and resolve the blocked item', ''), ('majority', 'Dispatch because most items are YES', 'Readiness is not a majority vote when a required condition is blocked.'), ('ignore', 'Ignore the response', 'That defeats the pre-mobilization control.')]}, {'title': 'Do not call it a failed mobilization too early', 'screen': 'Office Status · Store 214', 'facts': ['Readiness: BLOCKED', 'Crew has not left the shop', 'No travel or field hours have been incurred'], 'question': 'Which record fits this situation?', 'correct': 'blocked_readiness', 'success': 'Correct. Keep it as blocked readiness and follow up; failed mobilization is for a crew that actually arrived to a site that was not ready.', 'choices': [('blocked_readiness', 'Blocked readiness / pre-dispatch follow-up', ''), ('failed_mob', 'Failed Mobilization report', 'No mobilization has happened yet.'), ('arrival_ready', 'Successful Installer Arrival', 'The crew has not arrived.')]}, {'title': 'Preserve the original proof', 'screen': 'Readiness History · Store 218', 'facts': ['First response: Power NO', 'Site later corrected power', 'Historical proof should remain auditable'], 'question': 'How should the corrected condition be documented?', 'correct': 'fresh_response', 'success': 'Correct. Preserve the first response and collect a fresh readiness submission showing the corrected condition.', 'choices': [('fresh_response', 'Collect a new readiness response', ''), ('edit_history', 'Edit the original NO into YES', 'That destroys the historical record.'), ('phone_note', 'Rely only on a phone note', 'A phone note is weaker than a fresh documented readiness response.')]}, {'title': 'Release the crew only after the gate clears', 'screen': 'Updated Readiness · Store 221', 'facts': ['Previous blocker: corrected', 'Fresh response: all required items YES', 'Status: JOB IS READY', 'Crew schedule: still valid'], 'question': 'What should happen now?', 'correct': 'release', 'success': 'Correct. With fresh documented readiness and a valid crew plan, the PM can proceed with dispatch.', 'choices': [('release', 'Proceed with planned dispatch', ''), ('permanent_hold', 'Keep the job blocked permanently', 'The blocking condition has been corrected and documented.'), ('new_job', 'Create a duplicate job', 'The current job record already contains the readiness history.')]}], 'crew-conflict': [{'title': 'Understand deactivated crew', 'screen': 'Crew Directory', 'facts': ['Installer: Sam Reed', 'Status: INACTIVE', 'Past job history: retained', 'New assignment picker: Sam absent'], 'question': 'Why is Sam missing from new job assignments?', 'correct': 'inactive', 'success': 'Correct. Deactivated crew stay in historical records but are removed from new assignments.', 'choices': [('inactive', 'Because Sam is inactive', ''), ('deleted_history', "Because all of Sam's history was deleted", 'Deactivation preserves historical references.'), ('private', 'Because Sam belongs to another PM', 'Crew Directory is company-wide.')]}, {'title': 'Handle a subcontractor conflict', 'screen': 'Schedule · Crew Conflicts', 'facts': ['Subcontractor: Apex Install', 'Assigned to your job on Oct 6', 'Conflict warning: assigned elsewhere on Oct 6'], 'question': 'Does a subcontractor conflict need the same scheduling attention as internal crew?', 'correct': 'same_rules', 'success': 'Correct. Internal crew and subcontractors use the same scheduling/conflict protection.', 'choices': [('same_rules', 'Yes — resolve the conflict before relying on that assignment', ''), ('subs_ignore', 'No — subcontractors cannot conflict', 'Subcontractors participate in the same scheduling system.'), ('double_book', 'Keep both assignments and hope one cancels', 'That leaves both jobs exposed.')]}, {'title': "Protect another PM's private job", 'screen': 'Conflict Warning', 'facts': ['Your job: Store 415', 'Conflict: Taylor assigned to another private job', 'Other job name: hidden'], 'question': 'What information should the PM use to resolve the conflict?', 'correct': 'use_warning', 'success': "Correct. The conflict warning is enough to take action without exposing another PM's private job details.", 'choices': [('use_warning', 'Use the warning and reassign/coordinate crew', ''), ('reveal_job', 'Find a way to reveal the private job name', 'Private workspace details should remain private.'), ('ignore_privacy', 'Ask the trainee to disable privacy', 'Privacy is a product rule, not a conflict workaround.')]}, {'title': 'Match named crew to planned crew size', 'screen': 'Field Assignment · Store 420', 'facts': ['Planned crew size: 4', 'Named internal crew: 2', 'Named subcontractors: 1', 'No conflicts'], 'question': 'What staffing condition remains?', 'correct': 'one_short', 'success': 'Correct. Three named field resources against a planned crew size of four leaves one open position.', 'choices': [('one_short', 'The job is still one person short', ''), ('fully_staffed', 'The job is fully staffed', 'Two internal plus one subcontractor equals three, not four.'), ('conflict', 'There must be a schedule conflict', 'A staffing gap and a schedule conflict are different checks.')]}, {'title': 'Use availability before assigning', 'screen': 'Crew Directory · Availability', 'facts': ['Install date: Oct 9', 'Several active crew members', 'One person already booked', 'Availability tools are available'], 'question': 'What is the efficient way to choose the replacement?', 'correct': 'check_availability', 'success': 'Correct. Check availability/conflicts before assigning so the fix does not create a second problem.', 'choices': [('check_availability', 'Use crew availability/conflict information before assigning', ''), ('random', 'Pick any active name at random', 'Active does not necessarily mean available on that date.'), ('notes', 'Type a name in job notes only', 'Notes do not create a real schedulable assignment.')]}], 'failed-mobilization': [{'title': 'Separate a blocked site from a failed trip', 'screen': 'Readiness · Store 515', 'facts': ['Required item: NO', 'Crew has not departed', 'PM caught the issue before mobilization'], 'question': 'Should the PM create a Failed Mobilization report?', 'correct': 'no_failed', 'success': 'Correct. Catching the issue before dispatch is a readiness block, not a failed mobilization.', 'choices': [('no_failed', 'No — keep it as blocked readiness', ''), ('yes_failed', 'Yes — every blocked site is a failed mobilization', 'Failed mobilization requires an actual mobilization/arrival.'), ('arrival', 'Submit a successful arrival', 'The crew is not on site.')]}, {'title': 'Capture the cost of a failed trip', 'screen': 'Failed Mobilization · Store 519', 'facts': ['Crew arrived', 'Site not ready', '3 installers affected', '2.5 hours lost', 'Arrival photos available'], 'question': 'What should the failed-mobilization record include?', 'correct': 'document_impact', 'success': 'Correct. Record the crew impact, lost hours, issue details, and supporting arrival evidence.', 'choices': [('document_impact', 'Crew size, hours lost, issue details, notes/photos', ''), ('only_title', 'Only the job name', 'That would not document the operational impact.'), ('delete_arrival', 'Delete the arrival evidence', 'Arrival proof supports the failed-mobilization record.')]}, {'title': 'Create a fresh return attempt', 'screen': 'Mobilization History · Store 522', 'facts': ['Attempt #1: failed and archived', 'Return date: scheduled', 'New arrival proof will be needed'], 'question': 'What should the PM start for the return trip?', 'correct': 'return_visit', 'success': 'Correct. Start Return Visit / Next Mobilization to preserve Attempt #1 and create fresh readiness/arrival evidence for the return.', 'choices': [('return_visit', 'Start Return Visit / Next Mobilization', ''), ('reuse_arrival', 'Reuse the old arrival submission', 'Each mobilization needs its own current arrival evidence.'), ('delete_attempt', 'Delete Attempt #1', 'The failed attempt is part of the job history.')]}, {'title': 'Show the full story at closeout', 'screen': 'Client Report · Store 522', 'facts': ['Attempt #1: failed mobilization', 'Attempt #2: site ready and completed', 'Both attempts are preserved'], 'question': 'What should the final report communicate?', 'correct': 'history', 'success': 'Correct. The report should distinguish the successful current/last attempt while preserving prior mobilization history.', 'choices': [('history', 'Show the successful closeout plus prior mobilization history', ''), ('hide_failure', 'Erase the failed attempt from history', 'That removes useful documented proof.'), ('failure_only', 'Show only the failed attempt', 'That omits the successful return and completion.')]}], 'multi-day-progress': [{'title': 'Use Daily Progress for completed work', 'screen': 'Field Link · Store 610', 'facts': ['Day 2 work is complete', 'Crew needs to report what was installed', 'Photos are available', 'Client report should reflect progress'], 'question': 'Which submission type fits this update?', 'correct': 'daily_progress', 'success': 'Correct. Daily Progress is the structured record for work completed by date and can flow into the Client Report.', 'choices': [('daily_progress', 'Submit a Daily Progress Log', ''), ('arrival', 'Submit another Installer Arrival', 'Arrival is not a daily production log.'), ('readiness', 'Submit a readiness response', 'Readiness belongs before dispatch.')]}, {'title': 'Keep PM requests separate from client progress', 'screen': 'Field Updates · Store 614', 'facts': ['PM asks: “Send a photo of damaged wall.”', 'Field person replies with note and photo', 'This is troubleshooting, not daily production'], 'question': 'How is this different from a Daily Progress Log?', 'correct': 'internal_request', 'success': 'Correct. Field Update responses support PM communication and remain separate from the structured Daily Progress evidence used in client reporting.', 'choices': [('internal_request', 'It is a PM-request response, not a Daily Progress entry', ''), ('same_record', 'They are exactly the same record', 'DispatchProof keeps the two workflows separate.'), ('client_auto', 'Every PM request automatically becomes client-facing', 'PM-request responses remain internal unless handled separately.')]}, {'title': 'Reuse the active field link', 'screen': 'Field Update Link · Store 618', 'facts': ['Secure field link: active', 'Day 1 update: submitted', 'Day 2 update is now needed', 'Job remains active'], 'question': 'Does the PM need to generate a brand-new field link for every daily update?', 'correct': 'reuse_link', 'success': 'Correct. The active field link can be reused for repeated field responses and Daily Progress submissions while the job is active.', 'choices': [('reuse_link', 'No — reuse the active secure field link', ''), ('new_every_day', 'Yes — a new token is required every day', 'The current field link is designed for repeated use while active.'), ('arrival_token', 'Use the Installer Arrival token instead', 'Arrival and field-update links serve different purposes.')]}, {'title': 'Know what happens at completion', 'screen': 'Completed Job · Store 621', 'facts': ['Job marked complete', 'Field links were active before closeout', 'PM later reopens the job'], 'question': 'What happens to the old field links?', 'correct': 'stay_closed', 'success': 'Correct. Completing the job closes active field links, and reopening the job does not silently reactivate the old links.', 'choices': [('stay_closed', 'They stay closed; create a new link if needed', ''), ('reactivate', 'They automatically reactivate on reopen', 'Reopening does not reactivate old field links.'), ('public_forever', 'They remain public forever', 'Field links are controlled and can be closed/revoked.')]}], 'subcontractor-sourcing': [{'title': 'Start with a focused search', 'screen': 'Find a Subcontractor · Store 708', 'facts': ['Trade needed: Electrical', 'Job location: Dayton, OH', 'Local coverage preferred', 'Radius control available'], 'question': 'What search setup gives the most useful first pass?', 'correct': 'focused', 'success': 'Correct. Start with the needed trade and job location/radius, then widen only if the results are too thin.', 'choices': [('focused', 'Search the required trade around the job location', ''), ('nationwide', 'Search the entire country first', 'That creates noise when the need is local.'), ('wrong_trade', 'Search an unrelated trade', 'The trade filter should match the work needed.')]}, {'title': 'Treat search results as leads, not endorsements', 'screen': 'Subcontractor Search Results', 'facts': ['Several possible matches returned', 'Ratings/contact data may be available', 'DispatchProof did not interview or qualify them'], 'question': 'What responsibility still belongs to the PM/company?', 'correct': 'vet', 'success': 'Correct. Search results are leads; the company still verifies fit, qualifications, scope, insurance, pricing, and availability as appropriate.', 'choices': [('vet', 'Vet the subcontractor before relying on them', ''), ('guaranteed', 'Assume every result is qualified by DispatchProof', 'Search results are not a qualification guarantee.'), ('auto_hire', 'Automatically hire the top result', 'Ranking alone is not a hiring decision.')]}, {'title': 'Save without assigning when appropriate', 'screen': 'Find a Subcontractor · Results', 'facts': ['Candidate looks useful for future work', 'Current job is already staffed', 'Crew Directory can store the contact'], 'question': 'Which action makes sense?', 'correct': 'save_only', 'success': 'Correct. Save to Directory Only keeps the subcontractor reusable without adding them to a job that does not need them.', 'choices': [('save_only', 'Save to Directory Only', ''), ('assign_anyway', 'Save & Assign to This Job', 'That would create an unnecessary assignment.'), ('discard', 'Do nothing and lose the lead', 'Saving the useful contact avoids repeating the search later.')]}, {'title': 'Assign through the normal field workflow', 'screen': 'Crew Directory · Subcontractor', 'facts': ['Apex Electric is saved', 'Type: SUB', 'Current job needs one electrician', 'Install date is known'], 'question': 'How should the saved subcontractor be put on the job?', 'correct': 'field_assignment', 'success': 'Correct. Saved subcontractors are assigned through the same Field Assignment workflow used for crew.', 'choices': [('field_assignment', 'Assign the subcontractor through Field Assignment', ''), ('notes_only', 'Mention them only in notes', 'Notes do not create a schedulable assignment.'), ('new_user', 'Create a DispatchProof office-user account for them', 'A field subcontractor does not need to become an office user just to be assigned.')]}, {'title': 'Check availability after saving', 'screen': 'Schedule · Store 716', 'facts': ['Subcontractor saved and assigned', 'Same subcontractor appears on another job that day', 'Conflict warning displayed'], 'question': 'What should the PM do?', 'correct': 'resolve_sub_conflict', 'success': 'Correct. Subcontractors participate in the same scheduling/conflict system, so resolve the overlap before dispatch.', 'choices': [('resolve_sub_conflict', 'Resolve the conflict or choose another resource', ''), ('ignore_sub', 'Ignore it because the resource is a subcontractor', 'Subcontractors can be double-booked just like internal crew.'), ('delete_directory', 'Delete the subcontractor from the directory', 'A schedule conflict does not require deleting a valid contact.')]}], 'rollout-route': [{'title': 'Correct a route address safely', 'screen': 'Route Optimization · Rollout West', 'facts': ['Job record address: incomplete', 'Route planner offers an editable Route Address field', 'PM only needs a routing correction'], 'question': 'What happens if the PM corrects the Route Address here?', 'correct': 'route_only', 'success': 'Correct. The correction is used for routing and does not overwrite the underlying job record.', 'choices': [('route_only', 'It changes routing only, not the job itself', ''), ('job_overwrite', 'It permanently rewrites the job address', 'The route-address correction is intentionally non-destructive.'), ('delete_job', 'It requires recreating the job', 'A route correction does not require a new job.')]}, {'title': 'Plan a round trip', 'screen': 'Route Optimization · Crew Start', 'facts': ['Crew starts at the warehouse', 'Crew must return to the same warehouse after the last stop', 'Return to Starting Location option is available'], 'question': 'Which setting matches this plan?', 'correct': 'return_on', 'success': 'Correct. Turn on Return to Starting Location when the final leg back to the crew start should be included.', 'choices': [('return_on', 'Enable Return to Starting Location', ''), ('return_off', 'Leave it off', 'Leaving it off ends the route at the final job.'), ('fake_stop', 'Create a fake job for the warehouse', 'The dedicated return option handles this cleanly.')]}, {'title': 'Adjust the optimized sequence', 'screen': 'Saved Route · Rollout West', 'facts': ['Automatic route: calculated', 'PM knows Stop 4 must happen before Stop 3', 'Move Up / Move Down controls available'], 'question': 'What should the PM do after changing the stop order?', 'correct': 'recalculate', 'success': 'Correct. Move the stop, then Save Manual Order & Recalculate so mileage, time, and the route line match the chosen sequence.', 'choices': [('recalculate', 'Save Manual Order & Recalculate', ''), ('assume_totals', 'Move the stop but keep the old mileage/time', 'The totals need to be recalculated for the new sequence.'), ('optimize_again', 'Run automatic optimization and expect the manual order to stay', 'Automatic optimization may choose a different sequence.')]}, {'title': 'Keep completed work out of the active route', 'screen': 'Route Optimization · Project Jobs', 'facts': ['Project contains 18 jobs', '2 jobs are already completed', 'Route selector shows active jobs'], 'question': 'Should completed jobs be included in the new active route plan?', 'correct': 'exclude_completed', 'success': 'Correct. Completed jobs are excluded so the route focuses on work that still needs mobilization.', 'choices': [('exclude_completed', 'No — route the remaining active jobs', ''), ('include_completed', 'Yes — completed jobs should be routed again', 'Completed work should not add unnecessary stops.'), ('reopen_all', 'Reopen every completed job first', 'There is no reason to reopen completed work just for routing.')]}]}
+for _training_key, _extra_steps in TRAINING_EXTRA_QUESTIONS.items():
+    TRAINING_SCENARIOS[_training_key]["steps"].extend(_extra_steps)
+    TRAINING_SCENARIOS[_training_key]["estimated_minutes"] = 8
+
 TRAINING_STARTER_TRACK = tuple(TRAINING_SCENARIOS.keys())
 
 def get_db():
@@ -971,6 +978,12 @@ def ensure_columns(db):
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         )
     """)
+    training_assignment_columns = {
+        row["name"] for row in db.execute("PRAGMA table_info(training_assignments)").fetchall()
+    }
+    if "question_order" not in training_assignment_columns:
+        db.execute("ALTER TABLE training_assignments ADD COLUMN question_order TEXT")
+
     db.execute("""
         CREATE TABLE IF NOT EXISTS training_attempts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -4449,7 +4462,7 @@ def create_backup_archive():
         "product": PRODUCT_NAME,
         "backup_format": 2,
         "created_at": now_iso(),
-        "app_version": "2.45",
+        "app_version": "2.45.1",
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -4654,7 +4667,7 @@ def create_workspace_export_archive():
         "export_format": 2,
         "export_type": "user_workspace",
         "created_at": now_iso(),
-        "app_version": "2.45",
+        "app_version": "2.45.1",
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -5409,20 +5422,92 @@ def training_scenario(scenario_key):
     return TRAINING_SCENARIOS.get((scenario_key or "").strip())
 
 
-def training_assignment_card(row):
+def new_training_question_order(scenario):
+    order = list(range(len(scenario.get("steps") or [])))
+    secrets.SystemRandom().shuffle(order)
+    return order
+
+
+def training_question_order_from_value(value, scenario):
+    total = len(scenario.get("steps") or []) if scenario else 0
+    fallback = list(range(total))
+    if not value:
+        return fallback
+    try:
+        order = json.loads(value) if isinstance(value, str) else list(value)
+        order = [int(item) for item in order]
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return fallback
+    if len(order) != total or sorted(order) != fallback:
+        return fallback
+    return order
+
+
+def ensure_training_question_order(db, assignment, scenario):
+    data = dict(assignment)
+    raw = data.get("question_order")
+    order = training_question_order_from_value(raw, scenario)
+    # A missing/invalid order means this assignment predates V2.45.1 or the
+    # question bank changed. Give it a fresh randomized run and persist it.
+    valid_raw = False
+    if raw:
+        try:
+            parsed = [int(item) for item in json.loads(raw)]
+            valid_raw = len(parsed) == len(order) and parsed == order
+        except (TypeError, ValueError, json.JSONDecodeError):
+            valid_raw = False
+    if not valid_raw:
+        order = new_training_question_order(scenario)
+        db.execute(
+            "UPDATE training_assignments SET question_order = ? WHERE id = ?",
+            (json.dumps(order), assignment["id"]),
+        )
+        db.commit()
+    return order
+
+
+def training_assignment_card(row, question_order=None):
     data = dict(row)
     scenario = training_scenario(data.get("scenario_key"))
-    total_steps = len(scenario["steps"]) if scenario else 0
+    order = question_order if question_order is not None else training_question_order_from_value(data.get("question_order"), scenario)
+    total_steps = len(order) if scenario else 0
     current_step = max(0, int(data.get("current_step") or 0))
     if data.get("status") == "COMPLETED":
         completed_steps = total_steps
     else:
         completed_steps = min(current_step, total_steps)
     data["scenario"] = scenario
+    data["question_order"] = order
     data["total_steps"] = total_steps
     data["completed_steps"] = completed_steps
     data["progress_percent"] = int(round((completed_steps / total_steps) * 100)) if total_steps else 0
     return data
+
+
+def training_answer_feedback(scenario, question_order, attempt):
+    if not attempt or not scenario or not question_order:
+        return None
+    try:
+        position = int(attempt["step_index"])
+        question_index = question_order[position]
+        step = scenario["steps"][question_index]
+    except (IndexError, KeyError, TypeError, ValueError):
+        return None
+    choice = next((item for item in step["choices"] if item[0] == attempt["action_key"]), None)
+    if bool(attempt["is_correct"]):
+        message = step.get("success") or "That is the best action for this situation."
+        if message.lower().startswith("correct. "):
+            message = message[9:]
+        return {
+            "kind": "correct",
+            "title": "✓ Correct",
+            "message": message,
+        }
+    return {
+        "kind": "incorrect",
+        "title": "✕ Not Quite — Try Again",
+        "message": (choice[2] if choice and len(choice) > 2 else "") or "That is not the best action for this situation. Try again.",
+    }
 
 
 def get_training_assignment(db, assignment_id):
@@ -5500,7 +5585,7 @@ def inject_brand():
         "product_name": PRODUCT_NAME,
         "product_tagline": PRODUCT_TAGLINE,
         "product_subtag": PRODUCT_SUBTAG,
-        "app_version": "2.45",
+        "app_version": "2.45.1",
         "smtp_configured": smtp_is_configured(),
         "email_mode": EMAIL_MODE,
         "email_delivery_enabled": email_delivery_enabled(),
@@ -8573,12 +8658,13 @@ def assign_training():
             cur = db.execute("""
                 INSERT OR IGNORE INTO training_assignments (
                     user_id, scenario_key, status, current_step, coaching_flags,
-                    assigned_by, assigned_at, last_activity_at
-                ) VALUES (?, ?, 'ASSIGNED', 0, 0, ?, ?, ?)
+                    assigned_by, assigned_at, last_activity_at, question_order
+                ) VALUES (?, ?, 'ASSIGNED', 0, 0, ?, ?, ?, ?)
             """, (
                 user_id, key,
                 current_display_name() or current_username() or "Administrator",
                 now_iso(), now_iso(),
+                json.dumps(new_training_question_order(TRAINING_SCENARIOS[key])),
             ))
             added += int(cur.rowcount or 0)
 
@@ -8607,9 +8693,11 @@ def training_scenario_page(assignment_id):
         if not scenario:
             abort(404)
 
-        card = training_assignment_card(assignment)
-        step_index = min(card["completed_steps"], max(0, len(scenario["steps"]) - 1)) if scenario["steps"] else 0
-        step = None if card["status"] == "COMPLETED" else scenario["steps"][step_index]
+        question_order = ensure_training_question_order(db, assignment, scenario)
+        card = training_assignment_card(assignment, question_order)
+        step_index = min(card["completed_steps"], max(0, len(question_order) - 1)) if question_order else 0
+        question_index = question_order[step_index] if question_order else 0
+        step = None if card["status"] == "COMPLETED" else scenario["steps"][question_index]
         attempts = db.execute("""
             SELECT step_index, action_key, is_correct, created_at
             FROM training_attempts
@@ -8617,6 +8705,7 @@ def training_scenario_page(assignment_id):
             ORDER BY id DESC
             LIMIT 12
         """, (assignment_id,)).fetchall()
+        answer_feedback = training_answer_feedback(scenario, question_order, attempts[0] if attempts else None)
 
     return render_template(
         "training_scenario.html",
@@ -8625,6 +8714,7 @@ def training_scenario_page(assignment_id):
         step=step,
         step_index=step_index,
         attempts=attempts,
+        answer_feedback=answer_feedback,
         can_practice=user_can_practice_training_assignment(assignment),
     )
 
@@ -8647,8 +8737,9 @@ def answer_training_scenario(assignment_id):
             flash("This training scenario is already complete. Reset it if you want to practice again.")
             return redirect(url_for("training_scenario_page", assignment_id=assignment_id))
 
+        question_order = ensure_training_question_order(db, assignment, scenario)
         step_index = max(0, int(assignment["current_step"] or 0))
-        if step_index >= len(scenario["steps"]):
+        if step_index >= len(question_order):
             db.execute(
                 "UPDATE training_assignments SET status = 'COMPLETED', completed_at = ?, last_activity_at = ? WHERE id = ?",
                 (now_iso(), now_iso(), assignment_id),
@@ -8656,7 +8747,8 @@ def answer_training_scenario(assignment_id):
             db.commit()
             return redirect(url_for("training_scenario_page", assignment_id=assignment_id))
 
-        step = scenario["steps"][step_index]
+        question_index = question_order[step_index]
+        step = scenario["steps"][question_index]
         choice_map = {choice[0]: choice for choice in step["choices"]}
         choice = choice_map.get(action_key)
         if not choice:
@@ -8672,7 +8764,7 @@ def answer_training_scenario(assignment_id):
         started_at = assignment["started_at"] or now_iso()
         if correct:
             next_step = step_index + 1
-            completed = next_step >= len(scenario["steps"])
+            completed = next_step >= len(question_order)
             db.execute("""
                 UPDATE training_assignments
                 SET status = ?, current_step = ?, started_at = ?,
@@ -8687,7 +8779,6 @@ def answer_training_scenario(assignment_id):
                 assignment_id,
             ))
             db.commit()
-            flash(step["success"])
             if completed:
                 flash(f"Training complete: {scenario['title']}.")
             return redirect(url_for("training_scenario_page", assignment_id=assignment_id))
@@ -8699,8 +8790,6 @@ def answer_training_scenario(assignment_id):
             WHERE id = ?
         """, (started_at, now_iso(), assignment_id))
         db.commit()
-        feedback = choice[2] or "That is not the best action for this situation. Try again."
-        flash(f"Practice note: {feedback}")
         return redirect(url_for("training_scenario_page", assignment_id=assignment_id))
 
 
@@ -8716,9 +8805,14 @@ def reset_training_assignment(assignment_id):
         db.execute("""
             UPDATE training_assignments
             SET status = 'ASSIGNED', current_step = 0, coaching_flags = 0,
-                started_at = NULL, completed_at = NULL, last_activity_at = ?
+                started_at = NULL, completed_at = NULL, last_activity_at = ?,
+                question_order = ?
             WHERE id = ?
-        """, (now_iso(), assignment_id))
+        """, (
+            now_iso(),
+            json.dumps(new_training_question_order(training_scenario(assignment["scenario_key"]))),
+            assignment_id,
+        ))
         if current_user_is_admin():
             record_activity(
                 db,
