@@ -1,9 +1,11 @@
 
-from flask import Flask, render_template, request, redirect, url_for, send_from_directory, send_file, flash, abort, session, has_request_context
+from flask import Flask, render_template, request, redirect, url_for, send_from_directory, send_file, flash, abort, session, has_request_context, g
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.middleware.proxy_fix import ProxyFix
 from pathlib import Path
+from contextlib import contextmanager
+from contextvars import ContextVar
 import sqlite3
 import json
 import secrets
@@ -28,9 +30,9 @@ from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 BASE_DIR = Path(__file__).resolve().parent
-APP_VERSION = "2.46.12"
+APP_VERSION = "2.47.0"
 PUBLIC_PRICE_MONTHLY = 50.00
-DEPLOYMENT_MODE = os.getenv("DISPATCHPROOF_DEPLOYMENT_MODE", "isolated-company").strip() or "isolated-company"
+DEPLOYMENT_MODE = os.getenv("DISPATCHPROOF_DEPLOYMENT_MODE", "multi-company").strip() or "multi-company"
 
 # Local runs default to the project folder.
 # Local/ephemeral Render runs fall back to /tmp. Production deployments should
@@ -44,9 +46,222 @@ else:
     DATA_DIR = BASE_DIR
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
-DB_PATH = DATA_DIR / "dispatchproof.db"
-UPLOAD_DIR = DATA_DIR / "uploads"
+
+# V2.47: multi-company tenancy without mixing customer records in one SQLite file.
+# The original company keeps the legacy root database/uploads so existing installs
+# upgrade in place. Every additional company gets its own database + upload store
+# under DATA_DIR/companies/<company-code>/.
+def normalize_company_slug(value):
+    slug = re.sub(r"[^a-z0-9]+", "-", (value or "").strip().lower()).strip("-")
+    return slug[:40]
+
+DEFAULT_COMPANY_SLUG = normalize_company_slug(
+    os.getenv("DISPATCHPROOF_DEFAULT_COMPANY_SLUG", "default")
+) or "default"
+COMPANIES_DIR = DATA_DIR / "companies"
+PLATFORM_DB_PATH = DATA_DIR / "dispatchproof-platform.db"
+_TENANT_OVERRIDE = ContextVar("dispatchproof_tenant_override", default=None)
+
+def get_platform_db():
+    conn = sqlite3.connect(PLATFORM_DB_PATH, timeout=30)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout = 30000")
+    return conn
+
+def ensure_company_registry():
+    with get_platform_db() as db:
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS companies (
+                slug TEXT PRIMARY KEY,
+                display_name TEXT NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                uses_legacy_root INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                timezone_name TEXT
+            )
+        """)
+        company_columns = {row["name"] for row in db.execute("PRAGMA table_info(companies)").fetchall()}
+        if "timezone_name" not in company_columns:
+            db.execute("ALTER TABLE companies ADD COLUMN timezone_name TEXT")
+
+        now = datetime.now().replace(microsecond=0).isoformat()
+        default_name = os.getenv("DISPATCHPROOF_COMPANY_NAME", "DispatchProof").strip() or "DispatchProof"
+        # On the first multi-company upgrade, prefer the existing saved company
+        # name over an old/default environment placeholder.
+        legacy_db = DATA_DIR / "dispatchproof.db"
+        if legacy_db.exists():
+            try:
+                legacy_conn = sqlite3.connect(legacy_db, timeout=5)
+                legacy_row = legacy_conn.execute("SELECT company_name FROM app_settings WHERE id = 1").fetchone()
+                legacy_conn.close()
+                if legacy_row and legacy_row[0]:
+                    default_name = str(legacy_row[0]).strip() or default_name
+            except sqlite3.DatabaseError:
+                pass
+        default_timezone = os.getenv("DISPATCHPROOF_TIMEZONE", "America/New_York").strip() or "America/New_York"
+        db.execute("""
+            INSERT OR IGNORE INTO companies (
+                slug, display_name, is_active, uses_legacy_root, created_at, updated_at, timezone_name
+            ) VALUES (?, ?, 1, 1, ?, ?, ?)
+        """, (DEFAULT_COMPANY_SLUG, default_name, now, now, default_timezone))
+        db.execute("""
+            UPDATE companies
+            SET timezone_name = COALESCE(NULLIF(TRIM(timezone_name), ''), ?)
+            WHERE slug = ?
+        """, (default_timezone, DEFAULT_COMPANY_SLUG))
+
+        # Recovery aid: if the small platform registry is ever recreated while
+        # company folders still exist, rebuild missing registry rows from each
+        # company's own database instead of orphaning those workspaces.
+        if COMPANIES_DIR.exists():
+            for tenant_dir in COMPANIES_DIR.iterdir():
+                if not tenant_dir.is_dir():
+                    continue
+                slug = normalize_company_slug(tenant_dir.name)
+                if not slug or slug != tenant_dir.name or slug == DEFAULT_COMPANY_SLUG:
+                    continue
+                tenant_db = tenant_dir / "dispatchproof.db"
+                if not tenant_db.exists():
+                    continue
+                display_name = slug
+                timezone_name = default_timezone
+                try:
+                    tenant_conn = sqlite3.connect(tenant_db, timeout=5)
+                    columns = {row[1] for row in tenant_conn.execute("PRAGMA table_info(app_settings)").fetchall()}
+                    if "company_name" in columns:
+                        row = tenant_conn.execute("SELECT company_name, timezone_name FROM app_settings WHERE id = 1").fetchone() if "timezone_name" in columns else tenant_conn.execute("SELECT company_name FROM app_settings WHERE id = 1").fetchone()
+                        if row and row[0]:
+                            display_name = str(row[0]).strip() or display_name
+                        if row and len(row) > 1 and row[1]:
+                            timezone_name = str(row[1]).strip() or timezone_name
+                    tenant_conn.close()
+                except sqlite3.DatabaseError:
+                    pass
+                db.execute("""
+                    INSERT OR IGNORE INTO companies (
+                        slug, display_name, is_active, uses_legacy_root, created_at, updated_at, timezone_name
+                    ) VALUES (?, ?, 1, 0, ?, ?, ?)
+                """, (slug, display_name, now, now, timezone_name))
+        db.commit()
+
+def registered_company(slug):
+    slug = normalize_company_slug(slug)
+    if not slug:
+        return None
+    with get_platform_db() as db:
+        row = db.execute("SELECT * FROM companies WHERE slug = ?", (slug,)).fetchone()
+    return dict(row) if row else None
+
+def registered_companies():
+    with get_platform_db() as db:
+        rows = db.execute("SELECT * FROM companies ORDER BY LOWER(display_name), slug").fetchall()
+    return [dict(row) for row in rows]
+
+def company_timezone_name(slug=None):
+    slug = normalize_company_slug(slug or current_tenant_slug()) or DEFAULT_COMPANY_SLUG
+    candidate = ""
+    db_path = tenant_db_path(slug)
+    if db_path.exists():
+        try:
+            conn = sqlite3.connect(db_path, timeout=5)
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(app_settings)").fetchall()}
+            if "timezone_name" in columns:
+                row = conn.execute("SELECT timezone_name FROM app_settings WHERE id = 1").fetchone()
+                if row and row[0]:
+                    candidate = str(row[0]).strip()
+            conn.close()
+        except sqlite3.DatabaseError:
+            candidate = ""
+    if not candidate:
+        company = registered_company(slug) or {}
+        candidate = (company.get("timezone_name") or os.getenv("DISPATCHPROOF_TIMEZONE", "America/New_York")).strip()
+    try:
+        ZoneInfo(candidate)
+        return candidate
+    except Exception:
+        return "America/New_York"
+
+def current_display_timezone():
+    return ZoneInfo(company_timezone_name())
+
+def current_tenant_slug():
+    override = _TENANT_OVERRIDE.get()
+    if override:
+        return override
+    if has_request_context():
+        slug = getattr(g, "dispatchproof_tenant_slug", None)
+        if slug:
+            return slug
+        session_slug = normalize_company_slug(session.get("dispatchproof_company_slug") or "")
+        if session_slug:
+            return session_slug
+    return DEFAULT_COMPANY_SLUG
+
+@contextmanager
+def tenant_scope(slug):
+    slug = normalize_company_slug(slug) or DEFAULT_COMPANY_SLUG
+    token = _TENANT_OVERRIDE.set(slug)
+    try:
+        yield slug
+    finally:
+        _TENANT_OVERRIDE.reset(token)
+
+def tenant_data_dir(slug=None):
+    slug = normalize_company_slug(slug or current_tenant_slug()) or DEFAULT_COMPANY_SLUG
+    if slug == DEFAULT_COMPANY_SLUG:
+        return DATA_DIR
+    return COMPANIES_DIR / slug
+
+def tenant_db_path(slug=None):
+    return tenant_data_dir(slug) / "dispatchproof.db"
+
+def tenant_upload_dir(slug=None):
+    return tenant_data_dir(slug) / "uploads"
+
+class TenantPath:
+    """Path-like proxy that resolves to the active company's storage."""
+    def __init__(self, kind):
+        self.kind = kind
+
+    def _path(self):
+        base = tenant_data_dir()
+        if self.kind == "db":
+            return base / "dispatchproof.db"
+        return base / "uploads"
+
+    def __fspath__(self):
+        return os.fspath(self._path())
+
+    def __str__(self):
+        return str(self._path())
+
+    def __repr__(self):
+        return f"TenantPath({self.kind!r}, {self._path()!s})"
+
+    def __truediv__(self, other):
+        return self._path() / other
+
+    def __getattr__(self, name):
+        return getattr(self._path(), name)
+
+ensure_company_registry()
+DB_PATH = TenantPath("db")
+UPLOAD_DIR = TenantPath("uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+def tenant_token(nbytes=24):
+    # urlsafe tokens do not contain '.', making the company prefix unambiguous.
+    return f"{current_tenant_slug()}.{secrets.token_urlsafe(nbytes)}"
+
+def tenant_from_public_token(token):
+    raw = (token or "").strip()
+    if "." not in raw:
+        # Backward compatibility for every V2.46.12-and-earlier public link.
+        return DEFAULT_COMPANY_SLUG
+    prefix = normalize_company_slug(raw.split(".", 1)[0])
+    company = registered_company(prefix)
+    return prefix if company else DEFAULT_COMPANY_SLUG
 
 # Display timestamps in the company's local timezone while preserving the
 # existing UTC-like stored ISO values used by Render.
@@ -141,7 +356,7 @@ DEFAULT_REMINDER_HOURS_BEFORE = 48
 # Local beta reminder sweep. While the Flask app is running and receiving
 # requests, DispatchProof checks for due reminders at most once every 5 minutes.
 REMINDER_SWEEP_INTERVAL_SECONDS = 300
-LAST_REMINDER_SWEEP_AT = None
+LAST_REMINDER_SWEEP_AT = {}
 
 app = Flask(__name__)
 
@@ -641,7 +856,10 @@ for _training_key, _extra_steps in TRAINING_EXTRA_QUESTIONS.items():
 TRAINING_STARTER_TRACK = tuple(TRAINING_SCENARIOS.keys())
 
 def get_db():
-    conn = sqlite3.connect(DB_PATH, timeout=30)
+    db_path = tenant_db_path()
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    tenant_upload_dir().mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(db_path, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA busy_timeout = 30000")
@@ -1072,6 +1290,16 @@ def ensure_columns(db):
     }
     if "last_backup_at" not in app_settings_columns:
         db.execute("ALTER TABLE app_settings ADD COLUMN last_backup_at TEXT")
+    if "timezone_name" not in app_settings_columns:
+        db.execute("ALTER TABLE app_settings ADD COLUMN timezone_name TEXT")
+
+    tenant_meta = registered_company(current_tenant_slug()) or {}
+    default_tz = (tenant_meta.get("timezone_name") or os.getenv("DISPATCHPROOF_TIMEZONE", "America/New_York")).strip() or "America/New_York"
+    db.execute("""
+        UPDATE app_settings
+        SET timezone_name = COALESCE(NULLIF(TRIM(timezone_name), ''), ?)
+        WHERE id = 1
+    """, (default_tz,))
 
     # Older databases may already have Backup Downloaded activity. Use the
     # newest one as a safe initial reminder date until the next V2.14 backup.
@@ -1123,7 +1351,7 @@ def ensure_columns(db):
 
         for row in rows_without_report_token:
             while True:
-                candidate = secrets.token_urlsafe(24)
+                candidate = tenant_token(24)
                 exists = db.execute(
                     f"SELECT 1 FROM {table_name} WHERE report_token = ?",
                     (candidate,),
@@ -1152,7 +1380,7 @@ def ensure_columns(db):
 
     for row in rows_without_arrival_token:
         while True:
-            candidate = secrets.token_urlsafe(24)
+            candidate = tenant_token(24)
             exists = db.execute(
                 "SELECT 1 FROM jobs WHERE arrival_token = ?",
                 (candidate,),
@@ -1172,7 +1400,7 @@ def ensure_columns(db):
 
     for row in rows_without_client_report_token:
         while True:
-            candidate = secrets.token_urlsafe(24)
+            candidate = tenant_token(24)
             exists = db.execute(
                 "SELECT 1 FROM jobs WHERE client_report_token = ?",
                 (candidate,),
@@ -2491,6 +2719,7 @@ def init_db():
             accent_color TEXT NOT NULL DEFAULT '#0f62fe',
             logo_filename TEXT,
             last_backup_at TEXT,
+            timezone_name TEXT,
             updated_at TEXT
         );
 
@@ -2780,13 +3009,15 @@ def init_db():
             ON training_attempts(assignment_id, created_at DESC)
         """)
 
+        tenant_company = registered_company(current_tenant_slug()) or {}
         db.execute("""
             INSERT OR IGNORE INTO app_settings (
-                id, company_name, company_tagline, accent_color, updated_at
-            ) VALUES (1, ?, ?, '#0f62fe', ?)
+                id, company_name, company_tagline, accent_color, timezone_name, updated_at
+            ) VALUES (1, ?, ?, '#0f62fe', ?, ?)
         """, (
-            COMPANY_NAME,
+            tenant_company.get("display_name") or COMPANY_NAME,
             PRODUCT_TAGLINE,
+            tenant_company.get("timezone_name") or DISPLAY_TIMEZONE_NAME,
             datetime.now().replace(microsecond=0).isoformat(),
         ))
         db.commit()
@@ -2855,7 +3086,7 @@ def backup_reminder_state(last_backup_at):
     }
 
 def local_today():
-    return datetime.now(DISPLAY_TIMEZONE).date()
+    return datetime.now(current_display_timezone()).date()
 
 def job_schedule_bucket(installation_date):
     """Classify an installation date for Dashboard schedule attention."""
@@ -3199,7 +3430,7 @@ def format_datetime(value):
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
 
-        local_dt = dt.astimezone(DISPLAY_TIMEZONE)
+        local_dt = dt.astimezone(current_display_timezone())
         hour = local_dt.strftime("%I").lstrip("0") or "0"
         zone_label = local_dt.tzname() or "ET"
         return (
@@ -3507,7 +3738,7 @@ def recover_v130_orphaned_mobilizations(db):
 
         db.execute("DELETE FROM readiness_confirmations WHERE id = ?", (archived["id"],))
 
-        new_arrival_token = secrets.token_urlsafe(24)
+        new_arrival_token = tenant_token(24)
 
         db.execute("""
             UPDATE jobs
@@ -4044,7 +4275,8 @@ def send_smtp_message(recipient_email, recipient_name, subject, html_body):
 
     msg = EmailMessage()
     msg["Subject"] = subject
-    msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_FROM_EMAIL}>"
+    sender_name = (get_app_settings().get("company_name") or SMTP_FROM_NAME).strip()
+    msg["From"] = f"{sender_name} <{SMTP_FROM_EMAIL}>"
     msg["To"] = f"{recipient_name} <{recipient_email}>" if recipient_name else recipient_email
     msg.set_content("Please open this message in an HTML-capable email client.")
     msg.add_alternative(html_body, subtype="html")
@@ -4647,7 +4879,7 @@ def safe_next_url(value):
 
 def backup_filename():
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return f"dispatchproof_backup_{stamp}.zip"
+    return f"dispatchproof_{current_tenant_slug()}_backup_{stamp}.zip"
 
 def sqlite_sidecar_paths(db_path):
     return [
@@ -4818,9 +5050,11 @@ def create_backup_archive():
 
     metadata = {
         "product": PRODUCT_NAME,
-        "backup_format": 2,
+        "backup_format": 3,
         "created_at": now_iso(),
         "app_version": APP_VERSION,
+        "company_slug": current_tenant_slug(),
+        "company_name": get_app_settings().get("company_name") or COMPANY_NAME,
         "database_file": "dispatchproof.db",
         "uploads_folder": "uploads",
         "counts": backup_counts,
@@ -4842,7 +5076,7 @@ def create_backup_archive():
 def workspace_export_filename():
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     username = secure_filename(current_username()) or "user"
-    return f"dispatchproof_workspace_{username}_{stamp}.zip"
+    return f"dispatchproof_{current_tenant_slug()}_workspace_{username}_{stamp}.zip"
 
 
 def _rows_as_dicts(rows):
@@ -5048,10 +5282,12 @@ def create_workspace_export_archive():
 
     manifest = {
         "product": PRODUCT_NAME,
-        "export_format": 2,
+        "export_format": 3,
         "export_type": "user_workspace",
         "created_at": now_iso(),
         "app_version": APP_VERSION,
+        "company_slug": current_tenant_slug(),
+        "company_name": get_app_settings().get("company_name") or COMPANY_NAME,
         "exported_for": {
             "username": current_username(),
             "display_name": current_display_name(),
@@ -5156,7 +5392,7 @@ def _workspace_source_identity(manifest, job):
 
 
 def _workspace_restore_stage_dir():
-    path = DATA_DIR / "workspace_restore_staging"
+    path = tenant_data_dir() / "workspace_restore_staging"
     path.mkdir(parents=True, exist_ok=True)
     # Best-effort cleanup of abandoned previews older than two hours.
     cutoff = datetime.now().timestamp() - 7200
@@ -5194,8 +5430,14 @@ def inspect_workspace_restore_zip(zip_path):
             if manifest.get("product") != PRODUCT_NAME or manifest.get("export_type") != "user_workspace":
                 return False, "This is not a DispatchProof user workspace backup.", None
             export_format = int(manifest.get("export_format") or 0)
-            if export_format not in {1, 2}:
+            if export_format not in {1, 2, 3}:
                 return False, "This workspace backup format is not supported by this version of DispatchProof.", None
+            backup_company = normalize_company_slug(manifest.get("company_slug") or "")
+            if backup_company:
+                if backup_company != current_tenant_slug():
+                    return False, f"This workspace backup belongs to company ID {backup_company}, not {current_tenant_slug()}.", None
+            elif current_tenant_slug() != DEFAULT_COMPANY_SLUG:
+                return False, "Legacy workspace backups without a Company ID can only be restored into the primary company workspace.", None
             backup_user = ((manifest.get("exported_for") or {}).get("username") or "").strip()
             if backup_user.lower() != (current_username() or "").strip().lower():
                 return False, f"This workspace backup belongs to {backup_user or 'a different user'}. Sign in as that user or ask an Administrator for help.", None
@@ -5391,7 +5633,7 @@ def restore_workspace_archive(zip_path):
                 else:
                     client_map[old_id] = _restore_insert_row(
                         db, "clients", row, exclude={"id", "report_token", "owner_user_id"},
-                        overrides={"report_token": secrets.token_urlsafe(24), "owner_user_id": user_id, "created_at": row.get("created_at") or now_iso(), "updated_at": now_iso()},
+                        overrides={"report_token": tenant_token(24), "owner_user_id": user_id, "created_at": row.get("created_at") or now_iso(), "updated_at": now_iso()},
                     )
                     stats["clients"] += 1
 
@@ -5412,7 +5654,7 @@ def restore_workspace_archive(zip_path):
                 else:
                     project_map[old_id] = _restore_insert_row(
                         db, "projects", row, exclude={"id", "report_token", "client_id", "owner_user_id"},
-                        overrides={"report_token": secrets.token_urlsafe(24), "client_id": live_client_id, "owner_user_id": user_id, "created_at": row.get("created_at") or now_iso(), "updated_at": now_iso()},
+                        overrides={"report_token": tenant_token(24), "client_id": live_client_id, "owner_user_id": user_id, "created_at": row.get("created_at") or now_iso(), "updated_at": now_iso()},
                     )
                     stats["projects"] += 1
 
@@ -5556,9 +5798,9 @@ def restore_workspace_archive(zip_path):
                     db, "jobs", restored_job,
                     exclude={"id", "public_token", "arrival_token", "client_report_token", "client_id", "project_id", "owner_user_id", "team_id"},
                     overrides={
-                        "public_token": secrets.token_urlsafe(24),
-                        "arrival_token": secrets.token_urlsafe(24),
-                        "client_report_token": secrets.token_urlsafe(24),
+                        "public_token": tenant_token(24),
+                        "arrival_token": tenant_token(24),
+                        "client_report_token": tenant_token(24),
                         "client_id": client_map.get(job.get("client_id")),
                         "project_id": project_map.get(job.get("project_id")),
                         "owner_user_id": user_id,
@@ -5624,7 +5866,7 @@ def restore_workspace_archive(zip_path):
                     exclude={"id", "job_id", "token", "crew_member_id"},
                     overrides={
                         "job_id": job_map[old_job_id],
-                        "token": secrets.token_urlsafe(24),
+                        "token": tenant_token(24),
                         "crew_member_id": crew_map.get(row.get("crew_member_id")),
                     },
                 )
@@ -5699,6 +5941,13 @@ def validate_backup_zip(zip_path):
             manifest = json.loads(z.read("backup_manifest.json").decode("utf-8"))
             if manifest.get("product") != PRODUCT_NAME:
                 return False, "This does not appear to be a DispatchProof backup."
+
+            backup_company = normalize_company_slug(manifest.get("company_slug") or "")
+            if backup_company:
+                if backup_company != current_tenant_slug():
+                    return False, f"This backup belongs to company ID {backup_company}, not {current_tenant_slug()}. Open the correct company workspace before restoring it."
+            elif current_tenant_slug() != DEFAULT_COMPANY_SLUG:
+                return False, "Legacy backups without a Company ID can only be restored into the primary company workspace."
 
             if "dispatchproof.db" not in names:
                 return False, "Backup database is missing."
@@ -5861,6 +6110,7 @@ def get_app_settings():
         "accent_color": "#0f62fe",
         "logo_filename": None,
         "last_backup_at": None,
+        "timezone_name": os.getenv("DISPATCHPROOF_TIMEZONE", "America/New_York"),
     }
 
 def normalize_hex_color(value):
@@ -5871,7 +6121,7 @@ def company_logo_url(settings=None):
     settings = settings or get_app_settings()
     if not settings.get("logo_filename"):
         return None
-    return url_for("company_logo")
+    return url_for("company_logo", company=current_tenant_slug())
 
 def company_logo_external_url(settings=None):
     settings = settings or get_app_settings()
@@ -5880,9 +6130,9 @@ def company_logo_external_url(settings=None):
 
     base = public_app_base_url()
     if base:
-        return f"{base}/branding/logo"
+        return f"{base}/branding/logo?{urlencode({'company': current_tenant_slug()})}"
 
-    return url_for("company_logo", _external=True)
+    return url_for("company_logo", company=current_tenant_slug(), _external=True)
 
 
 def training_scenario(scenario_key):
@@ -6209,12 +6459,54 @@ def inject_brand():
         "current_display_name": current_display_name(),
         "current_user_role": current_user_role(),
         "current_user_is_admin": current_user_is_admin(),
+        "current_user_is_platform_owner": bool(session.get("dispatchproof_owner")),
+        "current_company_slug": current_tenant_slug(),
+        "default_company_slug": DEFAULT_COMPANY_SLUG,
+        "current_company_timezone": company_timezone_name(),
         "page_help_anchor": page_help_anchor_for_request(),
     }
+
+def resolve_request_tenant():
+    """Resolve company before any company database is opened for this request."""
+    candidate = ""
+
+    # Authenticated internal users stay pinned to the company they signed into.
+    if session.get("dispatchproof_authenticated") or session.get("dispatchproof_admin"):
+        candidate = normalize_company_slug(session.get("dispatchproof_company_slug") or "")
+
+    # Login can select a company without first creating a session.
+    if request.endpoint == "login":
+        candidate = normalize_company_slug(
+            request.form.get("company_code")
+            or request.args.get("company")
+            or candidate
+            or DEFAULT_COMPANY_SLUG
+        )
+
+    # Public evidence tokens generated by V2.47 include <company>.<random>.
+    token_value = (request.view_args or {}).get("token") if request.view_args else None
+    if token_value:
+        candidate = tenant_from_public_token(token_value)
+
+    # Branding images can be loaded from a public report without an auth session.
+    if request.endpoint == "company_logo" and request.args.get("company"):
+        candidate = normalize_company_slug(request.args.get("company"))
+
+    candidate = candidate or DEFAULT_COMPANY_SLUG
+    company = registered_company(candidate)
+    if not company:
+        candidate = DEFAULT_COMPANY_SLUG
+        company = registered_company(candidate)
+
+    g.dispatchproof_tenant_slug = candidate
+    g.dispatchproof_tenant_active = bool(company and company.get("is_active"))
+    return candidate
+
 
 @app.before_request
 def ensure_db():
     global LAST_REMINDER_SWEEP_AT
+    resolve_request_tenant()
     init_db()
 
     public_endpoints = {
@@ -6225,6 +6517,17 @@ def ensure_db():
         "client_portfolio_asset", "project_portfolio_asset",
         "company_logo"
     }
+
+    if not getattr(g, "dispatchproof_tenant_active", True):
+        if request.endpoint == "login":
+            pass
+        elif request.endpoint in public_endpoints:
+            abort(404)
+        else:
+            session.clear()
+            flash("That company workspace is currently inactive.")
+            return redirect(url_for("login"))
+
     if request.endpoint not in public_endpoints and not user_authenticated():
         return redirect(url_for("login", next=request.full_path if request.query_string else request.path))
 
@@ -6313,13 +6616,15 @@ def ensure_db():
         return
 
     now = datetime.now()
+    tenant_slug = current_tenant_slug()
+    last_sweep_at = LAST_REMINDER_SWEEP_AT.get(tenant_slug)
     should_sweep = (
-        LAST_REMINDER_SWEEP_AT is None
-        or (now - LAST_REMINDER_SWEEP_AT).total_seconds() >= REMINDER_SWEEP_INTERVAL_SECONDS
+        last_sweep_at is None
+        or (now - last_sweep_at).total_seconds() >= REMINDER_SWEEP_INTERVAL_SECONDS
     )
 
     if should_sweep:
-        LAST_REMINDER_SWEEP_AT = now
+        LAST_REMINDER_SWEEP_AT[tenant_slug] = now
         try:
             run_due_reminders()
         except Exception:
@@ -6337,6 +6642,18 @@ def login():
     next_url = request.args.get("next") or request.form.get("next") or ""
 
     if request.method == "POST":
+        submitted_company = normalize_company_slug(request.form.get("company_code") or DEFAULT_COMPANY_SLUG) or DEFAULT_COMPANY_SLUG
+        company = registered_company(submitted_company)
+        if not company or not company.get("is_active"):
+            flash("Company ID was not found or is inactive.")
+            return render_template(
+                "login.html", configured=True, next_url=next_url,
+                company_code=submitted_company, default_company_slug=DEFAULT_COMPANY_SLUG,
+            )
+        g.dispatchproof_tenant_slug = submitted_company
+        g.dispatchproof_tenant_active = True
+        init_db()
+
         submitted_username = request.form.get("username", "").strip()
         submitted_password = request.form.get("password", "")
         stay_signed_in = request.form.get("stay_signed_in") == "1"
@@ -6351,6 +6668,7 @@ def login():
         if owner_ok:
             session.clear()
             session.permanent = stay_signed_in
+            session["dispatchproof_company_slug"] = submitted_company
             session["dispatchproof_authenticated"] = True
             session["dispatchproof_admin"] = True
             session["dispatchproof_owner"] = True
@@ -6377,6 +6695,7 @@ def login():
 
                 session.clear()
                 session.permanent = stay_signed_in
+                session["dispatchproof_company_slug"] = submitted_company
                 session["dispatchproof_authenticated"] = True
                 session["dispatchproof_admin"] = True
                 session["dispatchproof_owner"] = False
@@ -6388,9 +6707,9 @@ def login():
                 session["dispatchproof_stay_signed_in"] = stay_signed_in
                 return redirect(safe_next_url(next_url))
 
-        flash("Incorrect username or password.")
+        flash("Incorrect company ID, username, or password.")
 
-    return render_template("login.html", configured=True, next_url=next_url)
+    return render_template("login.html", configured=True, next_url=next_url, company_code=current_tenant_slug(), default_company_slug=DEFAULT_COMPANY_SLUG)
 
 @app.post("/logout")
 def logout():
@@ -6410,6 +6729,7 @@ def health():
         "version": APP_VERSION,
         "data_dir": str(DATA_DIR),
         "deployment_mode": DEPLOYMENT_MODE,
+        "company_storage_model": "isolated-database-per-company",
         "public_price_monthly": PUBLIC_PRICE_MONTHLY,
         "email_mode": EMAIL_MODE,
         "smtp_configured": smtp_is_configured(),
@@ -6427,6 +6747,171 @@ def company_logo():
     return send_from_directory(UPLOAD_DIR, filename)
 
 
+
+
+
+def platform_owner_session_for_company(slug, stay_signed_in=False):
+    session.clear()
+    session.permanent = bool(stay_signed_in)
+    session["dispatchproof_company_slug"] = slug
+    session["dispatchproof_authenticated"] = True
+    session["dispatchproof_admin"] = True
+    session["dispatchproof_owner"] = True
+    session["dispatchproof_username"] = ADMIN_USERNAME
+    session["dispatchproof_admin_username"] = ADMIN_USERNAME
+    session["dispatchproof_display_name"] = ADMIN_USERNAME
+    session["dispatchproof_role"] = "OWNER"
+    session["dispatchproof_stay_signed_in"] = bool(stay_signed_in)
+
+
+def company_platform_stats(slug):
+    company = registered_company(slug) or {}
+    result = {"users": 0, "jobs": 0, "clients": 0, "projects": 0, "crew": 0}
+    if not company:
+        return result
+    try:
+        with tenant_scope(slug):
+            init_db()
+            with get_db() as db:
+                result["users"] = db.execute("SELECT COUNT(*) AS c FROM users WHERE is_active = 1").fetchone()["c"]
+                result["jobs"] = db.execute("SELECT COUNT(*) AS c FROM jobs").fetchone()["c"]
+                result["clients"] = db.execute("SELECT COUNT(*) AS c FROM clients").fetchone()["c"]
+                result["projects"] = db.execute("SELECT COUNT(*) AS c FROM projects").fetchone()["c"]
+                result["crew"] = db.execute("SELECT COUNT(*) AS c FROM crew_members WHERE is_active = 1").fetchone()["c"]
+    except Exception:
+        result["error"] = True
+    return result
+
+
+@app.route("/platform/companies", methods=["GET", "POST"])
+def platform_companies():
+    if not session.get("dispatchproof_owner"):
+        abort(404)
+
+    if request.method == "POST":
+        display_name = (request.form.get("display_name") or "").strip()
+        requested_slug = (request.form.get("company_code") or "").strip().lower()
+        slug = normalize_company_slug(requested_slug)
+        admin_name = (request.form.get("admin_name") or "").strip()
+        admin_username = (request.form.get("admin_username") or "").strip()
+        admin_password = request.form.get("admin_password") or ""
+        timezone_name = (request.form.get("timezone_name") or "America/New_York").strip() or "America/New_York"
+
+        try:
+            ZoneInfo(timezone_name)
+        except Exception:
+            flash("Company Time Zone must be a valid IANA time zone such as America/New_York.")
+            return redirect(url_for("platform_companies") + "#add-company")
+
+        if not display_name:
+            flash("Company Name is required.")
+            return redirect(url_for("platform_companies") + "#add-company")
+        if not slug or slug != requested_slug or len(slug) < 2:
+            flash("Company ID must use only lowercase letters, numbers, and hyphens (2–40 characters).")
+            return redirect(url_for("platform_companies") + "#add-company")
+        if registered_company(slug):
+            flash("That Company ID already exists.")
+            return redirect(url_for("platform_companies") + "#add-company")
+        if not admin_name or not admin_username:
+            flash("Initial Administrator name and username are required.")
+            return redirect(url_for("platform_companies") + "#add-company")
+        if len(admin_password) < 8:
+            flash("Initial Administrator password must be at least 8 characters.")
+            return redirect(url_for("platform_companies") + "#add-company")
+
+        created_at = now_iso()
+        with get_platform_db() as platform_db:
+            platform_db.execute("""
+                INSERT INTO companies (
+                    slug, display_name, is_active, uses_legacy_root, created_at, updated_at, timezone_name
+                ) VALUES (?, ?, 1, 0, ?, ?, ?)
+            """, (slug, display_name, created_at, created_at, timezone_name))
+            platform_db.commit()
+
+        try:
+            with tenant_scope(slug):
+                init_db()
+                with get_db() as db:
+                    db.execute(
+                        "UPDATE app_settings SET company_name = ?, timezone_name = ?, updated_at = ? WHERE id = 1",
+                        (display_name, timezone_name, now_iso()),
+                    )
+                    db.execute("""
+                        INSERT INTO users (
+                            full_name, username, password_hash, role, is_active,
+                            created_at, updated_at
+                        ) VALUES (?, ?, ?, 'ADMIN', 1, ?, ?)
+                    """, (
+                        admin_name,
+                        admin_username,
+                        generate_password_hash(admin_password),
+                        now_iso(),
+                        now_iso(),
+                    ))
+                    record_activity(
+                        db,
+                        "Company Workspace Provisioned",
+                        f"Created isolated company workspace {display_name} ({slug}).",
+                        actor_type="SYSTEM",
+                        actor_name="DispatchProof",
+                    )
+                    db.commit()
+        except Exception as exc:
+            with get_platform_db() as platform_db:
+                platform_db.execute("DELETE FROM companies WHERE slug = ?", (slug,))
+                platform_db.commit()
+            shutil.rmtree(COMPANIES_DIR / slug, ignore_errors=True)
+            flash(f"Company workspace could not be created: {exc}")
+            return redirect(url_for("platform_companies") + "#add-company")
+
+        flash(f"Created {display_name}. Company ID: {slug}")
+        return redirect(url_for("platform_companies"))
+
+    companies = []
+    for company in registered_companies():
+        item = dict(company)
+        item["stats"] = company_platform_stats(item["slug"])
+        item["login_url"] = url_for("login", company=item["slug"], _external=True)
+        companies.append(item)
+    return render_template("platform_companies.html", companies=companies)
+
+
+@app.post("/platform/companies/<slug>/open")
+def platform_open_company(slug):
+    if not session.get("dispatchproof_owner"):
+        abort(404)
+    company = registered_company(slug)
+    if not company or not company.get("is_active"):
+        flash("That company workspace is not active.")
+        return redirect(url_for("platform_companies"))
+    stay = bool(session.get("dispatchproof_stay_signed_in"))
+    platform_owner_session_for_company(company["slug"], stay)
+    flash(f"Opened {company['display_name']}.")
+    return redirect(url_for("dashboard"))
+
+
+@app.post("/platform/companies/<slug>/toggle")
+def platform_toggle_company(slug):
+    if not session.get("dispatchproof_owner"):
+        abort(404)
+    company = registered_company(slug)
+    if not company:
+        abort(404)
+    if company["slug"] == DEFAULT_COMPANY_SLUG:
+        flash("The primary company workspace cannot be deactivated from this page.")
+        return redirect(url_for("platform_companies"))
+    new_active = 0 if company.get("is_active") else 1
+    with get_platform_db() as db:
+        db.execute(
+            "UPDATE companies SET is_active = ?, updated_at = ? WHERE slug = ?",
+            (new_active, now_iso(), company["slug"]),
+        )
+        db.commit()
+    if not new_active and company["slug"] == current_tenant_slug():
+        stay = bool(session.get("dispatchproof_stay_signed_in"))
+        platform_owner_session_for_company(DEFAULT_COMPANY_SLUG, stay)
+    flash(f"{company['display_name']} is now {'active' if new_active else 'inactive'}.")
+    return redirect(url_for("platform_companies"))
 
 
 @app.route("/account", methods=["GET", "POST"])
@@ -6536,7 +7021,7 @@ def preview_my_workspace_restore():
         return redirect(url_for("my_account") + "#workspace-restore")
 
     stage_dir = _workspace_restore_stage_dir()
-    token = secrets.token_urlsafe(24)
+    token = tenant_token(24)
     zip_path = stage_dir / f"{token}.zip"
     meta_path = stage_dir / f"{token}.json"
     uploaded.save(zip_path)
@@ -7818,6 +8303,12 @@ def company_settings():
     if request.method == "POST":
         company_name = request.form.get("company_name", "").strip() or COMPANY_NAME
         company_tagline = request.form.get("company_tagline", "").strip()
+        timezone_name = (request.form.get("timezone_name") or company_timezone_name()).strip() or company_timezone_name()
+        try:
+            ZoneInfo(timezone_name)
+        except Exception:
+            flash("Company Time Zone must be a valid IANA time zone such as America/New_York.")
+            return redirect(url_for("company_settings"))
         contact_email = request.form.get("contact_email", "").strip()
         contact_phone = request.form.get("contact_phone", "").strip()
         website = request.form.get("website", "").strip()
@@ -7860,6 +8351,7 @@ def company_settings():
                     website = ?,
                     accent_color = ?,
                     logo_filename = ?,
+                    timezone_name = ?,
                     updated_at = ?
                 WHERE id = 1
             """, (
@@ -7870,6 +8362,7 @@ def company_settings():
                 website,
                 accent_color,
                 logo_filename,
+                timezone_name,
                 now_iso(),
             ))
             record_activity(
@@ -7879,12 +8372,20 @@ def company_settings():
             )
             db.commit()
 
+        with get_platform_db() as platform_db:
+            platform_db.execute(
+                "UPDATE companies SET display_name = ?, timezone_name = ?, updated_at = ? WHERE slug = ?",
+                (company_name, timezone_name, now_iso(), current_tenant_slug()),
+            )
+            platform_db.commit()
+
         flash("Company branding updated.")
         return redirect(url_for("company_settings"))
 
     return render_template(
         "company_settings.html",
         settings=get_app_settings(),
+        company_timezone=company_timezone_name(),
     )
 
 
@@ -8014,7 +8515,7 @@ def backup_restore():
         db_exists=db_exists,
         upload_count=upload_count,
         counts=counts,
-        data_dir=str(DATA_DIR),
+        data_dir=str(tenant_data_dir()),
         last_backup_at=settings.get("last_backup_at"),
         backup_status=backup_status,
     )
@@ -8256,7 +8757,7 @@ def rotate_portfolio_token(scope_type, scope_id):
 
     table_name = "clients" if scope_type == "CLIENT" else "projects"
     while True:
-        new_token = secrets.token_urlsafe(24)
+        new_token = tenant_token(24)
         with get_db() as db:
             exists = db.execute(
                 f"SELECT 1 FROM {table_name} WHERE report_token = ?",
@@ -8426,7 +8927,7 @@ def new_client():
             flash("Client Name is required.")
             return redirect(url_for("new_client"))
 
-        report_token = secrets.token_urlsafe(24)
+        report_token = tenant_token(24)
         with get_db() as db:
             duplicate = db.execute(
                 "SELECT id FROM clients WHERE name = ? COLLATE NOCASE", (name,)
@@ -8553,7 +9054,7 @@ def new_project(client_id):
             flash("Project Name is required.")
             return redirect(url_for("new_project", client_id=client_id))
 
-        report_token = secrets.token_urlsafe(24)
+        report_token = tenant_token(24)
         with get_db() as db:
             duplicate = db.execute("""
                 SELECT id FROM projects
@@ -8790,9 +9291,9 @@ def import_project_bulk_jobs(project_id):
                     reminder_hours_before, reminder_count
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', NULL, '', ?, NULL, 'NO RESPONSE', ?, 1, ?, 0)
             """, (
-                secrets.token_urlsafe(18),
-                secrets.token_urlsafe(24),
-                secrets.token_urlsafe(24),
+                tenant_token(18),
+                tenant_token(24),
+                tenant_token(24),
                 project["client_id"],
                 project_id,
                 item["job_name"],
@@ -10591,9 +11092,9 @@ def new_job():
                 flash("Planned Crew Size must be at least 1 when entered.")
                 planned_crew_size = -1
 
-        token = secrets.token_urlsafe(18)
-        arrival_token = secrets.token_urlsafe(24)
-        client_report_token = secrets.token_urlsafe(24)
+        token = tenant_token(18)
+        arrival_token = tenant_token(24)
+        client_report_token = tenant_token(24)
         if planned_crew_size == -1:
             with get_db() as db:
                 clients, projects = get_clients_and_projects(db)
@@ -11078,7 +11579,7 @@ def rotate_client_report(job_id):
             abort(404)
 
         while True:
-            new_token = secrets.token_urlsafe(24)
+            new_token = tenant_token(24)
             exists = db.execute(
                 "SELECT 1 FROM jobs WHERE client_report_token = ?",
                 (new_token,),
@@ -11196,7 +11697,7 @@ def field_updates(job_id):
                 return redirect(url_for("field_updates", job_id=job_id))
 
             while True:
-                token = secrets.token_urlsafe(24)
+                token = tenant_token(24)
                 if not db.execute("SELECT 1 FROM field_update_links WHERE token = ?", (token,)).fetchone():
                     break
 
@@ -11759,7 +12260,7 @@ def complete_job(job_id):
             return redirect(url_for("job_detail", job_id=job_id))
 
         # Revoke the shared installer link as soon as the job is completed.
-        closed_arrival_token = secrets.token_urlsafe(24)
+        closed_arrival_token = tenant_token(24)
         completed_at = now_iso()
 
         db.execute("""
@@ -12847,7 +13348,7 @@ def reset_job(job_id):
 
         # Every new confirmation/mobilization gets a fresh installer-arrival link.
         # This revokes any installer link that may have been shared for the prior attempt.
-        new_arrival_token = secrets.token_urlsafe(24)
+        new_arrival_token = tenant_token(24)
 
         db.execute("""
             UPDATE jobs
