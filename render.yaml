@@ -17,7 +17,9 @@ services:
       - key: DISPATCHPROOF_DATA_DIR
         value: /var/data/dispatchproof
       - key: DISPATCHPROOF_DEPLOYMENT_MODE
-        value: isolated-company
+        value: multi-company
+      - key: DISPATCHPROOF_DEFAULT_COMPANY_SLUG
+        value: default
       - key: DISPATCHPROOF_COMPANY_NAME
         value: DispatchProof
       - key: DISPATCHPROOF_EMAIL_MODE

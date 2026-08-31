@@ -34,6 +34,10 @@
       {% if configured %}
       <form method="post" class="login-form">
         <input type="hidden" name="next" value="{{ next_url }}">
+        <label>Company ID
+          <input name="company_code" value="{{ '' if company_code == default_company_slug else company_code }}" autocomplete="organization" placeholder="Leave blank for primary company">
+          <small class="muted">Use the Company ID provided with your DispatchProof account.</small>
+        </label>
         <label>Username
           <input name="username" autocomplete="username" required autofocus>
         </label>

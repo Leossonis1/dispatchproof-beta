@@ -1,27 +1,45 @@
-# Deploy DispatchProof V2.46.12
+# Deploy DispatchProof V2.47.0
 
-V2.46.12 is the commercial-launch operations baseline.
+## Render baseline
 
-## Existing production deployment
+Use the included `render.yaml` or verify these settings manually:
 
-If your current Render service already has the paid 0.5 CPU / 512 MB plan and persistent disk configured, deploy the code normally. Do **not** delete/recreate the service or disk.
-
-Confirm these environment/storage settings in Render:
-
-- Compute: `0.5c-512mb` (legacy Starter equivalent)
-- Persistent disk mounted at `/var/data` (1 GB is sufficient for the early-customer stage)
+- Plan: `0.5c-512mb`
+- Persistent disk: 1 GB mounted at `/var/data`
 - `DISPATCHPROOF_DATA_DIR=/var/data/dispatchproof`
-- `DISPATCHPROOF_DEPLOYMENT_MODE=isolated-company`
-- `DISPATCHPROOF_SECRET_KEY` remains private
-- `DISPATCHPROOF_ADMIN_PASSWORD` remains private
+- `DISPATCHPROOF_DEPLOYMENT_MODE=multi-company`
+- `DISPATCHPROOF_DEFAULT_COMPANY_SLUG=default`
+- unique `DISPATCHPROOF_SECRET_KEY`
+- private `DISPATCHPROOF_ADMIN_PASSWORD`
 
-`render.yaml` now reflects the intended settings for a *new* deployment. Existing manually configured Render services should be changed carefully so the current persistent data is never detached or replaced.
+**Important:** choose the default company slug before the first V2.47 production deploy and do not change it later without migrating the primary workspace. Leaving it as `default` is safe.
 
-## Post-deploy smoke test
+## Upgrade check
 
-1. Open `/health` and confirm version `2.46.12`.
-2. Sign in as Owner/Admin.
-3. Confirm Dashboard, Jobs, Schedule, Crew, Clients & Projects, Documents, Training, Settings, Integrations, and mobile navigation still open normally.
-4. Confirm existing jobs/documents are present.
-5. If Email Outbox Mode is enabled, generate one test message and confirm it appears in Email Outbox.
-6. Create/delete a harmless test job only if desired; do not perform a workspace restore as part of a routine deploy.
+1. Back up the existing V2.46.12 company before deploy.
+2. Deploy V2.47.0 using the same persistent disk/data directory.
+3. Open `/health`; confirm version `2.47.0`, deployment mode `multi-company`, and storage model `isolated-database-per-company`.
+4. Sign in to the primary company (Company ID can be left blank). Confirm existing jobs, users, documents, crew, and branding are unchanged.
+5. As the permanent Owner, open **Companies** and create one test company.
+6. Sign out and sign in to the test company using its Company ID and new Administrator account.
+7. Create a test job/public readiness link and verify it opens correctly while signed out.
+8. Confirm the primary company does not show the test company's jobs, clients, users, crew, or documents.
+9. Download a backup from the test company and confirm DispatchProof refuses to restore that backup while the primary company is open.
+
+## Storage layout
+
+```text
+/var/data/dispatchproof/
+  dispatchproof.db                 # primary/upgraded company
+  uploads/                         # primary/upgraded company
+  dispatchproof-platform.db        # company registry only
+  companies/
+    acme/
+      dispatchproof.db
+      uploads/
+    another-company/
+      dispatchproof.db
+      uploads/
+```
+
+The platform registry does not contain customer jobs, documents, clients, crew, or user passwords.

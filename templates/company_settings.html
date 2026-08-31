@@ -39,6 +39,22 @@
         <label>Website
           <input name="website" value="{{ settings.website or '' }}" placeholder="https://company.com">
         </label>
+
+        <label>Company Time Zone
+          <input name="timezone_name" value="{{ company_timezone }}" list="timezone-options" required placeholder="America/New_York">
+          <small>Used for dashboard dates, reminders, and displayed timestamps. Use an IANA time zone name.</small>
+          <datalist id="timezone-options">
+            <option value="America/New_York">
+            <option value="America/Chicago">
+            <option value="America/Denver">
+            <option value="America/Phoenix">
+            <option value="America/Los_Angeles">
+            <option value="America/Anchorage">
+            <option value="Pacific/Honolulu">
+            <option value="America/Toronto">
+            <option value="America/Vancouver">
+          </datalist>
+        </label>
       </div>
     </section>
 

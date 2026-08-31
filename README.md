@@ -1,23 +1,16 @@
-# DispatchProof V2.46.12 — Launch & Operations Baseline
+# DispatchProof V2.47.0 — Multi-Company Baseline
 
-V2.46.12 is the commercial-launch operations baseline built from the approved V2.46.11 release.
+DispatchProof V2.47.0 upgrades the V2.46.12 launch baseline from one-company-per-deployment to a multi-company service with **isolated storage per company**.
 
 ## What changed
 
-- Public launch price is locked at **$50/month per company** (initial offer: up to 10 office users; all core features included).
-- Corrected Render Blueprint from `free` to the current `0.5c-512mb` production compute plan.
-- Blueprint now documents a 1 GB persistent disk at `/var/data` and `DISPATCHPROOF_DATA_DIR=/var/data/dispatchproof` for new isolated-company deployments.
-- Added `DISPATCHPROOF_DEPLOYMENT_MODE=isolated-company` metadata so the intended early-customer architecture is explicit.
-- Centralized app version metadata at `2.46.12`; `/health` now reports the correct version plus deployment mode and public monthly price.
-- Replaced stale user-visible **Free Beta** email wording with **Email Outbox Mode** / testing wording. Email behavior itself is unchanged.
-- Added launch marketing, customer deployment, and IT scaling documents.
+- One Render service can host multiple unrelated customer companies.
+- The existing/primary company keeps the current root `dispatchproof.db` and `uploads/` paths, so this is a non-destructive upgrade.
+- Each additional company gets `companies/<company-id>/dispatchproof.db` and its own `uploads/` folder.
+- The permanent Owner gets a **Companies** page for provisioning/opening/deactivating company workspaces.
+- Company users sign in with Company ID + username + password.
+- New public readiness/arrival/report/field links contain a company prefix so unauthenticated links resolve the correct isolated database. Existing V2.46.12 public links continue to route to the primary company.
+- Full backups and user workspace exports are stamped with Company ID and cannot be restored into a different company.
+- Company time zone is now company-specific.
 
-## Architecture decision
-
-This release intentionally remains **one company per deployment/database**. Do not place unrelated customer companies into one V2.46.12 database. Early customers should receive isolated deployments.
-
-True shared multi-tenant/PostgreSQL/object-storage architecture is a planned scaling milestone after real customer traction proves the need. See `IT_UPGRADE_PLAN_V2_46_12.md`.
-
-## No behavior migration
-
-No job, crew, readiness, permissions, training, document, integration, or mobile workflow logic was changed in this release.
+See `MULTI_COMPANY_V2_47.md` for architecture details and `DEPLOY_RENDER.md` for deployment settings.

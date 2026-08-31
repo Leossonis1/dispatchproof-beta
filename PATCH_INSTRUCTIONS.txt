@@ -1,0 +1,21 @@
+DispatchProof V2.47.0 Multi-Company Patch Files
+
+Replace/add these files in your existing DispatchProof project, preserving the folder paths.
+
+Changed/new files:
+- DEPLOY_RENDER.md
+- MULTI_COMPANY_V2_47.md
+- README.md
+- UPDATE_GITHUB_V2_47.md
+- VERSION.txt
+- app.py
+- render.yaml
+- templates/base.html
+- templates/company_settings.html
+- templates/integrations.html
+- templates/login.html
+- templates/platform_companies.html
+
+No files need to be deleted.
+
+Recommended: back up the current deployed project/data before applying this patch.

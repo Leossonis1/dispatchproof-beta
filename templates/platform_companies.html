@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Companies · DispatchProof{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">Platform Owner</div>
+    <h1>Companies</h1>
+    <p>Each company below has its own DispatchProof database and upload store. Company data is not shared across workspaces.</p>
+  </div>
+</div>
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Company Workspaces</h2>
+      <p class="muted">Open a workspace to manage that company's users, jobs, settings, backups, and documents.</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Company</th><th>Company ID</th><th>Status</th><th>Time Zone</th><th>Users</th><th>Jobs</th><th>Login Link</th><th>Actions</th></tr></thead>
+      <tbody>
+      {% for company in companies %}
+        <tr>
+          <td><strong>{{ company.display_name }}</strong>{% if company.uses_legacy_root %}<br><small class="muted">Primary / upgraded workspace</small>{% endif %}</td>
+          <td><code>{{ company.slug }}</code></td>
+          <td>{{ 'Active' if company.is_active else 'Inactive' }}</td>
+          <td><small>{{ company.timezone_name or 'America/New_York' }}</small></td>
+          <td>{{ company.stats.users }}</td>
+          <td>{{ company.stats.jobs }}</td>
+          <td><a href="{{ company.login_url }}" target="_blank" rel="noopener">Open sign-in page</a></td>
+          <td>
+            {% if company.is_active %}
+            <form method="post" action="{{ url_for('platform_open_company', slug=company.slug) }}" style="display:inline-block;margin-right:6px;">
+              <button class="btn" type="submit">Open Workspace</button>
+            </form>
+            {% endif %}
+            {% if not company.uses_legacy_root %}
+            <form method="post" action="{{ url_for('platform_toggle_company', slug=company.slug) }}" style="display:inline-block;">
+              <button class="btn" type="submit">{{ 'Deactivate' if company.is_active else 'Reactivate' }}</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel" id="add-company">
+  <div class="panel-head">
+    <div>
+      <h2>Add Company</h2>
+      <p class="muted">Creates a brand-new isolated database, upload folder, and initial Administrator account.</p>
+    </div>
+  </div>
+  <form method="post" class="form-stack">
+    <label>Company Name
+      <input name="display_name" required placeholder="Acme Installations">
+    </label>
+    <label>Company ID
+      <input name="company_code" required pattern="[a-z0-9-]{2,40}" placeholder="acme-installations">
+      <small class="muted">Lowercase letters, numbers, and hyphens only. This is used at sign-in.</small>
+    </label>
+    <label>Company Time Zone
+      <input name="timezone_name" value="America/New_York" list="platform-timezone-options" required>
+      <datalist id="platform-timezone-options">
+        <option value="America/New_York"><option value="America/Chicago"><option value="America/Denver">
+        <option value="America/Phoenix"><option value="America/Los_Angeles"><option value="America/Anchorage">
+        <option value="Pacific/Honolulu"><option value="America/Toronto"><option value="America/Vancouver">
+      </datalist>
+    </label>
+    <label>Administrator Name
+      <input name="admin_name" required placeholder="Jane Smith">
+    </label>
+    <label>Administrator Username
+      <input name="admin_username" required autocomplete="off" placeholder="jsmith">
+    </label>
+    <label>Temporary Password
+      <input type="password" name="admin_password" required minlength="8" autocomplete="new-password">
+      <small class="muted">The administrator can change this from My Account after signing in.</small>
+    </label>
+    <div class="form-actions">
+      <button class="btn primary" type="submit">Create Company Workspace</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

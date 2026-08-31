@@ -53,6 +53,9 @@
       <a class="{% if request.path.startswith('/training') %}active{% endif %}" href="{{ url_for('training_home') }}">Training</a>
       <a class="{% if request.path.startswith('/help') %}active{% endif %}" href="{{ url_for('help_center') }}">Help & Tutorials</a>
       <a class="{% if request.path == '/account' %}active{% endif %}" href="{{ url_for('my_account') }}">My Account</a>
+      {% if current_user_is_platform_owner %}
+      <a class="{% if request.path.startswith('/platform/companies') %}active{% endif %}" href="{{ url_for('platform_companies') }}">Companies</a>
+      {% endif %}
       {% if current_user_is_admin %}
       <a class="{% if request.path.startswith('/settings/company') %}active{% endif %}" href="{{ url_for('company_settings') }}">Company Settings</a>
       <a class="{% if request.path.startswith('/settings/integrations') %}active{% endif %}" href="{{ url_for('integrations') }}">Integrations</a>
@@ -67,6 +70,7 @@
         <span>Signed in as</span>
         <strong>{{ current_display_name }}</strong>
         <small class="session-role">{{ 'Owner' if current_user_role == 'OWNER' else ('Administrator' if current_user_role == 'ADMIN' else 'Operations') }}</small>
+        {% if current_user_is_platform_owner %}<small class="session-role">Company ID: {{ current_company_slug }}</small>{% endif %}
         <form method="post" action="{{ url_for('logout') }}">
           <button class="sidebar-logout" type="submit">Sign Out</button>
         </form>
